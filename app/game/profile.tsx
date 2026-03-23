@@ -52,6 +52,7 @@ import {
   Video,
   MoreHorizontal,
   MapPin,
+  Bot,
 } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useGame } from '@/contexts/GameContext';
@@ -256,6 +257,15 @@ export default function ProfileScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }, [commentText, gameState.useCustomPhoto, gameState.profilePhotoUrl, gameState.playerName, addComment]);
 
+  const navigateToProfile = useCallback((authorId: string, isAIAgent?: boolean, oasisUserId?: number) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (isAIAgent) {
+      router.push(`/game/agent-profile?agentId=${authorId}${oasisUserId ? `&userId=${oasisUserId}` : ''}` as any);
+    } else {
+      router.push(`/owner-profile?id=${authorId}` as any);
+    }
+  }, [router]);
+
   const renderProfileImage = () => {
     if (gameState.useCustomPhoto && gameState.profilePhotoUrl) {
       return <Image source={{ uri: gameState.profilePhotoUrl }} style={styles.profilePhoto} />;
@@ -313,17 +323,35 @@ export default function ProfileScreen() {
     return (
       <View key={post.id} style={[styles.postCard, { backgroundColor: colors.surface }]}>
         <View style={styles.postHeader}>
-          <Image source={{ uri: post.authorAvatar }} style={styles.postAvatar} />
-          <View style={styles.postAuthorInfo}>
-            <View style={styles.postAuthorRow}>
-              <Text style={[styles.postAuthorName, { color: colors.text }]}>{post.authorName}</Text>
-              {post.badge && <Text style={styles.postBadge}>{post.badge}</Text>}
+          <TouchableOpacity
+            style={styles.postAuthorTouchable}
+            activeOpacity={0.7}
+            onPress={() => navigateToProfile(post.authorId, post.isAIAgent, post.oasisUserId)}
+          >
+            <View style={styles.postAvatarWrap}>
+              <Image source={{ uri: post.authorAvatar }} style={styles.postAvatar} />
+              {post.isAIAgent && (
+                <View style={styles.aiAvatarBadge}>
+                  <Bot size={8} color="#FFFFFF" />
+                </View>
+              )}
             </View>
-            <Text style={[styles.postTime, { color: colors.textSecondary }]}>
-              {formatTimeAgo(post.createdAt)}
-              {post.type !== 'status' && ` · ${post.type.charAt(0).toUpperCase() + post.type.slice(1)}`}
-            </Text>
-          </View>
+            <View style={styles.postAuthorInfo}>
+              <View style={styles.postAuthorRow}>
+                <Text style={[styles.postAuthorName, { color: colors.text }]}>{post.authorName}</Text>
+                {post.isAIAgent && (
+                  <View style={styles.aiTextBadge}>
+                    <Text style={styles.aiTextBadgeLabel}>AI</Text>
+                  </View>
+                )}
+                {post.badge && <Text style={styles.postBadge}>{post.badge}</Text>}
+              </View>
+              <Text style={[styles.postTime, { color: colors.textSecondary }]}>
+                {formatTimeAgo(post.createdAt)}
+                {post.type !== 'status' && ` · ${post.type.charAt(0).toUpperCase() + post.type.slice(1)}`}
+              </Text>
+            </View>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.postMore}>
             <MoreHorizontal size={18} color={colors.textSecondary} />
           </TouchableOpacity>
@@ -373,14 +401,22 @@ export default function ProfileScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.postAction}
-            onPress={() => setExpandedPostId(isExpanded ? null : post.id)}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setExpandedPostId(isExpanded ? null : post.id);
+            }}
           >
             <MessageCircle size={20} color={colors.textSecondary} />
             <Text style={[styles.postActionText, { color: colors.textSecondary }]}>
               {post.comments.length > 0 ? post.comments.length : ''}
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.postAction}>
+          <TouchableOpacity
+            style={styles.postAction}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }}
+          >
             <Send size={18} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
@@ -389,9 +425,26 @@ export default function ProfileScreen() {
           <View style={[styles.commentsSection, { borderTopColor: colors.border }]}>
             {post.comments.map(c => (
               <View key={c.id} style={styles.commentItem}>
-                <Image source={{ uri: c.authorAvatar }} style={styles.commentAvatar} />
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={() => navigateToProfile(c.authorId, c.isAIAgent)}
+                >
+                  <Image source={{ uri: c.authorAvatar }} style={styles.commentAvatar} />
+                </TouchableOpacity>
                 <View style={[styles.commentBubble, { backgroundColor: colors.background }]}>
-                  <Text style={[styles.commentAuthor, { color: colors.text }]}>{c.authorName}</Text>
+                  <TouchableOpacity
+                    activeOpacity={0.7}
+                    onPress={() => navigateToProfile(c.authorId, c.isAIAgent)}
+                  >
+                    <View style={styles.commentAuthorRow}>
+                      <Text style={[styles.commentAuthor, { color: colors.text }]}>{c.authorName}</Text>
+                      {c.isAIAgent && (
+                        <View style={styles.commentAiBadge}>
+                          <Bot size={8} color="#8B5CF6" />
+                        </View>
+                      )}
+                    </View>
+                  </TouchableOpacity>
                   <Text style={[styles.commentText, { color: colors.text }]}>{c.text}</Text>
                   <Text style={[styles.commentTime, { color: colors.textSecondary }]}>
                     {formatTimeAgo(c.createdAt)} · {c.likes} likes
@@ -408,8 +461,9 @@ export default function ProfileScreen() {
                 onChangeText={setCommentText}
               />
               <TouchableOpacity
-                style={[styles.commentSend, { backgroundColor: colors.primary }]}
+                style={[styles.commentSend, { backgroundColor: commentText.trim() ? colors.primary : `${colors.primary}40` }]}
                 onPress={() => handleComment(post.id)}
+                disabled={!commentText.trim()}
               >
                 <Send size={14} color="#FFF" />
               </TouchableOpacity>
@@ -418,7 +472,7 @@ export default function ProfileScreen() {
         )}
       </View>
     );
-  }, [expandedPostId, commentText, colors, toggleLikePost, handleComment]);
+  }, [expandedPostId, commentText, colors, toggleLikePost, handleComment, navigateToProfile]);
 
   const renderFeedTab = () => (
     <View>
@@ -1329,7 +1383,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 14,
   },
+  postAuthorTouchable: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  postAvatarWrap: { position: 'relative' as const },
   postAvatar: { width: 40, height: 40, borderRadius: 20 },
+  aiAvatarBadge: {
+    position: 'absolute' as const,
+    bottom: -1,
+    right: -1,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#8B5CF6',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  aiTextBadge: {
+    backgroundColor: '#8B5CF620',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+  },
+  aiTextBadgeLabel: {
+    fontSize: 9,
+    fontWeight: '700' as const,
+    color: '#8B5CF6',
+  },
   postAuthorInfo: { flex: 1, marginLeft: 10 },
   postAuthorRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   postAuthorName: { fontSize: 15, fontWeight: '700' as const },
@@ -1363,6 +1443,15 @@ const styles = StyleSheet.create({
   commentAvatar: { width: 28, height: 28, borderRadius: 14 },
   commentBubble: { flex: 1, padding: 10, borderRadius: 14 },
   commentAuthor: { fontSize: 13, fontWeight: '600' as const },
+  commentAuthorRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 4 },
+  commentAiBadge: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#8B5CF620',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
   commentText: { fontSize: 13, marginTop: 2, lineHeight: 18 },
   commentTime: { fontSize: 11, marginTop: 4 },
   commentInputRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: 8 },

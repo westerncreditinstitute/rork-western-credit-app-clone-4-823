@@ -164,6 +164,15 @@ export default function SocialFeedScreen() {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }, [toggleLikePost]);
 
+  const navigateToProfile = useCallback((authorId: string, isAIAgent?: boolean, oasisUserId?: number) => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (isAIAgent) {
+      router.push(`/game/agent-profile?agentId=${authorId}${oasisUserId ? `&userId=${oasisUserId}` : ''}` as any);
+    } else {
+      router.push(`/owner-profile?id=${authorId}` as any);
+    }
+  }, [router]);
+
   // Comment handlers
   const toggleComments = useCallback((postId: string) => {
     setExpandedComments(prev => {
@@ -270,6 +279,7 @@ export default function SocialFeedScreen() {
                   onPress={() => {
                     setShowSearch(false);
                     setSearchQuery('');
+                    navigateToProfile(user.id, user.isAIAgent, user.oasisUserId);
                   }}
                 >
                   <Image
@@ -351,7 +361,11 @@ export default function SocialFeedScreen() {
             contentContainerStyle={{ paddingHorizontal: 16 }}
             keyExtractor={item => item.id}
             renderItem={({ item }) => (
-              <TouchableOpacity style={styles.suggestionCard}>
+              <TouchableOpacity
+                style={styles.suggestionCard}
+                activeOpacity={0.7}
+                onPress={() => navigateToProfile(item.id, item.isAIAgent, item.oasisUserId)}
+              >
                 <Image
                   source={{ uri: item.avatar }}
                   style={styles.suggestionAvatar}
@@ -390,7 +404,11 @@ export default function SocialFeedScreen() {
       <View style={styles.postCard}>
         {/* Post Header */}
         <View style={styles.postHeader}>
-          <TouchableOpacity style={styles.postAuthorRow}>
+          <TouchableOpacity
+            style={styles.postAuthorRow}
+            activeOpacity={0.7}
+            onPress={() => navigateToProfile(post.authorId, post.isAIAgent, post.oasisUserId)}
+          >
             <View style={styles.avatarContainer}>
               <Image
                 source={{ uri: post.authorAvatar }}
@@ -535,21 +553,31 @@ export default function SocialFeedScreen() {
               <View style={styles.commentsList}>
                 {post.comments.slice(0, 3).map(comment => (
                   <View key={comment.id} style={styles.commentItem}>
-                    <Image
-                      source={{ uri: comment.authorAvatar }}
-                      style={styles.commentAvatar}
-                    />
+                    <TouchableOpacity
+                      activeOpacity={0.7}
+                      onPress={() => navigateToProfile(comment.authorId, comment.isAIAgent)}
+                    >
+                      <Image
+                        source={{ uri: comment.authorAvatar }}
+                        style={styles.commentAvatar}
+                      />
+                    </TouchableOpacity>
                     <View style={styles.commentBubble}>
-                      <View style={styles.commentAuthorRow}>
-                        <Text style={styles.commentAuthorName}>
-                          {comment.authorName}
-                        </Text>
-                        {comment.isAIAgent && (
-                          <View style={styles.commentAiBadge}>
-                            <Bot size={8} color="#8B5CF6" />
-                          </View>
-                        )}
-                      </View>
+                      <TouchableOpacity
+                        activeOpacity={0.7}
+                        onPress={() => navigateToProfile(comment.authorId, comment.isAIAgent)}
+                      >
+                        <View style={styles.commentAuthorRow}>
+                          <Text style={styles.commentAuthorName}>
+                            {comment.authorName}
+                          </Text>
+                          {comment.isAIAgent && (
+                            <View style={styles.commentAiBadge}>
+                              <Bot size={8} color="#8B5CF6" />
+                            </View>
+                          )}
+                        </View>
+                      </TouchableOpacity>
                       <Text style={styles.commentText}>{comment.text}</Text>
                     </View>
                   </View>
@@ -596,7 +624,7 @@ export default function SocialFeedScreen() {
       </View>
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [expandedComments, commentTexts, colors, handleLike, toggleComments, handleAddComment, styles]);
+  }, [expandedComments, commentTexts, colors, handleLike, toggleComments, handleAddComment, navigateToProfile, styles]);
 
   // ── Footer ──
   const renderFooter = () => {
