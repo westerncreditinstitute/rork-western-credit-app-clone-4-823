@@ -38,6 +38,7 @@ import {
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSocialFeed } from '@/contexts/SocialFeedContext';
 import { SocialPost } from '@/types/socialFeed';
+import { aiAgentLiveFeed } from '@/services/AIAgentLiveFeedService';
 
 type CategoryFilter = 'all' | 'credit_score' | 'achievement' | 'home_purchase' | 'milestone' | 'tip' | 'question' | 'status';
 
@@ -266,9 +267,32 @@ export default function LiveFeedScreen() {
 
   const [activeFilter, setActiveFilter] = useState<CategoryFilter>('all');
   const [showFilterPanel, setShowFilterPanel] = useState(false);
+  const [newPostCount, setNewPostCount] = useState(0);
+  const flatListRef = useRef<FlatList>(null);
+  const lastPostCountRef = useRef(posts.length);
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const filterPanelAnim = useRef(new Animated.Value(0)).current;
+  const newPostBadgeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!aiAgentLiveFeed.running) {
+      console.log('[LiveFeed] Ensuring AI agent live feed is running');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (posts.length > lastPostCountRef.current) {
+      const diff = posts.length - lastPostCountRef.current;
+      setNewPostCount(prev => prev + diff);
+      Animated.sequence([
+        Animated.timing(newPostBadgeAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
+        Animated.delay(2000),
+        Animated.timing(newPostBadgeAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
+      ]).start(() => setNewPostCount(0));
+    }
+    lastPostCountRef.current = posts.length;
+  }, [posts.length, newPostBadgeAnim]);
 
   useEffect(() => {
     const pulse = Animated.loop(
@@ -541,7 +565,34 @@ export default function LiveFeedScreen() {
         </Animated.View>
       )}
 
+      {newPostCount > 0 && (
+        <Animated.View
+          style={[
+            styles.newPostBanner,
+            {
+              opacity: newPostBadgeAnim,
+              transform: [{ translateY: newPostBadgeAnim.interpolate({ inputRange: [0, 1], outputRange: [-30, 0] }) }],
+            },
+          ]}
+        >
+          <TouchableOpacity
+            style={styles.newPostBannerInner}
+            onPress={() => {
+              flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+              setNewPostCount(0);
+            }}
+            activeOpacity={0.8}
+          >
+            <Zap size={14} color="#FFF" />
+            <Text style={styles.newPostBannerText}>
+              {newPostCount} new {newPostCount === 1 ? 'post' : 'posts'} from AI Agents
+            </Text>
+          </TouchableOpacity>
+        </Animated.View>
+      )}
+
       <FlatList
+        ref={flatListRef}
         data={filteredPosts}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
@@ -890,5 +941,29 @@ const styles = StyleSheet.create({
   },
   footerText: {
     fontSize: 13,
+  },
+  newPostBanner: {
+    position: 'absolute',
+    alignSelf: 'center',
+    zIndex: 50,
+    bottom: 30,
+  },
+  newPostBannerInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#6366F1',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 24,
+    ...Platform.select({
+      ios: { shadowColor: '#6366F1', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 10 },
+      android: { elevation: 6 },
+    }),
+  },
+  newPostBannerText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700' as const,
   },
 });

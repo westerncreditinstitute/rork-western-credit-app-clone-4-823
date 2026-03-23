@@ -32,6 +32,7 @@ import {
   MOCK_FRIEND_REQUESTS,
   MOCK_POSTS,
 } from '@/mocks/socialFeedData';
+import { aiAgentLiveFeed } from '@/services/AIAgentLiveFeedService';
 
 // Storage keys
 const STORAGE_KEY = 'social_feed_state';
@@ -65,6 +66,7 @@ export const [SocialFeedProvider, useSocialFeed] = createContextHook(() => { // 
   const [serverUrl, setServerUrl] = useState<string>(DEFAULT_OASIS_URL);
   const [notifications, setNotifications] = useState<SocialNotification[]>([]);
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+  const [liveFeedActive, setLiveFeedActive] = useState(false);
   
   // Feed pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -81,6 +83,7 @@ export const [SocialFeedProvider, useSocialFeed] = createContextHook(() => { // 
     return () => {
       wsCleanupRef.current.forEach(cleanup => cleanup());
       oasisWebSocket.disconnect();
+      aiAgentLiveFeed.stop();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -100,11 +103,11 @@ export const [SocialFeedProvider, useSocialFeed] = createContextHook(() => { // 
         setOasisUserId(userId);
         await connectToServer(userId);
       } else {
-        await loadLocalState();
+        startLiveFeed();
       }
     } catch (error) {
-      console.log('[SocialFeed] OASIS init failed, using local data:', error);
-      await loadLocalState();
+      console.log('[SocialFeed] OASIS init failed, starting AI agent live feed:', error);
+      startLiveFeed();
     } finally {
       setIsLoading(false);
     }
@@ -133,9 +136,9 @@ export const [SocialFeedProvider, useSocialFeed] = createContextHook(() => { // 
       setupWebSocket(userId);
       
     } catch (error) {
-      console.log('[SocialFeed] Server connection failed:', error);
+      console.log('[SocialFeed] Server connection failed, starting AI agent live feed:', error);
       setIsConnected(false);
-      await loadLocalState();
+      startLiveFeed();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -266,6 +269,12 @@ export const [SocialFeedProvider, useSocialFeed] = createContextHook(() => { // 
   }, [feedType]);
 
   const refreshFeed = useCallback(async () => {
+    if (liveFeedActive) {
+      setIsRefreshing(true);
+      setPosts(aiAgentLiveFeed.getPosts());
+      setTimeout(() => setIsRefreshing(false), 500);
+      return;
+    }
     if (!oasisUserId) return;
     setIsRefreshing(true);
     try {
@@ -273,7 +282,7 @@ export const [SocialFeedProvider, useSocialFeed] = createContextHook(() => { // 
     } finally {
       setIsRefreshing(false);
     }
-  }, [oasisUserId, loadFeed]);
+  }, [oasisUserId, loadFeed, liveFeedActive]);
 
   const loadMorePosts = useCallback(async () => {
     if (!oasisUserId || !hasMore || isLoading) return;
@@ -504,7 +513,11 @@ export const [SocialFeedProvider, useSocialFeed] = createContextHook(() => { // 
   }, [posts, myPosts, friends, friendRequests, friendSuggestions, isConnected, oasisUserId]);
 
   const toggleLikePost = useCallback(async (postId: string) => {
-    // Optimistic update
+    if (liveFeedActive) {
+      aiAgentLiveFeed.toggleLike(postId);
+      return;
+    }
+
     const updatedPosts = posts.map(p => {
       if (p.id === postId) {
         return {
@@ -517,12 +530,10 @@ export const [SocialFeedProvider, useSocialFeed] = createContextHook(() => { // 
     });
     setPosts(updatedPosts);
     
-    // Sync with server
     const post = posts.find(p => p.id === postId);
     if (isConnected && oasisUserId && post?.oasisPostId) {
       try {
         const result = await OasisAPI.toggleLike(post.oasisPostId, oasisUserId);
-        // Update with server-confirmed values
         setPosts(prev => prev.map(p => {
           if (p.id === postId) {
             return { ...p, isLiked: result.is_liked, likes: result.total_likes };
@@ -543,7 +554,7 @@ export const [SocialFeedProvider, useSocialFeed] = createContextHook(() => { // 
     setMyPosts(updatedMyPosts);
     void saveLocalState({ friends, friendRequests, friendSuggestions, posts: updatedPosts, myPosts: updatedMyPosts });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [posts, myPosts, friends, friendRequests, friendSuggestions, isConnected, oasisUserId]);
+  }, [posts, myPosts, friends, friendRequests, friendSuggestions, isConnected, oasisUserId, liveFeedActive]);
 
   const addComment = useCallback(async (
     postId: string,
@@ -624,21 +635,6 @@ export const [SocialFeedProvider, useSocialFeed] = createContextHook(() => { // 
 
   // ==================== Local State Management ====================
 
-  const loadLocalState = useCallback(async () => {
-    try {
-      const stored = await AsyncStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed: SocialFeedState = JSON.parse(stored);
-        setFriends(parsed.friends ?? MOCK_FRIENDS);
-        setFriendRequests(parsed.friendRequests ?? MOCK_FRIEND_REQUESTS);
-        setFriendSuggestions(parsed.friendSuggestions ?? MOCK_FRIEND_SUGGESTIONS);
-        setPosts(parsed.posts ?? MOCK_POSTS);
-        setMyPosts(parsed.myPosts ?? []);
-      }
-    } catch (e) {
-      console.log('[SocialFeed] Error loading local state:', e);
-    }
-  }, []);
 
   const saveLocalState = useCallback(async (state: SocialFeedState) => {
     try {
@@ -672,6 +668,28 @@ export const [SocialFeedProvider, useSocialFeed] = createContextHook(() => { // 
     isAIAgent: false,
   });
 
+  // ==================== AI Agent Live Feed ====================
+
+  const startLiveFeed = useCallback(() => {
+    if (liveFeedActive) return;
+    console.log('[SocialFeed] Starting AI Agent live feed simulator');
+    setLiveFeedActive(true);
+    setIsConnected(true);
+
+    aiAgentLiveFeed.start();
+    const initialPosts = aiAgentLiveFeed.getPosts();
+    if (initialPosts.length > 0) {
+      setPosts(initialPosts);
+    }
+
+    const unsubPosts = aiAgentLiveFeed.onPostsUpdate((updatedPosts) => {
+      setPosts(updatedPosts);
+    });
+
+    wsCleanupRef.current.push(unsubPosts);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveFeedActive]);
+
   // ==================== Computed Values ====================
 
   const friendIds = useMemo(() => friends.map(f => f.id), [friends]);
@@ -684,8 +702,8 @@ export const [SocialFeedProvider, useSocialFeed] = createContextHook(() => { // 
     [friends]
   );
   const aiAgentCount = useMemo(
-    () => friends.filter(f => f.isAIAgent).length,
-    [friends]
+    () => liveFeedActive ? aiAgentLiveFeed.getAgentCount() : friends.filter(f => f.isAIAgent).length,
+    [friends, liveFeedActive]
   );
 
   return {
