@@ -1,5 +1,7 @@
 import { SocialPost, PostType } from '@/types/socialFeed';
 
+export type AgentGender = 'male' | 'female';
+
 export interface AgentProfile {
   id: string;
   name: string;
@@ -8,24 +10,54 @@ export interface AgentProfile {
   occupation: string;
   creditScore: number;
   level: number;
+  gender: AgentGender;
+  hasPhoto: boolean;
 }
 
-const FIRST_NAMES = [
-  'Maya', 'James', 'Sofia', 'Marcus', 'Lin', 'Derek', 'Priya', 'Carlos', 'Aisha', 'Ben',
-  'Nadia', 'Omar', 'Rachel', 'Kai', 'Elena', 'Tyrone', 'Mei', 'Andre', 'Fatima', 'Noah',
-  'Zara', 'Liam', 'Isla', 'Ethan', 'Amara', 'Lucas', 'Nia', 'Mason', 'Layla', 'Jackson',
-  'Aria', 'Aiden', 'Chloe', 'Leo', 'Mila', 'Caleb', 'Luna', 'Owen', 'Aaliyah', 'Wyatt',
-  'Jade', 'Dylan', 'Ivy', 'Grayson', 'Elara', 'Hunter', 'Sage', 'Mateo', 'Brielle', 'Asher',
-  'Riley', 'Ezra', 'Willow', 'Landon', 'Ember', 'Micah', 'Nova', 'Nolan', 'Violet', 'Theo',
-  'Stella', 'Silas', 'Hazel', 'Miles', 'Aurora', 'Rowan', 'Iris', 'Cole', 'Ruby', 'Axel',
-  'Piper', 'Jasper', 'Dahlia', 'Felix', 'Eden', 'Milo', 'Wren', 'Beckett', 'Serena', 'Knox',
-  'Sasha', 'Rhys', 'Talia', 'Dean', 'Kira', 'Grant', 'Vera', 'Nash', 'Elise', 'Quinn',
-  'Bianca', 'Jace', 'Thea', 'Reid', 'Skye', 'Troy', 'Naomi', 'Beau', 'Celeste', 'Zane',
-  'Dara', 'Ivan', 'Lena', 'Hank', 'Rosa', 'Wade', 'Faye', 'Blaine', 'Tessa', 'Clark',
-  'Dana', 'Vince', 'Pearl', 'Drew', 'Opal', 'Shane', 'Blair', 'Kurt', 'June', 'Lance',
-  'Hope', 'Craig', 'Faith', 'Brent', 'Joy', 'Chad', 'Grace', 'Todd', 'Ivy', 'Glen',
-  'Dawn', 'Neil', 'Fern', 'Ray', 'Gwen', 'Joel', 'Beth', 'Mark', 'Ann', 'Paul',
-  'Jess', 'Dale', 'Kate', 'Hugh', 'Jane', 'Ross', 'Elle', 'Gene', 'Lily', 'Rick',
+interface NameEntry {
+  name: string;
+  gender: AgentGender;
+}
+
+const FIRST_NAMES: NameEntry[] = [
+  { name: 'Maya', gender: 'female' }, { name: 'James', gender: 'male' }, { name: 'Sofia', gender: 'female' }, { name: 'Marcus', gender: 'male' },
+  { name: 'Lin', gender: 'female' }, { name: 'Derek', gender: 'male' }, { name: 'Priya', gender: 'female' }, { name: 'Carlos', gender: 'male' },
+  { name: 'Aisha', gender: 'female' }, { name: 'Ben', gender: 'male' }, { name: 'Nadia', gender: 'female' }, { name: 'Omar', gender: 'male' },
+  { name: 'Rachel', gender: 'female' }, { name: 'Kai', gender: 'male' }, { name: 'Elena', gender: 'female' }, { name: 'Tyrone', gender: 'male' },
+  { name: 'Mei', gender: 'female' }, { name: 'Andre', gender: 'male' }, { name: 'Fatima', gender: 'female' }, { name: 'Noah', gender: 'male' },
+  { name: 'Zara', gender: 'female' }, { name: 'Liam', gender: 'male' }, { name: 'Isla', gender: 'female' }, { name: 'Ethan', gender: 'male' },
+  { name: 'Amara', gender: 'female' }, { name: 'Lucas', gender: 'male' }, { name: 'Nia', gender: 'female' }, { name: 'Mason', gender: 'male' },
+  { name: 'Layla', gender: 'female' }, { name: 'Jackson', gender: 'male' }, { name: 'Aria', gender: 'female' }, { name: 'Aiden', gender: 'male' },
+  { name: 'Chloe', gender: 'female' }, { name: 'Leo', gender: 'male' }, { name: 'Mila', gender: 'female' }, { name: 'Caleb', gender: 'male' },
+  { name: 'Luna', gender: 'female' }, { name: 'Owen', gender: 'male' }, { name: 'Aaliyah', gender: 'female' }, { name: 'Wyatt', gender: 'male' },
+  { name: 'Jade', gender: 'female' }, { name: 'Dylan', gender: 'male' }, { name: 'Ivy', gender: 'female' }, { name: 'Grayson', gender: 'male' },
+  { name: 'Elara', gender: 'female' }, { name: 'Hunter', gender: 'male' }, { name: 'Sage', gender: 'female' }, { name: 'Mateo', gender: 'male' },
+  { name: 'Brielle', gender: 'female' }, { name: 'Asher', gender: 'male' }, { name: 'Riley', gender: 'female' }, { name: 'Ezra', gender: 'male' },
+  { name: 'Willow', gender: 'female' }, { name: 'Landon', gender: 'male' }, { name: 'Ember', gender: 'female' }, { name: 'Micah', gender: 'male' },
+  { name: 'Nova', gender: 'female' }, { name: 'Nolan', gender: 'male' }, { name: 'Violet', gender: 'female' }, { name: 'Theo', gender: 'male' },
+  { name: 'Stella', gender: 'female' }, { name: 'Silas', gender: 'male' }, { name: 'Hazel', gender: 'female' }, { name: 'Miles', gender: 'male' },
+  { name: 'Aurora', gender: 'female' }, { name: 'Rowan', gender: 'male' }, { name: 'Iris', gender: 'female' }, { name: 'Cole', gender: 'male' },
+  { name: 'Ruby', gender: 'female' }, { name: 'Axel', gender: 'male' }, { name: 'Piper', gender: 'female' }, { name: 'Jasper', gender: 'male' },
+  { name: 'Dahlia', gender: 'female' }, { name: 'Felix', gender: 'male' }, { name: 'Eden', gender: 'female' }, { name: 'Milo', gender: 'male' },
+  { name: 'Wren', gender: 'female' }, { name: 'Beckett', gender: 'male' }, { name: 'Serena', gender: 'female' }, { name: 'Knox', gender: 'male' },
+  { name: 'Sasha', gender: 'female' }, { name: 'Rhys', gender: 'male' }, { name: 'Talia', gender: 'female' }, { name: 'Dean', gender: 'male' },
+  { name: 'Kira', gender: 'female' }, { name: 'Grant', gender: 'male' }, { name: 'Vera', gender: 'female' }, { name: 'Nash', gender: 'male' },
+  { name: 'Elise', gender: 'female' }, { name: 'Quinn', gender: 'male' }, { name: 'Bianca', gender: 'female' }, { name: 'Jace', gender: 'male' },
+  { name: 'Thea', gender: 'female' }, { name: 'Reid', gender: 'male' }, { name: 'Skye', gender: 'female' }, { name: 'Troy', gender: 'male' },
+  { name: 'Naomi', gender: 'female' }, { name: 'Beau', gender: 'male' }, { name: 'Celeste', gender: 'female' }, { name: 'Zane', gender: 'male' },
+  { name: 'Dara', gender: 'female' }, { name: 'Ivan', gender: 'male' }, { name: 'Lena', gender: 'female' }, { name: 'Hank', gender: 'male' },
+  { name: 'Rosa', gender: 'female' }, { name: 'Wade', gender: 'male' }, { name: 'Faye', gender: 'female' }, { name: 'Blaine', gender: 'male' },
+  { name: 'Tessa', gender: 'female' }, { name: 'Clark', gender: 'male' }, { name: 'Dana', gender: 'female' }, { name: 'Vince', gender: 'male' },
+  { name: 'Pearl', gender: 'female' }, { name: 'Drew', gender: 'male' }, { name: 'Opal', gender: 'female' }, { name: 'Shane', gender: 'male' },
+  { name: 'Blair', gender: 'female' }, { name: 'Kurt', gender: 'male' }, { name: 'June', gender: 'female' }, { name: 'Lance', gender: 'male' },
+  { name: 'Hope', gender: 'female' }, { name: 'Craig', gender: 'male' }, { name: 'Faith', gender: 'female' }, { name: 'Brent', gender: 'male' },
+  { name: 'Joy', gender: 'female' }, { name: 'Chad', gender: 'male' }, { name: 'Grace', gender: 'female' }, { name: 'Todd', gender: 'male' },
+  { name: 'Ivy', gender: 'female' }, { name: 'Glen', gender: 'male' }, { name: 'Dawn', gender: 'female' }, { name: 'Neil', gender: 'male' },
+  { name: 'Fern', gender: 'female' }, { name: 'Ray', gender: 'male' }, { name: 'Gwen', gender: 'female' }, { name: 'Joel', gender: 'male' },
+  { name: 'Beth', gender: 'female' }, { name: 'Mark', gender: 'male' }, { name: 'Ann', gender: 'female' }, { name: 'Paul', gender: 'male' },
+  { name: 'Jess', gender: 'female' }, { name: 'Dale', gender: 'male' }, { name: 'Kate', gender: 'female' }, { name: 'Hugh', gender: 'male' },
+  { name: 'Jane', gender: 'female' }, { name: 'Ross', gender: 'male' }, { name: 'Elle', gender: 'female' }, { name: 'Gene', gender: 'male' },
+  { name: 'Lily', gender: 'female' }, { name: 'Rick', gender: 'male' },
 ];
 
 const NAME_SUFFIXES = [
@@ -80,25 +112,32 @@ const OCCUPATIONS = [
   'Musician', 'Artist', 'Actor', 'Film Editor', 'Sound Engineer',
 ];
 
-const AVATAR_PHOTOS = [
-  'photo-1494790108377-be9c29b29330', 'photo-1507003211169-0a1dd7228f2d', 'photo-1438761681033-6461ffad8d80',
-  'photo-1500648767791-00dcc994a43e', 'photo-1534528741775-53994a69daeb', 'photo-1472099645785-5658abf4ff4e',
-  'photo-1544005313-94ddf0286df2', 'photo-1506794778202-cad84cf45f1d', 'photo-1531123897727-8f129e1688ce',
-  'photo-1519345182560-3f2917c472ef', 'photo-1517841905240-472988babdf9', 'photo-1560250097-0b93528c311a',
-  'photo-1487412720507-e7ab37603c6f', 'photo-1463453091185-61582044d556', 'photo-1524504388940-b1c1722653e1',
-  'photo-1580489944761-15a19d654956', 'photo-1539571696357-5a69c17a67c6', 'photo-1507591064344-4c6ce005b128',
-  'photo-1573496359142-b8d87734a5a2', 'photo-1522075469751-3a6694fb2f61', 'photo-1546961342-ea5f71b193f3',
-  'photo-1552058544-f2b08422138a', 'photo-1548142813-c348350df52b', 'photo-1535295972055-1c762f4483e5',
-  'photo-1546539782-6fc531453083', 'photo-1504257432389-52343af06ae3', 'photo-1542596768-5d1d21f1cf98',
-  'photo-1551836022-d5d88e9218df', 'photo-1564564321837-a57b7070ac4f', 'photo-1499996860823-5214fcc65f8f',
-  'photo-1543610892-0b1f7e6d8ac1', 'photo-1502767089025-6572583d8c40', 'photo-1508214751196-bcfd4ca60f91',
-  'photo-1488426862026-3ee34a7d66df', 'photo-1530785602389-07594beb8b73', 'photo-1557862921-37829c790f19',
-  'photo-1528892952291-009c663ce843', 'photo-1509868918274-064b4485a328', 'photo-1543871595-e11129e271cc',
-  'photo-1522529599102-193c0d76b5b6', 'photo-1529626455594-4ff0802cfb7e', 'photo-1506277886164-e25aa3f4ef7f',
-  'photo-1513956589380-bad6acb9b9d4', 'photo-1504199367641-aba8151af406', 'photo-1521572267360-ee0c2909d518',
-  'photo-1492562080023-ab3db95bfbce', 'photo-1506863530036-1efeddceb993', 'photo-1518577915332-c2a19f149a75',
-  'photo-1514626585954-d6439901a38c', 'photo-1505503693641-1926193e8d57',
+const FEMALE_AVATAR_PHOTOS = [
+  'photo-1494790108377-be9c29b29330', 'photo-1438761681033-6461ffad8d80',
+  'photo-1534528741775-53994a69daeb', 'photo-1544005313-94ddf0286df2',
+  'photo-1517841905240-472988babdf9', 'photo-1487412720507-e7ab37603c6f',
+  'photo-1524504388940-b1c1722653e1', 'photo-1580489944761-15a19d654956',
+  'photo-1573496359142-b8d87734a5a2', 'photo-1546961342-ea5f71b193f3',
+  'photo-1548142813-c348350df52b', 'photo-1546539782-6fc531453083',
+  'photo-1508214751196-bcfd4ca60f91', 'photo-1488426862026-3ee34a7d66df',
+  'photo-1509868918274-064b4485a328', 'photo-1543871595-e11129e271cc',
+  'photo-1506863530036-1efeddceb993',
 ];
+
+const MALE_AVATAR_PHOTOS = [
+  'photo-1507003211169-0a1dd7228f2d', 'photo-1500648767791-00dcc994a43e',
+  'photo-1472099645785-5658abf4ff4e', 'photo-1506794778202-cad84cf45f1d',
+  'photo-1531123897727-8f129e1688ce', 'photo-1519345182560-3f2917c472ef',
+  'photo-1560250097-0b93528c311a', 'photo-1463453091185-61582044d556',
+  'photo-1539571696357-5a69c17a67c6', 'photo-1507591064344-4c6ce005b128',
+  'photo-1522075469751-3a6694fb2f61', 'photo-1552058544-f2b08422138a',
+  'photo-1535295972055-1c762f4483e5', 'photo-1504257432389-52343af06ae3',
+  'photo-1551836022-d5d88e9218df', 'photo-1564564321837-a57b7070ac4f',
+  'photo-1499996860823-5214fcc65f8f', 'photo-1557862921-37829c790f19',
+  'photo-1528892952291-009c663ce843', 'photo-1529626455594-4ff0802cfb7e',
+];
+
+const PHOTO_ASSIGNMENT_RATE = 0.18;
 
 function seededRandom(seed: number): () => number {
   let s = seed;
@@ -111,6 +150,7 @@ function seededRandom(seed: number): () => number {
 function generateAllAgents(): AgentProfile[] {
   const agents: AgentProfile[] = [];
   const totalAgents = 10000;
+  const usedPhotoKeys = new Set<string>();
 
   for (let i = 0; i < totalAgents; i++) {
     const rng = seededRandom(i * 7919 + 104729);
@@ -119,26 +159,46 @@ function generateAllAgents(): AgentProfile[] {
     const suffixIdx = Math.floor(rng() * NAME_SUFFIXES.length);
     const cityIdx = Math.floor(rng() * CITIES.length);
     const occIdx = Math.floor(rng() * OCCUPATIONS.length);
-    const avatarIdx = Math.floor(rng() * AVATAR_PHOTOS.length);
+
+    const nameEntry = FIRST_NAMES[firstIdx];
+    const gender = nameEntry.gender;
 
     const baseScore = Math.floor(rng() * 500) + 350;
     const creditScore = Math.min(850, Math.max(350, baseScore));
     const level = Math.max(1, Math.min(100, Math.floor(rng() * 100) + 1));
 
     const uniqueNum = i + 1;
-    const name = `${FIRST_NAMES[firstIdx]}${NAME_SUFFIXES[suffixIdx]}${uniqueNum > 150 ? uniqueNum : ''}`;
+    const name = `${nameEntry.name}${NAME_SUFFIXES[suffixIdx]}${uniqueNum > 150 ? uniqueNum : ''}`;
+
+    const shouldHavePhoto = rng() < PHOTO_ASSIGNMENT_RATE;
+    let avatar = '';
+    let hasPhoto = false;
+
+    if (shouldHavePhoto) {
+      const photoPool = gender === 'female' ? FEMALE_AVATAR_PHOTOS : MALE_AVATAR_PHOTOS;
+      const photoIdx = Math.floor(rng() * photoPool.length);
+      const photoKey = `${photoPool[photoIdx]}_${uniqueNum}`;
+      if (!usedPhotoKeys.has(photoKey)) {
+        usedPhotoKeys.add(photoKey);
+        avatar = `https://images.unsplash.com/${photoPool[photoIdx]}?w=150&sig=${uniqueNum}`;
+        hasPhoto = true;
+      }
+    }
 
     agents.push({
       id: `agent_${uniqueNum}`,
       name,
-      avatar: `https://images.unsplash.com/${AVATAR_PHOTOS[avatarIdx]}?w=150&sig=${uniqueNum}`,
+      avatar,
       city: CITIES[cityIdx],
       occupation: OCCUPATIONS[occIdx],
       creditScore,
       level,
+      gender,
+      hasPhoto,
     });
   }
 
+  console.log(`[LiveFeed] Generated ${totalAgents} agents. ${agents.filter(a => a.hasPhoto).length} with photos, ${agents.filter(a => !a.hasPhoto).length} with default avatars`);
   return agents;
 }
 
@@ -367,6 +427,8 @@ function generatePost(offsetMs: number = 0): SocialPost {
     authorCity: agent.city,
     authorOccupation: agent.occupation,
     isAIAgent: true,
+    authorGender: agent.gender,
+    authorHasPhoto: agent.hasPhoto,
     text,
     media: [],
     likes: randomInt(5, 500),

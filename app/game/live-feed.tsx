@@ -40,6 +40,22 @@ import { useSocialFeed } from '@/contexts/SocialFeedContext';
 import { SocialPost } from '@/types/socialFeed';
 import { aiAgentLiveFeed } from '@/services/AIAgentLiveFeedService';
 
+const DEFAULT_MALE_COLORS = ['#3B82F6', '#6366F1', '#0EA5E9', '#14B8A6', '#8B5CF6'];
+const DEFAULT_FEMALE_COLORS = ['#EC4899', '#F43F5E', '#D946EF', '#F97316', '#EF4444'];
+
+function getDefaultAvatarColor(name: string, gender?: 'male' | 'female'): string {
+  const pool = gender === 'female' ? DEFAULT_FEMALE_COLORS : DEFAULT_MALE_COLORS;
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return pool[Math.abs(hash) % pool.length];
+}
+
+function getDefaultAvatarEmoji(gender?: 'male' | 'female'): string {
+  return gender === 'female' ? '👩' : '👨';
+}
+
 type CategoryFilter = 'all' | 'credit_score' | 'achievement' | 'home_purchase' | 'milestone' | 'tip' | 'question' | 'status';
 
 interface CategoryOption {
@@ -172,12 +188,12 @@ const LiveActivityItem = React.memo(function LiveActivityItem({
         onPress={() => onPressProfile(post)}
         activeOpacity={0.7}
       >
-        {post.authorAvatar ? (
+        {post.authorAvatar && post.authorHasPhoto !== false ? (
           <Image source={{ uri: post.authorAvatar }} style={styles.avatar} />
         ) : (
-          <View style={[styles.avatarPlaceholder, { backgroundColor: categoryInfo.color + '30' }]}>
-            <Text style={styles.avatarInitial}>
-              {post.authorName?.charAt(0)?.toUpperCase() || '?'}
+          <View style={[styles.avatarPlaceholder, { backgroundColor: getDefaultAvatarColor(post.authorName || '', post.authorGender) + '25' }]}>
+            <Text style={styles.avatarEmoji}>
+              {getDefaultAvatarEmoji(post.authorGender)}
             </Text>
           </View>
         )}
@@ -875,6 +891,9 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700' as const,
     color: '#6366F1',
+  },
+  avatarEmoji: {
+    fontSize: 18,
   },
   authorInfo: {
     flex: 1,

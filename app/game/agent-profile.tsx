@@ -14,9 +14,7 @@ import {
   Dimensions,
   ActivityIndicator,
   Animated,
-  FlatList,
   RefreshControl,
-  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
@@ -29,22 +27,15 @@ import {
   Star,
   UserPlus,
   UserCheck,
-  Heart,
   MessageCircle,
-  ChevronRight,
   Shield,
-  Award,
   DollarSign,
-  Home,
   GraduationCap,
   BarChart3,
   Clock,
   Zap,
-  Crown,
   Target,
   Activity,
-  CreditCard,
-  PiggyBank,
   Building2,
   Wallet,
   Users,
@@ -52,10 +43,8 @@ import {
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/contexts/ThemeContext';
-import { aiAgentLiveFeed, type AgentProfile as AIAgentProfile } from '@/services/AIAgentLiveFeedService';
+import { aiAgentLiveFeed, type AgentProfile as AIAgentProfile, type AgentGender } from '@/services/AIAgentLiveFeedService';
 import OasisAPI from '@/services/OasisAPIService';
-import type { AgentProfileResponse } from '@/services/OasisAPIService';
-import type { SocialPost } from '@/types/socialFeed';
 import * as Haptics from 'expo-haptics';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -94,6 +83,8 @@ interface AgentProfile {
   created_at?: string;
   last_active_at?: string;
   agent_id?: string;
+  gender?: AgentGender;
+  hasPhoto?: boolean;
   career?: { current_job?: string; salary?: number; company?: string };
   current_job?: { job_title?: string; company_name?: string; salary_monthly?: number };
   education: any;
@@ -101,7 +92,23 @@ interface AgentProfile {
   properties: any;
   credit_events: any;
   activity_breakdown: Record<string, number>;
-  [key: string]: any; // Allow extra fields from API
+  [key: string]: any;
+}
+
+const DEFAULT_MALE_COLORS = ['#3B82F6', '#6366F1', '#0EA5E9', '#14B8A6', '#8B5CF6'];
+const DEFAULT_FEMALE_COLORS = ['#EC4899', '#F43F5E', '#D946EF', '#F97316', '#EF4444'];
+
+function getDefaultAvatarColor(name: string, gender?: AgentGender): string {
+  const pool = gender === 'female' ? DEFAULT_FEMALE_COLORS : DEFAULT_MALE_COLORS;
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return pool[Math.abs(hash) % pool.length];
+}
+
+function getDefaultAvatarEmoji(gender?: AgentGender): string {
+  return gender === 'female' ? '\uD83D\uDC69' : '\uD83D\uDC68';
 }
 
 interface LiveFeedActivity {
@@ -362,6 +369,8 @@ export default function AgentProfileScreen() {
       monthly_income: Math.floor(Math.random() * 8000) + 3000,
       is_online: Math.random() > 0.3,
       agent_id: agent.id,
+      gender: agent.gender,
+      hasPhoto: agent.hasPhoto,
       current_job: { job_title: agent.occupation, company_name: 'OASIS Corp', salary_monthly: Math.floor(Math.random() * 8000) + 3000 },
       education: [],
       investments: { count: 0, total_value: 0, holdings: [] },
@@ -438,7 +447,7 @@ export default function AgentProfileScreen() {
     } finally {
       setLoading(false);
     }
-  }, [userId, agentId, buildLocalProfile]);
+  }, [userId, agentId, buildLocalProfile, headerOpacity, contentOpacity]);
 
   // Load more activity (OASIS only)
   const loadMoreActivity = useCallback(async () => {
@@ -466,7 +475,7 @@ export default function AgentProfileScreen() {
 
   // Follow/Unfollow via OasisAPI (OASIS agents only)
   const handleFollowToggle = useCallback(async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     if (isLocalAgent) {
       // Toggle local follow state
       setIsFollowing(prev => !prev);
@@ -501,7 +510,7 @@ export default function AgentProfileScreen() {
   }, [userId, isFollowing, isLocalAgent, profile]);
 
   useEffect(() => {
-    loadProfile();
+    void loadProfile();
   }, [loadProfile]);
 
   // ============================================================
@@ -537,7 +546,7 @@ export default function AgentProfileScreen() {
         )}
       </View>
     );
-  }, [activities, hasMoreActivity, loadingMore, colors]);
+  }, [activities, hasMoreActivity, loadingMore, colors, loadMoreActivity]);
 
   const renderFinancialTab = useMemo(() => {
     if (!profile) return null;
@@ -871,10 +880,16 @@ export default function AgentProfileScreen() {
             {/* Avatar & Name */}
             <View style={styles.profileHeader}>
               <View style={styles.avatarContainer}>
-                <Image
-                  source={{ uri: profile.avatar_url || 'https://via.placeholder.com/100' }}
-                  style={styles.avatar}
-                />
+                {profile.avatar_url && profile.hasPhoto !== false ? (
+                  <Image
+                    source={{ uri: profile.avatar_url }}
+                    style={styles.profileAvatar}
+                  />
+                ) : (
+                  <View style={[styles.profileAvatarDefault, { backgroundColor: getDefaultAvatarColor(profile.display_name, profile.gender) + '25' }]}>
+                    <Text style={styles.profileAvatarEmoji}>{getDefaultAvatarEmoji(profile.gender)}</Text>
+                  </View>
+                )}
                 {profile.is_online && <View style={[styles.onlineDot, { borderColor: colors.background }]} />}
               </View>
               <Text style={[styles.displayName, { color: colors.text }]}>{profile.display_name}</Text>
@@ -959,7 +974,7 @@ export default function AgentProfileScreen() {
                 style={[styles.tab, isActive && { borderBottomColor: colors.primary, borderBottomWidth: 2 }]}
                 onPress={() => {
                   setActiveTab(tab);
-                  Haptics.selectionAsync();
+                  void Haptics.selectionAsync();
                 }}
               >
                 <TabIcon size={16} color={isActive ? colors.primary : colors.textLight} />
@@ -1011,6 +1026,9 @@ const styles = StyleSheet.create({
   profileHeader: { alignItems: 'center', paddingHorizontal: 20 },
   avatarContainer: { position: 'relative', marginBottom: 12 },
   avatar: { width: 88, height: 88, borderRadius: 44, borderWidth: 3, borderColor: '#FFF' },
+  profileAvatar: { width: 88, height: 88, borderRadius: 44, borderWidth: 3, borderColor: '#FFF' },
+  profileAvatarDefault: { width: 88, height: 88, borderRadius: 44, borderWidth: 3, borderColor: '#FFF', alignItems: 'center' as const, justifyContent: 'center' as const },
+  profileAvatarEmoji: { fontSize: 36 },
   onlineDot: { position: 'absolute', bottom: 4, right: 4, width: 16, height: 16, borderRadius: 8, backgroundColor: '#10B981', borderWidth: 3 },
   displayName: { fontSize: 22, fontWeight: '800', textAlign: 'center' },
   userName: { fontSize: 14, marginTop: 2 },

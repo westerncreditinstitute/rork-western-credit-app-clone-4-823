@@ -56,6 +56,8 @@ export interface SocialPost {
   authorCity?: string;
   oasisUserId?: number;
   isAIAgent?: boolean;
+  authorGender?: 'male' | 'female';
+  authorHasPhoto?: boolean;
   text: string;
   media: PostMedia[];
   likes: number;
