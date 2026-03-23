@@ -1,15 +1,20 @@
-# Fix Feed Section - Profile & Social Feed
+# Scavenger Hunt - MUSO Token Treasure Hunt in LA
 
-## Profile Feed (app/game/profile.tsx)
-- [ ] Make post author row tappable with navigation (agent-profile for AI agents, owner-profile for players)
-- [ ] Make comment author names/avatars tappable with navigation
-- [ ] Add AI agent badge indicator on post avatars (like social-feed.tsx has)
-- [ ] Ensure like/comment interactions work properly with haptic feedback
+## Phase 1: Service & Types
+- [ ] Create ScavengerHuntService.ts with LA treasure locations, daily reset logic, claim tracking
+- [ ] Create types/scavengerHunt.ts with all type definitions
 
-## Social Feed (app/game/social-feed.tsx)
-- [ ] Add onPress handler to post author row TouchableOpacity (currently missing)
-- [ ] Make comment author names/avatars tappable with navigation
+## Phase 2: Context
+- [ ] Create ScavengerHuntContext.tsx for state management (locations, claims, daily reset)
 
-## Verification
+## Phase 3: Scavenger Hunt Page
+- [ ] Create app/game/scavenger-hunt.tsx - main page with OpenStreetMap, AR camera view, treasure list
+
+## Phase 4: Integration
+- [ ] Add scavenger-hunt to Quick Actions in index.tsx
+- [ ] Add route to _layout.tsx
+- [ ] Add ScavengerHuntProvider to _layout.tsx providers
+
+## Phase 5: Verification
 - [ ] TypeScript compile clean
-- [ ] Commit and push to repository
+- [ ] Commit and push

@@ -50,6 +50,7 @@ import {
   Bot,
   Globe,
   Radio,
+  Compass,
 } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useGame } from '@/contexts/GameContext';
@@ -80,6 +81,7 @@ const QUICK_ACTIONS = [
   { id: 'achievements', icon: Trophy, label: 'Achievements', route: '/game/achievements', color: '#8B5CF6' },
   { id: 'go-virtual', icon: Globe, label: 'Go Virtual', route: '/game/go-virtual', color: '#FF6B35' },
   { id: 'run-simulator', icon: Bot, label: 'Run Simulator', route: '/game/run-simulator', color: '#2563EB' },
+  { id: 'scavenger-hunt', icon: Compass, label: 'Treasure Hunt', route: '/game/scavenger-hunt', color: '#D946EF' },
   { id: 'live-feed', icon: Radio, label: 'Live Feed', route: '/game/live-feed', color: '#10B981' },
   { id: 'tutorial', icon: BookOpen, label: 'Full Tutorial', route: '/game/tutorial', color: '#14B8A6' },
 ] as const;
