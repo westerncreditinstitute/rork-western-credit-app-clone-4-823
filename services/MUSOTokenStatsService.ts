@@ -120,12 +120,34 @@ const MUSO_CONTRACT = {
 
 // Refresh intervals
 const REFRESH_INTERVALS = {
-  NETWORK: 15_000,     // 15 seconds
-  SUPPLY: 30_000,      // 30 seconds
-  HOLDERS: 60_000,     // 1 minute
-  TRANSACTIONS: 30_000, // 30 seconds
-  ECONOMY: 120_000,    // 2 minutes
+  NETWORK: 15_000,
+  SUPPLY: 30_000,
+  HOLDERS: 60_000,
+  TRANSACTIONS: 30_000,
+  ECONOMY: 120_000,
 };
+
+const FETCH_TIMEOUT_MS = 6_000;
+
+function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number = FETCH_TIMEOUT_MS): Promise<Response> {
+  return new Promise((resolve, reject) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      controller.abort();
+      reject(new Error(`Fetch timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    fetch(url, { ...options, signal: controller.signal })
+      .then((res) => {
+        clearTimeout(timer);
+        resolve(res);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
 
 // ============================================================
 // Service
@@ -226,7 +248,7 @@ class MUSOTokenStatsServiceClass {
     try {
       // Fetch latest block and gas price in parallel
       const [blockRes, gasRes] = await Promise.all([
-        fetch(SEPOLIA_CONFIG.rpcUrl, {
+        fetchWithTimeout(SEPOLIA_CONFIG.rpcUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -236,7 +258,7 @@ class MUSOTokenStatsServiceClass {
             id: 1,
           }),
         }),
-        fetch(SEPOLIA_CONFIG.rpcUrl, {
+        fetchWithTimeout(SEPOLIA_CONFIG.rpcUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -280,7 +302,7 @@ class MUSOTokenStatsServiceClass {
   private async fetchSupplyInfo(): Promise<TokenSupplyInfo> {
     try {
       // ERC20 totalSupply() selector: 0x18160ddd
-      const totalSupplyRes = await fetch(SEPOLIA_CONFIG.rpcUrl, {
+      const totalSupplyRes = await fetchWithTimeout(SEPOLIA_CONFIG.rpcUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

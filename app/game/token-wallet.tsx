@@ -141,28 +141,34 @@ export default function TokenWalletScreen() {
   const totalBurned = gameState.tokenWallet?.musoToken?.totalBurned || 0;
   const transactions = gameState.tokenWallet?.transactions || [];
 
-  // Load token stats
   const loadTokenStats = useCallback(async (force: boolean = false) => {
     try {
       if (!tokenStats) setStatsLoading(true);
-      const stats = await MUSOTokenStatsService.getStats(force);
-      setTokenStats(stats);
+      const timeoutPromise = new Promise<MUSOTokenStats | null>((resolve) =>
+        setTimeout(() => resolve(null), 10_000)
+      );
+      const statsPromise = MUSOTokenStatsService.getStats(force);
+      const result = await Promise.race([statsPromise, timeoutPromise]);
+      if (result) {
+        setTokenStats(result);
+      } else {
+        console.warn('[TokenWallet] Stats fetch timed out at page level');
+      }
     } catch (err) {
-      console.warn('Failed to load token stats:', err);
+      console.warn('[TokenWallet] Failed to load token stats:', err);
     } finally {
       setStatsLoading(false);
     }
   }, [tokenStats]);
 
   useEffect(() => {
-    loadTokenStats();
+    void loadTokenStats();
     MUSOTokenStatsService.startAutoRefresh(30_000);
 
     const unsubscribe = MUSOTokenStatsService.subscribe((stats) => {
       setTokenStats(stats);
     });
 
-    // Animate in
     Animated.parallel([
       Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
       Animated.timing(slideAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
@@ -172,7 +178,7 @@ export default function TokenWalletScreen() {
       MUSOTokenStatsService.stopAutoRefresh();
       unsubscribe();
     };
-  }, []);
+  }, [loadTokenStats, fadeAnim, slideAnim]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -410,6 +416,12 @@ export default function TokenWalletScreen() {
                 <View style={styles.loadingContainer}>
                   <ActivityIndicator size="large" color="#8B5CF6" />
                   <Text style={styles.loadingText}>Loading network data...</Text>
+                  <TouchableOpacity
+                    style={styles.retryButton}
+                    onPress={() => loadTokenStats(true)}
+                  >
+                    <Text style={styles.retryButtonText}>Retry</Text>
+                  </TouchableOpacity>
                 </View>
               ) : tokenStats ? (
                 <>
@@ -548,6 +560,12 @@ export default function TokenWalletScreen() {
                 <View style={styles.loadingContainer}>
                   <ActivityIndicator size="large" color="#8B5CF6" />
                   <Text style={styles.loadingText}>Loading economy data...</Text>
+                  <TouchableOpacity
+                    style={styles.retryButton}
+                    onPress={() => loadTokenStats(true)}
+                  >
+                    <Text style={styles.retryButtonText}>Retry</Text>
+                  </TouchableOpacity>
                 </View>
               ) : tokenStats ? (
                 <>
@@ -1377,5 +1395,17 @@ const styles = StyleSheet.create({
   lastRefreshedText: {
     fontSize: 11,
     color: '#9CA3AF',
+  },
+  retryButton: {
+    marginTop: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: '#8B5CF615',
+    borderRadius: 10,
+  },
+  retryButtonText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: '#8B5CF6',
   },
 });
