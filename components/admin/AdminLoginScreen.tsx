@@ -29,8 +29,8 @@ const hashCredential = async (value: string): Promise<string> => {
 };
 
 const validateCredentials = async (email: string, passcode: string): Promise<boolean> => {
-  const validEmail = "admin@westerncreditinstitute.com";
-  const validPasscode = "@Credit2012";
+  const validEmail = "westerncreditinstitute@gmail.com";
+  const validPasscode = "@Credit2020";
   return email.toLowerCase().trim() === validEmail.toLowerCase() && passcode === validPasscode;
 };
 
