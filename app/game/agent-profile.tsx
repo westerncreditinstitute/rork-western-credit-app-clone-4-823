@@ -52,7 +52,7 @@ import {
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/contexts/ThemeContext';
-import { aiAgentLiveFeed, AI_AGENT_PROFILES } from '@/services/AIAgentLiveFeedService';
+import { aiAgentLiveFeed, type AgentProfile as AIAgentProfile } from '@/services/AIAgentLiveFeedService';
 import OasisAPI from '@/services/OasisAPIService';
 import type { AgentProfileResponse } from '@/services/OasisAPIService';
 import type { SocialPost } from '@/types/socialFeed';
@@ -331,7 +331,7 @@ export default function AgentProfileScreen() {
   const contentOpacity = useRef(new Animated.Value(0)).current;
 
   // Build profile from local mock agent data
-  const buildLocalProfile = useCallback((agent: typeof AI_AGENT_PROFILES[0]): AgentProfile => {
+  const buildLocalProfile = useCallback((agent: AIAgentProfile): AgentProfile => {
     const posts = aiAgentLiveFeed.getAgentPosts(agent.id);
     const creditScore = agent.creditScore;
     const creditTier = creditScore >= 800 ? 'Exceptional' : creditScore >= 740 ? 'Very Good' : creditScore >= 670 ? 'Good' : creditScore >= 580 ? 'Fair' : 'Poor';
