@@ -92,7 +92,7 @@ const _LIFESTYLE_EMOJI: Record<string, string> = {
 
 export default function AgentDiscoveryScreen() {
   const { colors, isDark } = useTheme();
-  const _router = useRouter();
+  const router = useRouter();
   const insets = useSafeAreaInsets();
 
   const {
@@ -150,6 +150,18 @@ export default function AgentDiscoveryScreen() {
     }
     return list;
   }, [friendSuggestions, selectedCity, selectedOccupation]);
+
+  // Navigate to agent profile
+  const navigateToAgentProfile = useCallback((agent: Friend) => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push({
+      pathname: '/game/agent-profile',
+      params: {
+        agentId: agent.id,
+        userId: agent.oasisUserId ? String(agent.oasisUserId) : '',
+      },
+    });
+  }, [router]);
 
   // Follow/unfollow toggle
   const handleToggleFollow = useCallback((agent: Friend) => {
@@ -221,7 +233,11 @@ export default function AgentDiscoveryScreen() {
     const creditScore = agent.numFollowers ? Math.min(850, 500 + agent.numFollowers) : 700;
 
     return (
-      <View style={styles.agentCard}>
+      <TouchableOpacity
+        style={styles.agentCard}
+        onPress={() => navigateToAgentProfile(agent)}
+        activeOpacity={0.8}
+      >
         <View style={styles.agentCardHeader}>
           <View style={styles.agentAvatarWrap}>
             <Image source={{ uri: agent.avatar }} style={styles.agentAvatar} />
@@ -311,15 +327,15 @@ export default function AgentDiscoveryScreen() {
             </>
           )}
         </TouchableOpacity>
-      </View>
+      </TouchableOpacity>
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [friendIds, colors, handleToggleFollow, styles]);
+  }, [friendIds, colors, handleToggleFollow, navigateToAgentProfile, styles]);
 
   const renderFeaturedAgent = useCallback(({ item: agent }: { item: Friend }) => {
     const isFollowing = friendIds.has(agent.id);
     return (
-      <TouchableOpacity style={styles.featuredCard} activeOpacity={0.8}>
+      <TouchableOpacity style={styles.featuredCard} activeOpacity={0.8} onPress={() => navigateToAgentProfile(agent)}>
         <LinearGradient
           colors={isDark ? ['#1F2937', '#374151'] : ['#F9FAFB', '#F3F4F6']}
           style={styles.featuredGradient}
@@ -366,7 +382,7 @@ export default function AgentDiscoveryScreen() {
       </TouchableOpacity>
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [friendIds, colors, isDark, handleToggleFollow, styles]);
+  }, [friendIds, colors, isDark, handleToggleFollow, navigateToAgentProfile, styles]);
 
   // ── Filter Bar ──
   const renderFilters = () => (

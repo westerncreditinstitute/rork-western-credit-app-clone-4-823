@@ -98,11 +98,13 @@ const LiveActivityItem = React.memo(function LiveActivityItem({
   colors,
   isDark,
   onLike,
+  onPressProfile,
 }: {
   post: SocialPost;
   colors: any;
   isDark: boolean;
   onLike: (id: string) => void;
+  onPressProfile: (post: SocialPost) => void;
 }) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
@@ -165,7 +167,11 @@ const LiveActivityItem = React.memo(function LiveActivityItem({
         </View>
       </View>
 
-      <View style={styles.authorRow}>
+      <TouchableOpacity
+        style={styles.authorRow}
+        onPress={() => onPressProfile(post)}
+        activeOpacity={0.7}
+      >
         {post.authorAvatar ? (
           <Image source={{ uri: post.authorAvatar }} style={styles.avatar} />
         ) : (
@@ -199,7 +205,7 @@ const LiveActivityItem = React.memo(function LiveActivityItem({
             </Text>
           )}
         </View>
-      </View>
+      </TouchableOpacity>
 
       <Text style={[styles.postContent, { color: colors.text }]} numberOfLines={4}>
         {post.text || post.content || ''}
@@ -337,6 +343,19 @@ export default function LiveFeedScreen() {
     void toggleLikePost(postId);
   }, [toggleLikePost]);
 
+  const handlePressProfile = useCallback((post: SocialPost) => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (post.isAIAgent) {
+      router.push({
+        pathname: '/game/agent-profile',
+        params: {
+          agentId: post.authorId || '',
+          userId: post.oasisUserId ? String(post.oasisUserId) : '',
+        },
+      });
+    }
+  }, [router]);
+
   const handleRefresh = useCallback(() => {
     void refreshFeed();
   }, [refreshFeed]);
@@ -364,8 +383,9 @@ export default function LiveFeedScreen() {
       colors={colors}
       isDark={isDark}
       onLike={handleLike}
+      onPressProfile={handlePressProfile}
     />
-  ), [colors, isDark, handleLike]);
+  ), [colors, isDark, handleLike, handlePressProfile]);
 
   const keyExtractor = useCallback((item: SocialPost) => item.id, []);
 

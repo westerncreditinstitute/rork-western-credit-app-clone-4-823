@@ -1,6 +1,6 @@
 import { SocialPost, PostType } from '@/types/socialFeed';
 
-const AI_AGENT_PROFILES = [
+export const AI_AGENT_PROFILES = [
   { id: 'agent_maya', name: 'Maya_CreditPro', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150', city: 'New York', occupation: 'Financial Analyst', creditScore: 782, level: 47 },
   { id: 'agent_james', name: 'JamesTheBuilder', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150', city: 'Los Angeles', occupation: 'Software Engineer', creditScore: 815, level: 63 },
   { id: 'agent_sofia', name: 'Sofia_Saves', avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150', city: 'Miami', occupation: 'Small Business Owner', creditScore: 714, level: 39 },
@@ -341,6 +341,18 @@ class AIAgentLiveFeedService {
 
   get running(): boolean {
     return this.isRunning;
+  }
+
+  getAgentById(agentId: string): typeof AI_AGENT_PROFILES[0] | undefined {
+    return AI_AGENT_PROFILES.find(a => a.id === agentId);
+  }
+
+  getAgentPosts(agentId: string): SocialPost[] {
+    return this.posts.filter(p => p.authorId === agentId);
+  }
+
+  getAllAgents(): typeof AI_AGENT_PROFILES {
+    return [...AI_AGENT_PROFILES];
   }
 }
 

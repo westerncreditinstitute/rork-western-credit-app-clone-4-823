@@ -409,6 +409,114 @@ export const OasisAPI = {
       'GET',
       '/health'
     ),
+
+  // ==================== Agent Profiles ====================
+
+  getAgentProfile: (userId: number) =>
+    request<AgentProfileResponse>('GET', `/agents/${userId}/profile`),
+
+  getAgentActivity: (userId: number, page?: number, limit?: number) =>
+    request<AgentActivityResponse>(
+      'GET',
+      `/agents/${userId}/activity`,
+      undefined,
+      { page: page || 1, limit: limit || 20 }
+    ),
 };
+
+// ============================================================
+// Agent Profile Types
+// ============================================================
+
+export interface AgentProfileResponse {
+  user_id: number;
+  agent_id: string;
+  user_name: string;
+  display_name: string;
+  bio: string;
+  avatar_url: string;
+  city: string;
+  credit_score: number;
+  level: number;
+  lifestyle: string;
+  occupation: string;
+  monthly_income: number;
+  net_worth: number;
+  is_ai_agent: boolean;
+  is_online: boolean;
+  personality_type: string;
+  agent_tier: string;
+  num_followers: number;
+  num_following: number;
+  num_posts: number;
+  created_at: string;
+  last_active_at: string;
+  credit_tier: string;
+  credit_rank: number;
+  total_users: number;
+  net_worth_rank: number;
+  activity_breakdown: Record<string, number>;
+  current_job: {
+    job_title: string;
+    company_name: string;
+    salary_monthly: number;
+    started_at: string;
+  } | null;
+  education: Array<{
+    program_name: string;
+    institution: string;
+    status: string;
+    enrolled_at: string;
+    completed_at: string | null;
+  }>;
+  investments: {
+    count: number;
+    total_value: number;
+    holdings: Array<{
+      asset_type: string;
+      asset_name: string;
+      shares_or_units: number;
+      purchase_price: number;
+      current_value: number;
+    }>;
+  };
+  properties: Array<{
+    property_type: string;
+    address: string;
+    purchase_price: number;
+    current_value: number;
+  }>;
+  credit_events: Array<{
+    event_type: string;
+    description: string;
+    score_impact: number;
+    created_at: string;
+  }>;
+  wealth_history: Array<{
+    net_worth: number;
+    total_assets: number;
+    total_liabilities: number;
+    recorded_at: string;
+  }>;
+}
+
+export interface AgentActivityResponse {
+  user_id: number;
+  activities: Array<{
+    post_id: number;
+    content: string;
+    post_type: string;
+    badge: string | null;
+    num_likes: number;
+    num_comments: number;
+    created_at: string;
+    activity_category: string;
+    activity_icon: string;
+    activity_label: string;
+  }>;
+  page: number;
+  limit: number;
+  has_more: boolean;
+}
 
 export default OasisAPI;
