@@ -220,7 +220,7 @@ export const [HomeProvider, useHome] = createContextHook(() => {
   const realtimeSubscriptions = useHomeRealtimeSubscriptions(
     currentHomeId.current ?? undefined,
     {
-      onHomeUpdate: useCallback((payload) => {
+      onHomeUpdate: useCallback((payload: any) => {
         console.log('[HomeContext] Realtime home update received:', payload.eventType);
         setRealtimeState(prev => ({
           ...prev,
@@ -231,19 +231,19 @@ export const [HomeProvider, useHome] = createContextHook(() => {
           },
         }));
       }, []),
-      onRoomUpdate: useCallback((payload) => {
+      onRoomUpdate: useCallback((payload: any) => {
         console.log('[HomeContext] Realtime room update received:', payload.eventType);
-        queryClient.invalidateQueries({ queryKey: ['homeRooms'] });
+        void queryClient.invalidateQueries({ queryKey: ['homeRooms'] });
       }, [queryClient]),
-      onItemUpdate: useCallback((payload) => {
+      onItemUpdate: useCallback((payload: any) => {
         console.log('[HomeContext] Realtime item update received:', payload.eventType);
-        queryClient.invalidateQueries({ queryKey: ['homeItems'] });
+        void queryClient.invalidateQueries({ queryKey: ['homeItems'] });
       }, [queryClient]),
-      onVisitorUpdate: useCallback((payload) => {
+      onVisitorUpdate: useCallback((payload: any) => {
         console.log('[HomeContext] Realtime visitor update received:', payload.eventType);
-        queryClient.invalidateQueries({ queryKey: ['activeVisitors'] });
+        void queryClient.invalidateQueries({ queryKey: ['activeVisitors'] });
       }, [queryClient]),
-      onError: useCallback((error) => {
+      onError: useCallback((error: any) => {
         console.error('[HomeContext] Realtime subscription error:', error);
         setErrorState(prev => ({
           ...prev,
@@ -362,7 +362,7 @@ export const [HomeProvider, useHome] = createContextHook(() => {
         }
       };
 
-      loadHomeData();
+      void loadHomeData();
     });
 
     return () => interactionHandle.cancel();
@@ -436,7 +436,7 @@ export const [HomeProvider, useHome] = createContextHook(() => {
           clearTimeout(autoSaveTimeoutRef.current);
         }
         autoSaveTimeoutRef.current = setTimeout(() => {
-          saveHomeData();
+          void saveHomeData();
         }, 5000);
       }
     }
@@ -450,7 +450,7 @@ export const [HomeProvider, useHome] = createContextHook(() => {
 
   useEffect(() => {
     if (isInitialized && homeInventory.length > 0) {
-      saveInventory();
+      void saveInventory();
     }
   }, [homeInventory, isInitialized, saveInventory]);
 
@@ -632,7 +632,7 @@ export const [HomeProvider, useHome] = createContextHook(() => {
     if (upgradedHome) {
       integration.economy.deductBalance(validation.cost);
       integration.analytics.trackHomeUpgraded(currentHome.homeId, currentTier, targetTier);
-      integration.notifications.sendTierUpgradeNotification(targetTier);
+      void integration.notifications.sendTierUpgradeNotification(targetTier);
       console.log('[HomeContext] Home upgraded to tier:', targetTier);
       setLoadingState(prev => ({ ...prev, isUpgrading: false }));
       return true;
@@ -1024,7 +1024,7 @@ export const [HomeProvider, useHome] = createContextHook(() => {
     console.log('[HomeContext] Home data reset');
   }, [playerId]);
 
-  return {
+  return useMemo(() => ({
     currentHome,
     hasHome,
     homeStats,
@@ -1113,7 +1113,21 @@ export const [HomeProvider, useHome] = createContextHook(() => {
     saveHomeData,
     
     integration,
-  };
+  }), [
+    currentHome, hasHome, homeStats, homeInventory, availableInventory, placedInventory,
+    isInitialized, homeManagerState, visitorSystemState, placementState, isVisiting, isHosting,
+    visitDuration, housingType, canAccessHomeEditor, isSharedRental, isPropertyOwner, isHomeless,
+    editMode, roomState, itemState, undoRedoState, undoRedoHook.canUndo, undoRedoHook.canRedo,
+    undoRedoHook.historyLength, undoRedoHook.futureLength, visitorState, loadingState, errorState,
+    realtimeState, homeServices, realtimeSubscriptions, getHousingStatusText,
+    getHomeEditorEligibilityMessage, createHome, upgradeHome, getUpgradeCost, canUpgrade,
+    purchaseHomeItem, placeItemFromInventory, removeItemToInventory, moveItem, browsePublicHomes,
+    visitHome, leaveVisit, setHomePublic, hostSession, endHostSession, enterEditMode, exitEditMode,
+    selectRoom, setRoomVisibility, selectItem, selectPlacedItem, highlightItem, setAutoSave,
+    discardChanges, enterPlacementMode, exitPlacementMode, confirmPlacement, undoPlacement,
+    redoPlacement, getItemDefinition, getItemsInRoom, getRoomCapacity, setError, setServiceError,
+    clearError, retryLastOperation, resetHome, saveHomeData, integration,
+  ]);
 });
 
 export function useHomeEditor() {

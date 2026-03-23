@@ -42,7 +42,7 @@ export function Room3DPreview({
   items,
   selectedItemId,
   onSelectItem,
-  onMoveItem,
+  onMoveItem: _onMoveItem,
   showGrid,
   viewMode,
   colors,
@@ -362,7 +362,7 @@ function FloorPlane({ width, depth, scale, offset, containerSize, showGrid, grid
                 style={[
                   styles.floorGridLine,
                   {
-                    left: (i / width) * 100 + '%',
+                    left: `${(i / width) * 100}%` as unknown as number,
                     width: 1,
                     height: '100%',
                     backgroundColor: gridColor,
@@ -377,7 +377,7 @@ function FloorPlane({ width, depth, scale, offset, containerSize, showGrid, grid
                 style={[
                   styles.floorGridLine,
                   {
-                    top: (i / depth) * 100 + '%',
+                    top: `${(i / depth) * 100}%` as unknown as number,
                     height: 1,
                     width: '100%',
                     backgroundColor: gridColor,
