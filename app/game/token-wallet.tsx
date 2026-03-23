@@ -144,15 +144,9 @@ export default function TokenWalletScreen() {
   const loadTokenStats = useCallback(async (force: boolean = false) => {
     try {
       if (!tokenStats) setStatsLoading(true);
-      const timeoutPromise = new Promise<MUSOTokenStats | null>((resolve) =>
-        setTimeout(() => resolve(null), 10_000)
-      );
-      const statsPromise = MUSOTokenStatsService.getStats(force);
-      const result = await Promise.race([statsPromise, timeoutPromise]);
+      const result = await MUSOTokenStatsService.getStats(force);
       if (result) {
         setTokenStats(result);
-      } else {
-        console.warn('[TokenWallet] Stats fetch timed out at page level');
       }
     } catch (err) {
       console.warn('[TokenWallet] Failed to load token stats:', err);

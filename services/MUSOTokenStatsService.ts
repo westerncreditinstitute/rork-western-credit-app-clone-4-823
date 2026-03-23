@@ -170,11 +170,34 @@ class MUSOTokenStatsServiceClass {
       return this.cachedStats;
     }
 
-    const stats = await this.fetchAllStats();
-    this.cachedStats = stats;
-    this.lastFetchTime = now;
-    this.notifyListeners(stats);
-    return stats;
+    if (!this.cachedStats) {
+      console.log('[MUSOTokenStats] Returning instant defaults while fetching live data');
+      const defaults = this.buildDefaultStats();
+      this.cachedStats = defaults;
+      this.lastFetchTime = now;
+
+      this.fetchAllStats().then((stats) => {
+        this.cachedStats = stats;
+        this.lastFetchTime = Date.now();
+        this.notifyListeners(stats);
+        console.log('[MUSOTokenStats] Live data loaded successfully');
+      }).catch((err) => {
+        console.warn('[MUSOTokenStats] Background fetch failed, using defaults:', err);
+      });
+
+      return defaults;
+    }
+
+    try {
+      const stats = await this.fetchAllStats();
+      this.cachedStats = stats;
+      this.lastFetchTime = now;
+      this.notifyListeners(stats);
+      return stats;
+    } catch (err) {
+      console.warn('[MUSOTokenStats] Refresh failed, returning cached:', err);
+      return this.cachedStats;
+    }
   }
 
   /**
@@ -533,6 +556,19 @@ class MUSOTokenStatsServiceClass {
       totalRegistered: 1_250,
       totalEligible: 900,
       description: 'Testnet MUSO tokens will be eligible for mainnet token swap when MUSO launches on major exchanges.',
+    };
+  }
+
+  private buildDefaultStats(): MUSOTokenStats {
+    return {
+      network: this.getDefaultNetworkInfo(),
+      contract: this.getContractInfo(),
+      supply: this.getDefaultSupplyInfo(),
+      holders: this.getDefaultHolderStats(),
+      transactions: this.getDefaultTransactionStats(),
+      economy: this.getDefaultEconomyStats(),
+      mainnetSwap: this.getDefaultMainnetSwapInfo(),
+      lastRefreshed: Date.now(),
     };
   }
 
