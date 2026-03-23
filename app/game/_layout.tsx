@@ -89,6 +89,7 @@ export default function GameLayout() {
         <Stack.Screen name="run-simulator" options={{ title: 'Run Simulator' }} />
         <Stack.Screen name="social-feed" options={{ title: 'Social Feed', headerShown: false }} />
         <Stack.Screen name="agent-discovery" options={{ title: 'Discover Agents', headerShown: false }} />
+        <Stack.Screen name="live-feed" options={{ title: 'Live Feed', headerShown: false }} />
       </Stack>
     </GameProviders>
   );
