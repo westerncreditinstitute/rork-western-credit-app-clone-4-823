@@ -14,7 +14,7 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import {
   MapPin,
   Camera,
@@ -22,6 +22,7 @@ import {
   Trophy,
   Compass,
   Navigation,
+  ChevronLeft,
   ChevronRight,
   X,
   Gift,
@@ -59,6 +60,7 @@ type ViewMode = 'map' | 'list' | 'legend' | 'stats';
 
 export default function ScavengerHuntScreen() {
   const { colors, isDark } = useTheme();
+  const router = useRouter();
   const { mintTokens } = useGame();
   const {
     treasures,
@@ -296,6 +298,13 @@ export default function ScavengerHuntScreen() {
       style={styles.header}
     >
       <View style={styles.headerTop}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <ChevronLeft size={24} color="#FFFFFF" />
+        </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>🗺️ Treasure Hunt</Text>
           <View style={styles.locationRow}>
@@ -1528,7 +1537,8 @@ const styles = StyleSheet.create({
   loadingText: { fontSize: 14 },
 
   header: { padding: 20, paddingTop: 12 },
-  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  backButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center' as const, justifyContent: 'center' as const, marginRight: 10 },
+  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   headerTitle: { fontSize: 26, fontWeight: '800' as const, color: '#FFF' },
   headerSubtitle: { fontSize: 12, color: '#BAE6FD', marginTop: 4 },
   headerRight: { alignItems: 'flex-end' },
