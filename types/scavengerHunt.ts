@@ -110,12 +110,14 @@ export const TREASURE_TYPE_CONFIG: Record<TreasureType, {
   label: string;
   icon: string;
   baseReward: number;
+  imageUrl?: string;
+  isGif?: boolean;
 }> = {
   coin_pile: { label: 'Coin Pile', icon: '🪙', baseReward: 25 },
-  treasure_chest: { label: 'Treasure Chest', icon: '📦', baseReward: 50 },
+  treasure_chest: { label: 'Treasure Chest', icon: '📦', baseReward: 50, imageUrl: 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/sxoyt6evwrnj9ec9e7xa2' },
   golden_muso: { label: 'Golden MUSO', icon: '🏆', baseReward: 100 },
   crystal_vault: { label: 'Crystal Vault', icon: '💎', baseReward: 150 },
-  token_fountain: { label: 'Token Fountain', icon: '⛲', baseReward: 200 },
+  token_fountain: { label: 'Token Fountain', icon: '⛲', baseReward: 200, imageUrl: 'https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/h81re9sgu9wthtq0rtnvy', isGif: true },
 };
 
 export const STREAK_BONUSES: Record<number, { multiplier: number; label: string }> = {

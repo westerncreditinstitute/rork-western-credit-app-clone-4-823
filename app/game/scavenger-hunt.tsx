@@ -87,7 +87,7 @@ export default function ScavengerHuntScreen() {
   const [isScanning, setIsScanning] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   const [showLegendPreview, setShowLegendPreview] = useState(false);
-  const [legendPreviewType, setLegendPreviewType] = useState<{ key: string; label: string; icon: string; baseReward: number } | null>(null);
+  const [legendPreviewType, setLegendPreviewType] = useState<{ key: string; label: string; icon: string; baseReward: number; imageUrl?: string; isGif?: boolean } | null>(null);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [_cameraReady, setCameraReady] = useState(false);
 
@@ -559,7 +559,11 @@ export default function ScavengerHuntScreen() {
       >
         <View style={styles.treasureCardLeft}>
           <View style={[styles.treasureIconWrap, { backgroundColor: rarity.bgColor }]}>
-            <Text style={styles.treasureCardIcon}>{claimed ? '✅' : treasure.icon}</Text>
+            {!claimed && typeConfig.imageUrl ? (
+              <Image source={{ uri: typeConfig.imageUrl }} style={styles.treasureCardImage} resizeMode="contain" />
+            ) : (
+              <Text style={styles.treasureCardIcon}>{claimed ? '✅' : treasure.icon}</Text>
+            )}
           </View>
         </View>
 
@@ -652,7 +656,7 @@ export default function ScavengerHuntScreen() {
   );
 
   const renderLegendView = () => {
-    const treasureTypes = Object.entries(TREASURE_TYPE_CONFIG) as [string, { label: string; icon: string; baseReward: number }][];
+    const treasureTypes = Object.entries(TREASURE_TYPE_CONFIG) as [string, { label: string; icon: string; baseReward: number; imageUrl?: string; isGif?: boolean }][];
     const rarities = Object.entries(RARITY_CONFIG) as [string, { color: string; glowIntensity: number; label: string; multiplier: number; bgColor: string }][];
     const placeTypes = Object.entries(PLACE_TYPE_CONFIG) as [string, { label: string; icon: string; priority: number }][];
     const streaks = Object.entries(STREAK_BONUSES) as [string, { multiplier: number; label: string }][];
@@ -680,7 +684,11 @@ export default function ScavengerHuntScreen() {
               onPress={() => handleLegendPreview({ key, ...config })}
             >
               <View style={[styles.legendItemIcon, { backgroundColor: '#F59E0B10' }]}>
-                <Text style={styles.legendItemEmoji}>{config.icon}</Text>
+                {config.imageUrl ? (
+                  <Image source={{ uri: config.imageUrl }} style={styles.legendItemImage} resizeMode="contain" />
+                ) : (
+                  <Text style={styles.legendItemEmoji}>{config.icon}</Text>
+                )}
               </View>
               <View style={styles.legendItemInfo}>
                 <Text style={[styles.legendItemName, { color: colors.text }]}>{config.label}</Text>
@@ -834,10 +842,10 @@ export default function ScavengerHuntScreen() {
             </View>
           </View>
           {[
-            { type: 'Coin Pile', rarity: 'Common', base: 25, mult: 1.0, total: 25, icon: '🪙', rarityColor: '#9CA3AF' },
-            { type: 'Treasure Chest', rarity: 'Rare', base: 50, mult: 1.5, total: 75, icon: '📦', rarityColor: '#3B82F6' },
-            { type: 'Golden MUSO', rarity: 'Epic', base: 100, mult: 2.0, total: 200, icon: '🏆', rarityColor: '#8B5CF6' },
-            { type: 'Token Fountain', rarity: 'Legendary', base: 200, mult: 3.0, total: 600, icon: '⛲', rarityColor: '#F59E0B' },
+            { type: 'Coin Pile', rarity: 'Common', base: 25, mult: 1.0, total: 25, icon: '🪙', rarityColor: '#9CA3AF', imageUrl: undefined as string | undefined },
+            { type: 'Treasure Chest', rarity: 'Rare', base: 50, mult: 1.5, total: 75, icon: '📦', rarityColor: '#3B82F6', imageUrl: TREASURE_TYPE_CONFIG.treasure_chest.imageUrl },
+            { type: 'Golden MUSO', rarity: 'Epic', base: 100, mult: 2.0, total: 200, icon: '🏆', rarityColor: '#8B5CF6', imageUrl: undefined as string | undefined },
+            { type: 'Token Fountain', rarity: 'Legendary', base: 200, mult: 3.0, total: 600, icon: '⛲', rarityColor: '#F59E0B', imageUrl: TREASURE_TYPE_CONFIG.token_fountain.imageUrl },
           ].map((example, index) => (
             <View
               key={index}
@@ -846,7 +854,11 @@ export default function ScavengerHuntScreen() {
                 index < 3 && { borderBottomWidth: 1, borderBottomColor: colors.border + '40' },
               ]}
             >
-              <Text style={styles.legendExampleIcon}>{example.icon}</Text>
+              {example.imageUrl ? (
+                <Image source={{ uri: example.imageUrl }} style={styles.legendExampleImage} resizeMode="contain" />
+              ) : (
+                <Text style={styles.legendExampleIcon}>{example.icon}</Text>
+              )}
               <View style={styles.legendExampleInfo}>
                 <Text style={[styles.legendExampleName, { color: colors.text }]}>{example.type}</Text>
                 <Text style={[styles.legendExampleCalc, { color: colors.textSecondary }]}>
@@ -1041,7 +1053,11 @@ export default function ScavengerHuntScreen() {
               >
                 <View style={[styles.arPreviewGlow, { borderColor: typeColor + '50', shadowColor: typeColor }]} />
                 <View style={[styles.arPreviewBody, { backgroundColor: typeColor + '20', borderColor: typeColor }]}>
-                  <Text style={styles.arPreviewIcon}>{legendPreviewType.icon}</Text>
+                  {legendPreviewType.imageUrl ? (
+                    <Image source={{ uri: legendPreviewType.imageUrl }} style={styles.arPreviewImage} resizeMode="contain" />
+                  ) : (
+                    <Text style={styles.arPreviewIcon}>{legendPreviewType.icon}</Text>
+                  )}
                 </View>
                 {[...Array(8)].map((_, i) => (
                   <Animated.View
@@ -1089,7 +1105,11 @@ export default function ScavengerHuntScreen() {
               <View style={styles.arBottomSection}>
                 <View style={styles.arPreviewInfoCard}>
                   <View style={styles.arPreviewInfoHeader}>
-                    <Text style={styles.arPreviewInfoEmoji}>{legendPreviewType.icon}</Text>
+                    {legendPreviewType.imageUrl ? (
+                      <Image source={{ uri: legendPreviewType.imageUrl }} style={styles.arPreviewInfoImage} resizeMode="contain" />
+                    ) : (
+                      <Text style={styles.arPreviewInfoEmoji}>{legendPreviewType.icon}</Text>
+                    )}
                     <View style={{ flex: 1 }}>
                       <Text style={styles.arPreviewInfoTitle}>{legendPreviewType.label}</Text>
                       <Text style={styles.arPreviewInfoSub}>Base Reward: {legendPreviewType.baseReward} MUSO</Text>
@@ -1291,7 +1311,11 @@ export default function ScavengerHuntScreen() {
 
             <View style={[styles.modalTreasureVisual, { backgroundColor: rarity.bgColor }]}>
               <Animated.View style={{ transform: [{ translateY: floatAnim }] }}>
-                <Text style={styles.modalTreasureIcon}>{selectedTreasure.icon}</Text>
+                {typeConfig.imageUrl ? (
+                  <Image source={{ uri: typeConfig.imageUrl }} style={styles.modalTreasureImage} resizeMode="contain" />
+                ) : (
+                  <Text style={styles.modalTreasureIcon}>{selectedTreasure.icon}</Text>
+                )}
               </Animated.View>
               <View style={[styles.modalRarityBadge, { backgroundColor: rarity.color + '20', borderColor: rarity.color }]}>
                 <Text style={[styles.modalRarityText, { color: rarity.color }]}>{rarity.label}</Text>
@@ -1723,6 +1747,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   treasureCardIcon: { fontSize: 24 },
+  treasureCardImage: { width: 40, height: 40, borderRadius: 8 },
   treasureCardCenter: { flex: 1 },
   treasureNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   treasureCardName: { fontSize: 15, fontWeight: '700' as const, flexShrink: 1 },
@@ -1763,6 +1788,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   legendItemEmoji: { fontSize: 22 },
+  legendItemImage: { width: 36, height: 36, borderRadius: 6 },
   legendItemInfo: { flex: 1 },
   legendItemName: { fontSize: 15, fontWeight: '600' as const },
   legendItemDesc: { fontSize: 12, marginTop: 2 },
@@ -1828,6 +1854,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   legendExampleIcon: { fontSize: 28 },
+  legendExampleImage: { width: 36, height: 36, borderRadius: 8 },
   legendExampleInfo: { flex: 1 },
   legendExampleName: { fontSize: 14, fontWeight: '600' as const },
   legendExampleCalc: { fontSize: 12, marginTop: 2 },
@@ -1904,6 +1931,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   modalTreasureIcon: { fontSize: 64 },
+  modalTreasureImage: { width: 120, height: 120, borderRadius: 16 },
   modalRarityBadge: {
     paddingHorizontal: 14,
     paddingVertical: 4,
@@ -2168,6 +2196,11 @@ const styles = StyleSheet.create({
   arPreviewIcon: {
     fontSize: 52,
   },
+  arPreviewImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 12,
+  },
   arPreviewInfoCard: {
     backgroundColor: 'rgba(0,0,0,0.6)',
     borderRadius: 16,
@@ -2182,6 +2215,11 @@ const styles = StyleSheet.create({
   },
   arPreviewInfoEmoji: {
     fontSize: 36,
+  },
+  arPreviewInfoImage: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
   },
   arPreviewInfoTitle: {
     fontSize: 18,
