@@ -1,7 +1,7 @@
 // 3D LA City Viewer for Credit Life Simulator
 // Main screen for exploring the 3D Los Angeles city
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,6 @@ import {
   Dimensions,
   ActivityIndicator,
   Alert,
-  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -20,7 +19,7 @@ import { useCity3D } from '../../contexts/City3DContext';
 import { DistrictId, DistrictConfig, LandmarkConfig } from '../../types/city3d';
 import { DISTRICTS } from '../../config/districts';
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 
 // District card component
 function DistrictCard({ 
@@ -33,7 +32,7 @@ function DistrictCard({
   isSelected: boolean;
 }) {
   const landmarkCount = district.landmarks.length;
-  const totalTreasure = district.landmarks.reduce((sum, l) => sum + (l.treasureValue || 0), 0);
+  const totalTreasure = district.landmarks.reduce((sum: number, l) => sum + (l.treasureValue || 0), 0);
   
   return (
     <TouchableOpacity
@@ -131,7 +130,7 @@ function MapView() {
           </Text>
           
           {/* Landmark markers */}
-          {state.landmarks.map((landmark, index) => {
+          {state.landmarks.map((landmark, _index) => {
             const isDiscovered = state.discoveredLandmarks.has(landmark.id);
             // Calculate position based on coordinates relative to district center
             const offsetX = ((landmark.coordinates.lon - district.center.lon) / 0.01) * 100;
@@ -246,19 +245,21 @@ export default function City3DScreen() {
   const { 
     state, 
     loadDistrict, 
-    resetDistrict, 
     discoverLandmark,
     checkLandmarkProximity 
   } = useCity3D();
   
   const [selectedView, setSelectedView] = useState<'map' | 'district' | 'landmarks'>('map');
-  const [selectedLandmark, setSelectedLandmark] = useState<LandmarkConfig | null>(null);
+  const [_selectedLandmark, setSelectedLandmark] = useState<LandmarkConfig | null>(null);
   
-  // Load district from params
+  // Load district from params or default to hollywood
   useEffect(() => {
-    if (params.district && params.district !== state.currentDistrict) {
-      loadDistrict(params.district as DistrictId);
+    const targetDistrict = params.district || 'hollywood';
+    if (targetDistrict !== state.currentDistrict) {
+      console.log('[City3D] Loading district:', targetDistrict);
+      void loadDistrict(targetDistrict as DistrictId);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.district]);
   
   // Handle landmark discovery
@@ -289,7 +290,7 @@ export default function City3DScreen() {
   
   // Handle district selection
   const handleDistrictSelect = useCallback((districtId: DistrictId) => {
-    loadDistrict(districtId);
+    void loadDistrict(districtId);
     setSelectedView('map');
   }, [loadDistrict]);
   
@@ -319,18 +320,29 @@ export default function City3DScreen() {
       
       {/* Start exploration button */}
       <TouchableOpacity 
-        style={styles.startButton}
+        style={[styles.startButton, !state.currentDistrict && styles.startButtonDisabled]}
         onPress={() => {
           if (state.currentDistrict) {
+            console.log('[City3D] Navigating to scavenger hunt with district:', state.currentDistrict);
             router.push(`/game/scavenger-hunt?district=${state.currentDistrict}`);
+          } else {
+            console.log('[City3D] No district loaded, loading default...');
+            void loadDistrict('hollywood' as DistrictId);
+            Alert.alert(
+              'Loading District',
+              'Please wait for the district to load, then tap Start Exploration again.',
+              [{ text: 'OK' }]
+            );
           }
         }}
       >
         <LinearGradient
-          colors={['#FFD700', '#FFA500']}
+          colors={state.currentDistrict ? ['#FFD700', '#FFA500'] : ['#888', '#666']}
           style={styles.startButtonGradient}
         >
-          <Text style={styles.startButtonText}>🚀 Start Exploration</Text>
+          <Text style={styles.startButtonText}>
+            {state.isLoading ? '⏳ Loading District...' : '🚀 Start Exploration'}
+          </Text>
         </LinearGradient>
       </TouchableOpacity>
     </View>
@@ -602,7 +614,10 @@ const styles = StyleSheet.create({
   startButtonText: {
     color: '#1a1a2e',
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: 'bold' as const,
+  },
+  startButtonDisabled: {
+    opacity: 0.7,
   },
   sectionTitle: {
     color: '#FFFFFF',
