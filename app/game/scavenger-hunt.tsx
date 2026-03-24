@@ -491,6 +491,8 @@ export default function ScavengerHuntScreen() {
     const typeConfig = TREASURE_TYPE_CONFIG[treasure.treasureType];
     const placeConfig = PLACE_TYPE_CONFIG[treasure.placeType];
     const distance = treasureDistances.find(d => d.treasure.id === treasure.id);
+    const isReal = treasure.isRealPlace && treasure.locationName;
+    const isPark = treasure.placeType === 'park';
 
     return (
       <TouchableOpacity
@@ -518,7 +520,31 @@ export default function ScavengerHuntScreen() {
               {treasure.name}
             </Text>
             {claimed && <Lock size={12} color={colors.textSecondary} />}
+            {isReal && (
+              <View style={styles.realPlaceBadge}>
+                <Text style={styles.realPlaceBadgeText}>REAL</Text>
+              </View>
+            )}
           </View>
+
+          {isReal && !isPark && (
+            <View style={styles.realLocationLabelRow}>
+              <MapPin size={11} color="#0EA5E9" />
+              <Text style={[styles.realLocationLabel, { color: '#0EA5E9' }]} numberOfLines={1}>
+                {treasure.locationName}{treasure.locationAddress ? `, ${treasure.locationAddress}` : ''}
+              </Text>
+            </View>
+          )}
+
+          {isReal && isPark && (
+            <View style={styles.parkHintRow}>
+              <Eye size={11} color="#10B981" />
+              <Text style={[styles.parkHintLabel, { color: '#10B981' }]} numberOfLines={1}>
+                Hint: Search near {treasure.locationName}
+              </Text>
+            </View>
+          )}
+
           <View style={styles.treasureLocationRow}>
             {getPlaceTypeIcon(treasure.placeType)}
             <Text style={[styles.treasureCardLocation, { color: colors.textSecondary }]} numberOfLines={1}>
@@ -873,6 +899,39 @@ export default function ScavengerHuntScreen() {
             <Text style={[styles.modalTreasureName, { color: colors.text }]}>{selectedTreasure.name}</Text>
             <Text style={[styles.modalDescription, { color: colors.textSecondary }]}>{selectedTreasure.description}</Text>
 
+            {selectedTreasure.isRealPlace && selectedTreasure.locationName && selectedTreasure.placeType !== 'park' && (
+              <View style={[styles.realLocationBanner, { backgroundColor: isDark ? '#0C4A6E' : '#E0F2FE' }]}>
+                <MapPin size={18} color="#0EA5E9" />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.realLocationBannerName, { color: isDark ? '#7DD3FC' : '#0369A1' }]}>
+                    {selectedTreasure.locationName}
+                  </Text>
+                  {selectedTreasure.locationAddress ? (
+                    <Text style={[styles.realLocationBannerAddr, { color: isDark ? '#BAE6FD' : '#0C4A6E' }]}>
+                      {selectedTreasure.locationAddress}
+                    </Text>
+                  ) : null}
+                  <Text style={[styles.realLocationBannerHint, { color: isDark ? '#BAE6FD' : '#0C4A6E' }]}>
+                    AR anchor placed at the entryway
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {selectedTreasure.isRealPlace && selectedTreasure.locationName && selectedTreasure.placeType === 'park' && (
+              <View style={[styles.parkLocationBanner, { backgroundColor: isDark ? '#064E3B' : '#ECFDF5' }]}>
+                <TreePine size={18} color="#10B981" />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.parkLocationBannerName, { color: isDark ? '#6EE7B7' : '#065F46' }]}>
+                    {selectedTreasure.locationName}
+                  </Text>
+                  <Text style={[styles.parkLocationBannerHint, { color: isDark ? '#A7F3D0' : '#047857' }]}>
+                    Exact location hidden — use the hint below to find it!
+                  </Text>
+                </View>
+              </View>
+            )}
+
             <View style={styles.modalDetails}>
               <View style={styles.modalDetailRow}>
                 <MapPin size={16} color={colors.textSecondary} />
@@ -909,9 +968,9 @@ export default function ScavengerHuntScreen() {
             </View>
 
             <View style={[styles.hintBox, { backgroundColor: colors.background }]}>
-              <Eye size={14} color="#F59E0B" />
+              <Eye size={14} color={selectedTreasure.placeType === 'park' ? '#10B981' : '#F59E0B'} />
               <Text style={[styles.hintText, { color: colors.textSecondary }]}>
-                💡 Hint: {selectedTreasure.hint}
+                {selectedTreasure.searchHint || `💡 Hint: ${selectedTreasure.hint}`}
               </Text>
             </View>
 
@@ -1361,7 +1420,80 @@ const styles = StyleSheet.create({
     gap: 10,
     marginBottom: 16,
   },
-  hintText: { flex: 1, fontSize: 13, lineHeight: 18, fontStyle: 'italic' },
+  hintText: { flex: 1, fontSize: 13, lineHeight: 18, fontStyle: 'italic' as const },
+  realPlaceBadge: {
+    backgroundColor: '#0EA5E920',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  realPlaceBadgeText: {
+    fontSize: 8,
+    fontWeight: '800' as const,
+    color: '#0EA5E9',
+    letterSpacing: 0.5,
+  },
+  realLocationLabelRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 4,
+    marginTop: 2,
+  },
+  realLocationLabel: {
+    fontSize: 11,
+    fontWeight: '600' as const,
+    flexShrink: 1,
+  },
+  parkHintRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 4,
+    marginTop: 2,
+  },
+  parkHintLabel: {
+    fontSize: 11,
+    fontWeight: '600' as const,
+    fontStyle: 'italic' as const,
+    flexShrink: 1,
+  },
+  realLocationBanner: {
+    flexDirection: 'row' as const,
+    alignItems: 'flex-start' as const,
+    padding: 14,
+    borderRadius: 12,
+    gap: 10,
+    marginBottom: 12,
+  },
+  realLocationBannerName: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+  },
+  realLocationBannerAddr: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  realLocationBannerHint: {
+    fontSize: 11,
+    marginTop: 4,
+    fontStyle: 'italic' as const,
+  },
+  parkLocationBanner: {
+    flexDirection: 'row' as const,
+    alignItems: 'flex-start' as const,
+    padding: 14,
+    borderRadius: 12,
+    gap: 10,
+    marginBottom: 12,
+  },
+  parkLocationBannerName: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+  },
+  parkLocationBannerHint: {
+    fontSize: 12,
+    marginTop: 3,
+    fontStyle: 'italic' as const,
+  },
   claimResultBox: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -8,6 +8,10 @@ export interface TreasureLocation {
   longitude: number;
   neighborhood: string;
   landmark: string;
+  locationName: string;
+  locationAddress: string;
+  searchHint: string;
+  isRealPlace: boolean;
   treasureType: TreasureType;
   placeType: PlaceType;
   tokenReward: number;

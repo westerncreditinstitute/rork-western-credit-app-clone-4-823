@@ -11,6 +11,7 @@ import {
   MAX_DAILY_TREASURES,
 } from '../types/scavengerHunt';
 import { ScavengerHuntService } from '../services/ScavengerHuntService';
+import { PlacesService, NearbyPlace } from '../services/PlacesService';
 
 const STORAGE_KEY = '@scavenger_hunt_state';
 const LOCATION_STORAGE_KEY = '@scavenger_hunt_last_location';
@@ -65,6 +66,8 @@ export function ScavengerHuntProvider({ children }: { children: React.ReactNode 
   const [locationPermissionGranted, setLocationPermissionGranted] = useState(false);
   const initialized = useRef(false);
   const treasuresGeneratedForDay = useRef<string | null>(null);
+  const cachedRealPlaces = useRef<NearbyPlace[]>([]);
+  const placesFetchedForGrid = useRef<string | null>(null);
 
   const dailyClaimsRemaining = MAX_DAILY_TREASURES - ScavengerHuntService.getTodayClaimCount(claims);
 
@@ -86,7 +89,7 @@ export function ScavengerHuntProvider({ children }: { children: React.ReactNode 
     }
   }, [playerLocation, treasures]);
 
-  const generateTreasuresForLocation = useCallback((lat: number, lon: number) => {
+  const generateTreasuresForLocation = useCallback(async (lat: number, lon: number) => {
     const todayKey = ScavengerHuntService.getTodayKey();
     const gridKey = `${todayKey}_${Math.round(lat * 100)}_${Math.round(lon * 100)}`;
 
@@ -96,7 +99,22 @@ export function ScavengerHuntProvider({ children }: { children: React.ReactNode 
     }
 
     console.log(`[ScavengerHunt] Generating ${MAX_DAILY_TREASURES} treasures within 5mi of ${lat.toFixed(4)}, ${lon.toFixed(4)}`);
-    const generated = ScavengerHuntService.generateTreasuresAroundPlayer(lat, lon, todayKey);
+
+    let realPlaces: NearbyPlace[] = cachedRealPlaces.current;
+    if (placesFetchedForGrid.current !== gridKey) {
+      try {
+        console.log('[ScavengerHunt] Fetching real nearby places via Overpass API...');
+        realPlaces = await PlacesService.fetchNearbyPlaces(lat, lon);
+        cachedRealPlaces.current = realPlaces;
+        placesFetchedForGrid.current = gridKey;
+        console.log(`[ScavengerHunt] Fetched ${realPlaces.length} real places for treasure placement`);
+      } catch (err) {
+        console.error('[ScavengerHunt] Failed to fetch real places, using generated locations:', err);
+        realPlaces = [];
+      }
+    }
+
+    const generated = ScavengerHuntService.generateTreasuresAroundPlayer(lat, lon, todayKey, realPlaces);
     setTreasures(generated);
     treasuresGeneratedForDay.current = gridKey;
 
@@ -142,7 +160,7 @@ export function ScavengerHuntProvider({ children }: { children: React.ReactNode 
         const locData = JSON.parse(lastLoc);
         if (locData.dayKey === todayKey && locData.lat && locData.lon) {
           console.log('[ScavengerHunt] Restoring treasures from last known location');
-          generateTreasuresForLocation(locData.lat, locData.lon);
+          void generateTreasuresForLocation(locData.lat, locData.lon);
         } else {
           const fallback = ScavengerHuntService.generateTreasuresAroundPlayer(34.0522, -118.2437);
           setTreasures(fallback);
@@ -181,7 +199,7 @@ export function ScavengerHuntProvider({ children }: { children: React.ReactNode 
 
   const setPlayerLocation = useCallback((location: PlayerLocation) => {
     setPlayerLocationState(location);
-    generateTreasuresForLocation(location.latitude, location.longitude);
+    void generateTreasuresForLocation(location.latitude, location.longitude);
   }, [generateTreasuresForLocation]);
 
   const requestLocationPermission = useCallback(async (): Promise<boolean> => {
@@ -246,7 +264,8 @@ export function ScavengerHuntProvider({ children }: { children: React.ReactNode 
 
   const regenerateTreasuresForLocation = useCallback((lat: number, lon: number) => {
     treasuresGeneratedForDay.current = null;
-    generateTreasuresForLocation(lat, lon);
+    placesFetchedForGrid.current = null;
+    void generateTreasuresForLocation(lat, lon);
   }, [generateTreasuresForLocation]);
 
   const claimTreasure = useCallback((treasureId: string): { success: boolean; tokensAwarded: number; message: string } => {
@@ -312,7 +331,8 @@ export function ScavengerHuntProvider({ children }: { children: React.ReactNode 
   const refreshDailyTreasures = useCallback(() => {
     if (playerLocation) {
       treasuresGeneratedForDay.current = null;
-      generateTreasuresForLocation(playerLocation.latitude, playerLocation.longitude);
+      placesFetchedForGrid.current = null;
+      void generateTreasuresForLocation(playerLocation.latitude, playerLocation.longitude);
     } else {
       const fallback = ScavengerHuntService.generateTreasuresAroundPlayer(34.0522, -118.2437);
       setTreasures(fallback);

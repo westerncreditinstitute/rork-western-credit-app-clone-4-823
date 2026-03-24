@@ -14,6 +14,7 @@ import {
   TreasureType,
   ParticleEffect,
 } from '../types/scavengerHunt';
+import { NearbyPlace, PlacesService } from './PlacesService';
 
 interface PlaceTemplate {
   namePrefix: string;
@@ -245,7 +246,8 @@ export class ScavengerHuntService {
   static generateTreasuresAroundPlayer(
     playerLat: number,
     playerLon: number,
-    dayKey?: string
+    dayKey?: string,
+    realPlaces?: NearbyPlace[]
   ): TreasureLocation[] {
     const today = dayKey || this.getTodayKey();
     const gridLat = Math.round(playerLat * 100) / 100;
@@ -262,13 +264,39 @@ export class ScavengerHuntService {
       'park',
     ];
 
+    const selectedPlaces = realPlaces && realPlaces.length > 0
+      ? PlacesService.selectPlacesForTreasures(realPlaces, priorityDistribution, random)
+      : new Array(MAX_DAILY_TREASURES).fill(null);
+
     for (let i = 0; i < MAX_DAILY_TREASURES; i++) {
       const placeType = priorityDistribution[i];
       const template = PLACE_TEMPLATES.find(t => t.placeType === placeType) || PLACE_TEMPLATES[0];
+      const matchedPlace = selectedPlaces[i] || null;
 
-      const minDist = 200 + (i * 150);
-      const maxDist = Math.min(minDist + 2500, this.FIVE_MILES_M);
-      const point = this.generatePointInRadius(playerLat, playerLon, minDist, maxDist, random);
+      let point: { latitude: number; longitude: number };
+      let locationName = '';
+      let locationAddress = '';
+      let searchHint = '';
+      let isRealPlace = false;
+
+      if (matchedPlace) {
+        isRealPlace = true;
+        locationName = matchedPlace.name;
+        locationAddress = matchedPlace.address || '';
+        point = {
+          latitude: matchedPlace.entranceLat ?? matchedPlace.latitude,
+          longitude: matchedPlace.entranceLon ?? matchedPlace.longitude,
+        };
+        searchHint = PlacesService.getSearchHintForPlace(matchedPlace, random);
+        console.log(`[ScavengerHunt] Treasure #${i + 1}: Real ${placeType} — "${matchedPlace.name}"`);
+      } else {
+        const minDist = 200 + (i * 150);
+        const maxDist = Math.min(minDist + 2500, this.FIVE_MILES_M);
+        point = this.generatePointInRadius(playerLat, playerLon, minDist, maxDist, random);
+        const hintIndex = Math.floor(random() * template.hints.length);
+        searchHint = template.hints[hintIndex];
+        console.log(`[ScavengerHunt] Treasure #${i + 1}: Generated ${placeType} (no real place match)`);
+      }
 
       const rarity = this.pickRarity(random);
       const treasureType = this.pickTreasureType(rarity, random);
@@ -293,20 +321,50 @@ export class ScavengerHuntService {
       const directionName = directionNames[dirIndex];
       const distMiles = (distFromPlayer / 1609.34).toFixed(1);
 
+      let treasureName: string;
+      let treasureHint: string;
+
+      if (isRealPlace && locationName) {
+        if (placeType === 'park') {
+          treasureName = `${template.icon} ${locationName}`;
+          treasureHint = searchHint;
+        } else {
+          treasureName = `${template.icon} ${locationName}`;
+          treasureHint = searchHint;
+        }
+      } else {
+        treasureName = `${template.icon} ${template.nameSuffix[suffixIndex]}`;
+        treasureHint = template.hints[hintIndex];
+      }
+
+      const neighborhoodLabel = isRealPlace && locationName
+        ? (placeType === 'park'
+          ? `Near ${locationName} • ${distMiles} mi ${directionName}`
+          : `${locationName} • ${distMiles} mi ${directionName}`)
+        : `${distMiles} mi ${directionName}`;
+
+      const landmarkLabel = isRealPlace && locationName
+        ? (locationAddress ? `${locationName}, ${locationAddress}` : locationName)
+        : `${template.namePrefix} Location #${i + 1}`;
+
       treasures.push({
         id: `treasure_${today}_${i}_${this.hashString(seedStr + i)}`,
-        name: `${template.icon} ${template.nameSuffix[suffixIndex]}`,
+        name: treasureName,
         description: template.descriptions[descIndex],
         latitude: point.latitude,
         longitude: point.longitude,
-        neighborhood: `${distMiles} mi ${directionName}`,
-        landmark: `${template.namePrefix} Location #${i + 1}`,
+        neighborhood: neighborhoodLabel,
+        landmark: landmarkLabel,
+        locationName,
+        locationAddress,
+        searchHint,
+        isRealPlace,
         treasureType,
         placeType,
         tokenReward: rewardVariation,
         rarity,
         icon: template.icon,
-        hint: template.hints[hintIndex],
+        hint: treasureHint,
         radiusMeters: 100 + Math.floor(random() * 150),
         distanceFromPlayer: distFromPlayer,
         modelColor: colors.model,
