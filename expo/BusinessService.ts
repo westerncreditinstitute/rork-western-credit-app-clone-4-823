@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import {
   BusinessCategoryData,
   UserBusinessData,
@@ -18,6 +18,10 @@ export class BusinessService {
    */
   static async getUserBusinesses(userId: string): Promise<UserBusinessData[]> {
     try {
+      if (!isSupabaseConfigured) {
+        console.log('[BusinessService] Supabase not configured, skipping fetch');
+        return [];
+      }
       if (!isValidUUID(userId)) {
         console.log('[BusinessService] Skipping database query for non-UUID user:', userId);
         return [];
@@ -48,6 +52,7 @@ export class BusinessService {
    */
   static async getBusinessById(businessId: string): Promise<UserBusinessData | null> {
     try {
+      if (!isSupabaseConfigured) return null;
       const { data, error } = await supabase
         .from('user_businesses')
         .select('*')
@@ -74,6 +79,9 @@ export class BusinessService {
     categoryData: BusinessCategoryData
   ): Promise<BusinessOperationResult<UserBusinessData>> {
     try {
+      if (!isSupabaseConfigured) {
+        return { success: false, error: 'Supabase not configured', errorCode: 'NETWORK_ERROR' };
+      }
       const now = new Date().toISOString();
 
       const { data, error } = await supabase
@@ -139,6 +147,9 @@ export class BusinessService {
     updates: Partial<UserBusinessData>
   ): Promise<BusinessOperationResult<UserBusinessData>> {
     try {
+      if (!isSupabaseConfigured) {
+        return { success: false, error: 'Supabase not configured', errorCode: 'NETWORK_ERROR' };
+      }
       const updateData: any = {
         updated_at: new Date().toISOString(),
       };
@@ -189,6 +200,7 @@ export class BusinessService {
    */
   static async deleteBusiness(businessId: string, userId: string): Promise<boolean> {
     try {
+      if (!isSupabaseConfigured) return false;
       const { error } = await supabase
         .from('user_businesses')
         .update({ is_active: false, updated_at: new Date().toISOString() })

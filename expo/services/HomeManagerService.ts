@@ -1,6 +1,6 @@
 // Home Manager Service - Manages player homes and operations
 
-import { supabase } from '../lib/supabase';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import {
   PlayerHome,
   CreateHomeInput,
@@ -16,6 +16,9 @@ export class HomeManagerService {
    * Create a new home for a player
    */
   static async createHome(input: CreateHomeInput): Promise<PlayerHome> {
+    if (!isSupabaseConfigured) {
+      throw new Error('Supabase is not configured');
+    }
     const { playerId, homeTier, homeName, homeDescription, isPublic = false } = input;
 
     // Get tier configuration
@@ -72,6 +75,10 @@ export class HomeManagerService {
    * Get player's home
    */
   static async getPlayerHome(playerId: string): Promise<PlayerHome | null> {
+    if (!isSupabaseConfigured) {
+      console.log('[HomeManagerService] Supabase not configured, skipping fetch');
+      return null;
+    }
     if (!playerId || !this.isValidUUID(playerId)) {
       console.warn('[HomeManagerService] Invalid player ID format:', playerId);
       return null;
@@ -98,6 +105,10 @@ export class HomeManagerService {
    * Get home by ID
    */
   static async getHomeById(homeId: string): Promise<PlayerHome | null> {
+    if (!isSupabaseConfigured) {
+      console.log('[HomeManagerService] Supabase not configured, skipping fetch');
+      return null;
+    }
     if (!homeId || !this.isValidUUID(homeId)) {
       console.warn('[HomeManagerService] Invalid home ID format:', homeId);
       return null;
@@ -124,6 +135,9 @@ export class HomeManagerService {
    * Update home details
    */
   static async updateHome(input: UpdateHomeInput): Promise<PlayerHome> {
+    if (!isSupabaseConfigured) {
+      throw new Error('Supabase is not configured');
+    }
     const { homeId, homeName, homeDescription, isPublic, maxVisitors } = input;
 
     const updates: any = {};
@@ -150,6 +164,9 @@ export class HomeManagerService {
    * Delete home
    */
   static async deleteHome(homeId: string): Promise<void> {
+    if (!isSupabaseConfigured) {
+      throw new Error('Supabase is not configured');
+    }
     const { error } = await supabase.from('player_homes').delete().eq('id', homeId);
 
     if (error) {
@@ -240,6 +257,10 @@ export class HomeManagerService {
     offset: number = 0,
     tierFilter?: number
   ): Promise<PublicHomeListItem[]> {
+    if (!isSupabaseConfigured) {
+      console.log('[HomeManagerService] Supabase not configured, returning empty list');
+      return [];
+    }
     let query = supabase
       .from('player_homes')
       .select(`
@@ -297,6 +318,10 @@ export class HomeManagerService {
     searchTerm: string,
     limit: number = 20
   ): Promise<PublicHomeListItem[]> {
+    if (!isSupabaseConfigured) {
+      console.log('[HomeManagerService] Supabase not configured, returning empty list');
+      return [];
+    }
     const { data, error } = await supabase
       .from('player_homes')
       .select(`
@@ -372,6 +397,9 @@ export class HomeManagerService {
     totalVisits: number;
     averageRating: number;
   }> {
+    if (!isSupabaseConfigured) {
+      return { totalHomes: 0, publicHomes: 0, totalVisits: 0, averageRating: 0 };
+    }
     const { data } = await supabase
       .from('player_homes')
       .select('is_public, total_visits, total_rating, rating_count');
