@@ -1077,9 +1077,9 @@ export default function ScavengerHuntScreen() {
                 <View style={[styles.arPreviewGlow, { borderColor: typeColor + '50', shadowColor: typeColor }]} />
                 <View style={[styles.arPreviewBody, { backgroundColor: typeColor + '20', borderColor: typeColor }]}>
                   {legendPreviewType.imageUrl && legendPreviewType.key === 'treasure_chest' ? (
-                    <AnimatedTreasureChest imageUrl={legendPreviewType.imageUrl} size={SCREEN_WIDTH * 0.4} />
+                    <AnimatedTreasureChest imageUrl={legendPreviewType.imageUrl} size={SCREEN_HEIGHT * 0.55} />
                   ) : legendPreviewType.imageUrl && legendPreviewType.key === 'token_fountain' ? (
-                    <AnimatedTokenFountain imageUrl={legendPreviewType.imageUrl} size={SCREEN_WIDTH * 0.4} />
+                    <AnimatedTokenFountain imageUrl={legendPreviewType.imageUrl} size={SCREEN_HEIGHT * 0.55} />
                   ) : legendPreviewType.imageUrl ? (
                     <Image source={{ uri: legendPreviewType.imageUrl }} style={styles.arPreviewImage} resizeMode="contain" />
                   ) : (
@@ -1093,8 +1093,8 @@ export default function ScavengerHuntScreen() {
                       styles.arParticle,
                       {
                         backgroundColor: typeColor,
-                        left: (SCREEN_WIDTH * 0.35) + Math.cos((i * Math.PI * 2) / 8) * (SCREEN_WIDTH * 0.3),
-                        top: (SCREEN_HEIGHT * 0.225) + Math.sin((i * Math.PI * 2) / 8) * (SCREEN_WIDTH * 0.3),
+                        left: (SCREEN_WIDTH * 0.45) + Math.cos((i * Math.PI * 2) / 8) * (SCREEN_HEIGHT * 0.32),
+                        top: (SCREEN_HEIGHT * 0.35) + Math.sin((i * Math.PI * 2) / 8) * (SCREEN_HEIGHT * 0.32),
                         opacity: shimmerAnim.interpolate({
                           inputRange: [0, 0.5, 1],
                           outputRange: [0.2, 0.9, 0.2],
@@ -2200,16 +2200,16 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
   },
   arPreviewOuter: {
-    width: SCREEN_WIDTH * 0.7,
-    height: SCREEN_HEIGHT * 0.45,
+    width: SCREEN_WIDTH * 0.9,
+    height: SCREEN_HEIGHT * 0.7,
     alignItems: 'center',
     justifyContent: 'center',
   },
   arPreviewGlow: {
     position: 'absolute',
-    width: SCREEN_WIDTH * 0.65,
-    height: SCREEN_WIDTH * 0.65,
-    borderRadius: SCREEN_WIDTH * 0.325,
+    width: SCREEN_HEIGHT * 0.6,
+    height: SCREEN_HEIGHT * 0.6,
+    borderRadius: SCREEN_HEIGHT * 0.3,
     borderWidth: 3,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.6,
@@ -2217,9 +2217,9 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   arPreviewBody: {
-    width: SCREEN_WIDTH * 0.55,
-    height: SCREEN_WIDTH * 0.55,
-    borderRadius: SCREEN_WIDTH * 0.275,
+    width: SCREEN_HEIGHT * 0.55,
+    height: SCREEN_HEIGHT * 0.55,
+    borderRadius: SCREEN_HEIGHT * 0.275,
     borderWidth: 3,
     alignItems: 'center',
     justifyContent: 'center',
@@ -2230,11 +2230,11 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   arPreviewIcon: {
-    fontSize: 120,
+    fontSize: 200,
   },
   arPreviewImage: {
-    width: SCREEN_WIDTH * 0.45,
-    height: SCREEN_WIDTH * 0.45,
+    width: SCREEN_HEIGHT * 0.5,
+    height: SCREEN_HEIGHT * 0.5,
   },
   arPreviewInfoCard: {
     backgroundColor: 'rgba(0,0,0,0.6)',
