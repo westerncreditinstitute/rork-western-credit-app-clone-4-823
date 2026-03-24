@@ -9,18 +9,21 @@ export interface TreasureLocation {
   neighborhood: string;
   landmark: string;
   treasureType: TreasureType;
+  placeType: PlaceType;
   tokenReward: number;
   rarity: TreasureRarity;
   icon: string;
   hint: string;
   radiusMeters: number;
-  // Visual
+  distanceFromPlayer?: number;
   modelColor: string;
   glowColor: string;
   particleEffect: ParticleEffect;
 }
 
 export type TreasureType = 'coin_pile' | 'treasure_chest' | 'golden_muso' | 'crystal_vault' | 'token_fountain';
+
+export type PlaceType = 'park' | 'gas_station' | 'restaurant' | 'landmark' | 'shopping' | 'entertainment';
 
 export type TreasureRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
 
@@ -117,4 +120,21 @@ export const STREAK_BONUSES: Record<number, { multiplier: number; label: string 
   7: { multiplier: 2.0, label: 'Weekly Warrior! 2x' },
   14: { multiplier: 2.5, label: '2-Week Legend! 2.5x' },
   30: { multiplier: 3.0, label: 'Monthly Master! 3x' },
+};
+
+export const MAX_DAILY_TREASURES = 10;
+export const TREASURE_RADIUS_MILES = 5;
+export const TREASURE_RADIUS_METERS = TREASURE_RADIUS_MILES * 1609.34;
+
+export const PLACE_TYPE_CONFIG: Record<PlaceType, {
+  label: string;
+  icon: string;
+  priority: number;
+}> = {
+  park: { label: 'Park', icon: '🌳', priority: 1 },
+  gas_station: { label: 'Gas Station', icon: '⛽', priority: 1 },
+  restaurant: { label: 'Restaurant', icon: '🍽️', priority: 1 },
+  landmark: { label: 'Landmark', icon: '🏛️', priority: 2 },
+  shopping: { label: 'Shopping', icon: '🛍️', priority: 3 },
+  entertainment: { label: 'Entertainment', icon: '🎭', priority: 3 },
 };

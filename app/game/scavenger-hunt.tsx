@@ -10,17 +10,15 @@ import {
   Modal,
   Image,
   Alert,
-  Platform,
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack, useRouter } from 'expo-router';
+import { Stack } from 'expo-router';
 import {
   MapPin,
   Camera,
   Coins,
   Trophy,
-  Star,
   Compass,
   Navigation,
   ChevronRight,
@@ -29,36 +27,33 @@ import {
   Zap,
   Target,
   Eye,
-  Clock,
   Flame,
-  Award,
   Map as MapIcon,
   RefreshCw,
-  ChevronDown,
   Shield,
   Lock,
   Unlock,
+  LocateFixed,
+  Fuel,
+  TreePine,
+  UtensilsCrossed,
+  AlertCircle,
 } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useGame } from '@/contexts/GameContext';
 import { useScavengerHunt } from '@/contexts/ScavengerHuntContext';
 import { ScavengerHuntService } from '@/services/ScavengerHuntService';
-import { RARITY_CONFIG, TREASURE_TYPE_CONFIG, TreasureLocation } from '@/types/scavengerHunt';
+import { RARITY_CONFIG, TREASURE_TYPE_CONFIG, PLACE_TYPE_CONFIG, MAX_DAILY_TREASURES, TreasureLocation } from '@/types/scavengerHunt';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// ═══════════════════════════════════════════════════════════════
-// 🗺️ SCAVENGER HUNT MAIN SCREEN
-// ═══════════════════════════════════════════════════════════════
-
 type ViewMode = 'map' | 'list' | 'stats';
 
 export default function ScavengerHuntScreen() {
   const { colors, isDark } = useTheme();
-  const { gameState, mintTokens } = useGame();
-  const router = useRouter();
+  const { mintTokens } = useGame();
   const {
     treasures,
     dailyProgress,
@@ -67,13 +62,15 @@ export default function ScavengerHuntScreen() {
     isLoading,
     selectedTreasure,
     treasureDistances,
-    totalTokensEarned,
     selectTreasure,
     claimTreasure,
     isTreasureClaimed,
     refreshDailyTreasures,
     setPlayerLocation,
     getStreakBonusLabel,
+    playerLocation,
+    dailyClaimsRemaining,
+    requestLocationPermission,
   } = useScavengerHunt();
 
   const [viewMode, setViewMode] = useState<ViewMode>('map');
@@ -82,18 +79,17 @@ export default function ScavengerHuntScreen() {
   const [claimResult, setClaimResult] = useState<{ success: boolean; tokensAwarded: number; message: string } | null>(null);
   const [arScanProgress, setArScanProgress] = useState(0);
   const [isScanning, setIsScanning] = useState(false);
+  const [isLocating, setIsLocating] = useState(false);
 
-  // Animations
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const floatAnim = useRef(new Animated.Value(0)).current;
   const scanLineAnim = useRef(new Animated.Value(0)).current;
   const coinSpinAnim = useRef(new Animated.Value(0)).current;
   const claimScaleAnim = useRef(new Animated.Value(0)).current;
   const shimmerAnim = useRef(new Animated.Value(0)).current;
+  const locationPulse = useRef(new Animated.Value(0)).current;
 
-  // Start animations
   useEffect(() => {
-    // Pulse effect for nearby treasures
     Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, { toValue: 1.15, duration: 1000, useNativeDriver: true }),
@@ -101,7 +97,6 @@ export default function ScavengerHuntScreen() {
       ])
     ).start();
 
-    // Float animation for 3D token
     Animated.loop(
       Animated.sequence([
         Animated.timing(floatAnim, { toValue: -12, duration: 1500, useNativeDriver: true }),
@@ -109,44 +104,66 @@ export default function ScavengerHuntScreen() {
       ])
     ).start();
 
-    // Coin spin
     Animated.loop(
       Animated.timing(coinSpinAnim, { toValue: 1, duration: 3000, useNativeDriver: true })
     ).start();
 
-    // Shimmer
     Animated.loop(
       Animated.timing(shimmerAnim, { toValue: 1, duration: 2000, useNativeDriver: true })
     ).start();
+
+    Animated.loop(
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+      Animated.sequence([
+        Animated.timing(locationPulse, { toValue: 1, duration: 1500, useNativeDriver: true }),
+        Animated.timing(locationPulse, { toValue: 0, duration: 1500, useNativeDriver: true }),
+      ])
+    ).start();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Simulate player location (LA center area for demo)
   useEffect(() => {
-    // Set a simulated location in central LA for demo purposes
-    setPlayerLocation({
-      latitude: 34.0522,
-      longitude: -118.2437,
-      accuracy: 10,
-      timestamp: Date.now(),
-    });
-  }, [setPlayerLocation]);
+    void handleRequestLocation();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleRequestLocation = useCallback(async () => {
+    setIsLocating(true);
+    console.log('[TreasureHunt] Requesting player location...');
+    const granted: boolean = await requestLocationPermission();
+    if (!granted) {
+      console.log('[TreasureHunt] Location not granted, using fallback location');
+      setPlayerLocation({
+        latitude: 34.0522,
+        longitude: -118.2437,
+        accuracy: 100,
+        timestamp: Date.now(),
+      });
+    }
+    setIsLocating(false);
+  }, [requestLocationPermission, setPlayerLocation]);
 
   const streakBonusLabel = useMemo(() => getStreakBonusLabel(), [getStreakBonusLabel]);
 
   const handleTreasureTap = useCallback((treasure: TreasureLocation) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     selectTreasure(treasure);
     setShowClaimModal(true);
   }, [selectTreasure]);
 
   const handleStartARScan = useCallback(() => {
     if (!selectedTreasure) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+
+    if (dailyClaimsRemaining <= 0) {
+      Alert.alert('Daily Limit Reached', `You've claimed all ${MAX_DAILY_TREASURES} treasures for today. Come back tomorrow!`);
+      return;
+    }
+
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     setShowARCamera(true);
     setIsScanning(true);
     setArScanProgress(0);
 
-    // Animate scan line
     Animated.loop(
       Animated.timing(scanLineAnim, {
         toValue: 1,
@@ -155,7 +172,6 @@ export default function ScavengerHuntScreen() {
       })
     ).start();
 
-    // Simulate AR scanning progress
     let progress = 0;
     const interval = setInterval(() => {
       progress += Math.random() * 15 + 5;
@@ -170,7 +186,8 @@ export default function ScavengerHuntScreen() {
         setArScanProgress(Math.min(progress, 99));
       }
     }, 400);
-  }, [selectedTreasure]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTreasure, dailyClaimsRemaining]);
 
   const handleClaimTreasure = useCallback(() => {
     if (!selectedTreasure) return;
@@ -181,16 +198,14 @@ export default function ScavengerHuntScreen() {
     setShowARCamera(false);
 
     if (result.success) {
-      // Mint the tokens
       mintTokens(result.tokensAwarded, 'Scavenger Hunt: ' + selectedTreasure.name, {
         source: 'scavenger_hunt',
         category: 'treasure_claim',
         relatedId: selectedTreasure.id,
       });
 
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-      // Animate claim
       Animated.spring(claimScaleAnim, {
         toValue: 1,
         friction: 4,
@@ -198,8 +213,9 @@ export default function ScavengerHuntScreen() {
         useNativeDriver: true,
       }).start();
     } else {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTreasure, claimTreasure, mintTokens]);
 
   const closeClaimModal = useCallback(() => {
@@ -207,28 +223,53 @@ export default function ScavengerHuntScreen() {
     setClaimResult(null);
     selectTreasure(null);
     claimScaleAnim.setValue(0);
-  }, [selectTreasure, claimScaleAnim]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectTreasure]);
 
   const coinRotation = coinSpinAnim.interpolate({
     inputRange: [0, 1],
     outputRange: ['0deg', '360deg'],
   });
 
-  // ═══════════════════════════════════════════════════════════════
-  // 🎨 RENDER COMPONENTS
-  // ═══════════════════════════════════════════════════════════════
+  const getPlaceTypeIcon = (placeType: string) => {
+    switch (placeType) {
+      case 'park': return <TreePine size={12} color="#10B981" />;
+      case 'gas_station': return <Fuel size={12} color="#F59E0B" />;
+      case 'restaurant': return <UtensilsCrossed size={12} color="#EF4444" />;
+      default: return <MapPin size={12} color={colors.textSecondary} />;
+    }
+  };
 
   const renderHeader = () => (
     <LinearGradient
-      colors={isDark ? ['#1a0a2e', '#2d1b4e', '#1e1145'] : ['#4C1D95', '#6D28D9', '#7C3AED']}
+      colors={isDark ? ['#0a1628', '#132744', '#0d1f3c'] : ['#0F4C75', '#1B6CA8', '#3282B8']}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={styles.header}
     >
       <View style={styles.headerTop}>
-        <View>
+        <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>🗺️ Treasure Hunt</Text>
-          <Text style={styles.headerSubtitle}>Los Angeles • {dailyProgress.totalTreasures} Treasures Today</Text>
+          <View style={styles.locationRow}>
+            {playerLocation ? (
+              <Text style={styles.headerSubtitle}>
+                📍 {playerLocation.latitude.toFixed(3)}°N, {Math.abs(playerLocation.longitude).toFixed(3)}°W
+              </Text>
+            ) : (
+              <Text style={styles.headerSubtitle}>📍 Locating you...</Text>
+            )}
+            <TouchableOpacity
+              style={styles.relocateBtn}
+              onPress={handleRequestLocation}
+              disabled={isLocating}
+            >
+              {isLocating ? (
+                <ActivityIndicator size="small" color="#7DD3FC" />
+              ) : (
+                <LocateFixed size={14} color="#7DD3FC" />
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
         <View style={styles.headerRight}>
           <View style={styles.streakBadge}>
@@ -238,7 +279,30 @@ export default function ScavengerHuntScreen() {
         </View>
       </View>
 
-      {/* Daily Progress Bar */}
+      <View style={styles.dailyLimitBar}>
+        <View style={styles.dailyLimitLeft}>
+          <Target size={14} color="#7DD3FC" />
+          <Text style={styles.dailyLimitText}>
+            {dailyClaimsRemaining}/{MAX_DAILY_TREASURES} Claims Left Today
+          </Text>
+        </View>
+        <View style={styles.dailyLimitDots}>
+          {Array.from({ length: MAX_DAILY_TREASURES }).map((_, i) => (
+            <View
+              key={i}
+              style={[
+                styles.dailyLimitDot,
+                {
+                  backgroundColor: i < (MAX_DAILY_TREASURES - dailyClaimsRemaining)
+                    ? '#10B981'
+                    : 'rgba(255,255,255,0.2)',
+                },
+              ]}
+            />
+          ))}
+        </View>
+      </View>
+
       <View style={styles.progressSection}>
         <View style={styles.progressBarBg}>
           <View
@@ -264,14 +328,46 @@ export default function ScavengerHuntScreen() {
     </LinearGradient>
   );
 
+  const renderRadiusBanner = () => (
+    <View style={[styles.radiusBanner, { backgroundColor: isDark ? '#132744' : '#E0F2FE' }]}>
+      <View style={styles.radiusBannerContent}>
+        <Animated.View style={{ opacity: locationPulse.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }) }}>
+          <LocateFixed size={18} color={isDark ? '#38BDF8' : '#0284C7'} />
+        </Animated.View>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.radiusBannerTitle, { color: isDark ? '#7DD3FC' : '#0369A1' }]}>
+            5-Mile Radius Active
+          </Text>
+          <Text style={[styles.radiusBannerSub, { color: isDark ? '#BAE6FD' : '#0C4A6E' }]}>
+            10 treasures placed near parks, gas stations & restaurants around you
+          </Text>
+        </View>
+      </View>
+      <View style={styles.placeTypeRow}>
+        {(['park', 'gas_station', 'restaurant'] as const).map(type => {
+          const config = PLACE_TYPE_CONFIG[type];
+          const count = treasures.filter(t => t.placeType === type).length;
+          return (
+            <View key={type} style={[styles.placeTypeChip, { backgroundColor: isDark ? '#1E3A5F' : '#BAE6FD' }]}>
+              <Text style={styles.placeTypeChipIcon}>{config.icon}</Text>
+              <Text style={[styles.placeTypeChipText, { color: isDark ? '#BAE6FD' : '#0C4A6E' }]}>
+                {config.label} ({count})
+              </Text>
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+
   const renderViewToggle = () => (
     <View style={[styles.viewToggle, { backgroundColor: colors.surface }]}>
       {(['map', 'list', 'stats'] as ViewMode[]).map(mode => (
         <TouchableOpacity
           key={mode}
-          style={[styles.viewToggleBtn, viewMode === mode && { backgroundColor: colors.primary }]}
+          style={[styles.viewToggleBtn, viewMode === mode && { backgroundColor: '#0F4C75' }]}
           onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
             setViewMode(mode);
           }}
         >
@@ -286,86 +382,114 @@ export default function ScavengerHuntScreen() {
     </View>
   );
 
-  const renderMapView = () => (
-    <View style={styles.mapContainer}>
-      {/* OpenStreetMap Display */}
-      <View style={[styles.mapPlaceholder, { backgroundColor: isDark ? '#1a1a2e' : '#E8F4FD' }]}>
-        <Image
-          source={{
-            uri: `https://staticmap.openstreetmap.de/staticmap.php?center=34.0522,-118.2437&zoom=11&size=${Math.round(SCREEN_WIDTH)}x400&maptype=mapnik`,
-          }}
-          style={styles.mapImage}
-          resizeMode="cover"
-        />
+  const renderMapView = () => {
+    const centerLat = playerLocation?.latitude || 34.0522;
+    const centerLon = playerLocation?.longitude || -118.2437;
 
-        {/* Treasure Markers Overlay */}
-        <View style={styles.markersOverlay}>
-          {treasures.map(treasure => {
-            const claimed = isTreasureClaimed(treasure.id);
-            const rarity = RARITY_CONFIG[treasure.rarity];
-            const relativeX = ((treasure.longitude + 118.8) / 0.7) * 100;
-            const relativeY = ((34.2 - treasure.latitude) / 0.5) * 100;
+    return (
+      <View style={styles.mapContainer}>
+        <View style={[styles.mapPlaceholder, { backgroundColor: isDark ? '#0a1628' : '#E0F2FE' }]}>
+          <Image
+            source={{
+              uri: `https://staticmap.openstreetmap.de/staticmap.php?center=${centerLat},${centerLon}&zoom=12&size=${Math.round(SCREEN_WIDTH)}x400&maptype=mapnik`,
+            }}
+            style={styles.mapImage}
+            resizeMode="cover"
+          />
 
-            return (
-              <TouchableOpacity
-                key={treasure.id}
-                style={[
-                  styles.mapMarker,
-                  {
-                    left: `${Math.min(Math.max(relativeX, 5), 90)}%`,
-                    top: `${Math.min(Math.max(relativeY, 5), 85)}%`,
-                    opacity: claimed ? 0.4 : 1,
-                  },
-                ]}
-                onPress={() => handleTreasureTap(treasure)}
-                activeOpacity={0.7}
-              >
+          <View style={styles.markersOverlay}>
+            {playerLocation && (
+              <View style={[styles.playerMarker, { left: '48%', top: '47%' }]}>
                 <Animated.View
                   style={[
-                    styles.markerPulse,
+                    styles.playerPulseRing,
                     {
-                      backgroundColor: rarity.color + '30',
-                      transform: [{ scale: claimed ? 1 : pulseAnim }],
+                      transform: [{ scale: pulseAnim }],
+                      opacity: locationPulse.interpolate({ inputRange: [0, 1], outputRange: [0.3, 0.6] }),
                     },
                   ]}
+                />
+                <View style={styles.playerDot}>
+                  <Text style={styles.playerDotIcon}>📍</Text>
+                </View>
+              </View>
+            )}
+
+            {treasures.map(treasure => {
+              const claimed = isTreasureClaimed(treasure.id);
+              const rarity = RARITY_CONFIG[treasure.rarity];
+              const latDiff = treasure.latitude - centerLat;
+              const lonDiff = treasure.longitude - centerLon;
+              const relativeX = 50 + (lonDiff / 0.12) * 45;
+              const relativeY = 50 - (latDiff / 0.08) * 45;
+
+              return (
+                <TouchableOpacity
+                  key={treasure.id}
+                  style={[
+                    styles.mapMarker,
+                    {
+                      left: `${Math.min(Math.max(relativeX, 3), 93)}%`,
+                      top: `${Math.min(Math.max(relativeY, 3), 88)}%`,
+                      opacity: claimed ? 0.35 : 1,
+                    },
+                  ]}
+                  onPress={() => handleTreasureTap(treasure)}
+                  activeOpacity={0.7}
                 >
-                  <View style={[styles.markerDot, { backgroundColor: rarity.color }]}>
-                    <Text style={styles.markerIcon}>{claimed ? '✅' : treasure.icon}</Text>
-                  </View>
-                </Animated.View>
-              </TouchableOpacity>
-            );
-          })}
+                  <Animated.View
+                    style={[
+                      styles.markerPulse,
+                      {
+                        backgroundColor: rarity.color + '30',
+                        transform: [{ scale: claimed ? 1 : pulseAnim }],
+                      },
+                    ]}
+                  >
+                    <View style={[styles.markerDot, { backgroundColor: rarity.color }]}>
+                      <Text style={styles.markerIcon}>{claimed ? '✅' : treasure.icon}</Text>
+                    </View>
+                  </Animated.View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <View style={[styles.mapLegend, { backgroundColor: colors.surface + 'E6' }]}>
+            <Text style={[styles.mapLegendTitle, { color: colors.text }]}>Locations</Text>
+            {(['park', 'gas_station', 'restaurant'] as const).map(type => {
+              const config = PLACE_TYPE_CONFIG[type];
+              return (
+                <View key={type} style={styles.legendItem}>
+                  <Text style={{ fontSize: 10 }}>{config.icon}</Text>
+                  <Text style={[styles.legendText, { color: colors.textSecondary }]}>{config.label}</Text>
+                </View>
+              );
+            })}
+          </View>
+
+          <View style={[styles.radiusIndicator, { borderColor: isDark ? '#38BDF840' : '#0284C740' }]}>
+            <Text style={[styles.radiusIndicatorText, { color: isDark ? '#38BDF8' : '#0284C7' }]}>5 mi</Text>
+          </View>
         </View>
 
-        {/* Map Legend */}
-        <View style={[styles.mapLegend, { backgroundColor: colors.surface + 'E6' }]}>
-          <Text style={[styles.mapLegendTitle, { color: colors.text }]}>Rarity</Text>
-          {Object.entries(RARITY_CONFIG).map(([key, config]) => (
-            <View key={key} style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: config.color }]} />
-              <Text style={[styles.legendText, { color: colors.textSecondary }]}>{config.label}</Text>
-            </View>
-          ))}
+        <View style={[styles.osmAttribution, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.osmText, { color: colors.textSecondary }]}>
+            © OpenStreetMap contributors • 5-mile radius
+          </Text>
+          <TouchableOpacity onPress={() => refreshDailyTreasures()}>
+            <RefreshCw size={14} color="#0F4C75" />
+          </TouchableOpacity>
         </View>
       </View>
+    );
+  };
 
-      {/* OpenStreetMap Attribution */}
-      <View style={[styles.osmAttribution, { backgroundColor: colors.surface }]}>
-        <Text style={[styles.osmText, { color: colors.textSecondary }]}>
-          © OpenStreetMap contributors
-        </Text>
-        <TouchableOpacity onPress={() => refreshDailyTreasures()}>
-          <RefreshCw size={14} color={colors.primary} />
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-
-  const renderTreasureCard = (treasure: TreasureLocation, index: number) => {
+  const renderTreasureCard = (treasure: TreasureLocation, _index: number) => {
     const claimed = isTreasureClaimed(treasure.id);
     const rarity = RARITY_CONFIG[treasure.rarity];
     const typeConfig = TREASURE_TYPE_CONFIG[treasure.treasureType];
+    const placeConfig = PLACE_TYPE_CONFIG[treasure.placeType];
     const distance = treasureDistances.find(d => d.treasure.id === treasure.id);
 
     return (
@@ -390,14 +514,17 @@ export default function ScavengerHuntScreen() {
 
         <View style={styles.treasureCardCenter}>
           <View style={styles.treasureNameRow}>
-            <Text style={[styles.treasureCardName, { color: claimed ? colors.textSecondary : colors.text }]}>
+            <Text style={[styles.treasureCardName, { color: claimed ? colors.textSecondary : colors.text }]} numberOfLines={1}>
               {treasure.name}
             </Text>
             {claimed && <Lock size={12} color={colors.textSecondary} />}
           </View>
-          <Text style={[styles.treasureCardLocation, { color: colors.textSecondary }]}>
-            📍 {treasure.neighborhood} • {treasure.landmark}
-          </Text>
+          <View style={styles.treasureLocationRow}>
+            {getPlaceTypeIcon(treasure.placeType)}
+            <Text style={[styles.treasureCardLocation, { color: colors.textSecondary }]} numberOfLines={1}>
+              {placeConfig.label} • {treasure.neighborhood}
+            </Text>
+          </View>
           <View style={styles.treasureCardMeta}>
             <View style={[styles.rarityTag, { backgroundColor: rarity.bgColor }]}>
               <Text style={[styles.rarityTagText, { color: rarity.color }]}>{rarity.label}</Text>
@@ -429,9 +556,22 @@ export default function ScavengerHuntScreen() {
       <View style={styles.listHeader}>
         <Text style={[styles.listTitle, { color: colors.text }]}>Today's Treasures</Text>
         <Text style={[styles.listSubtitle, { color: colors.textSecondary }]}>
-          {dailyProgress.claimedTreasures} of {dailyProgress.totalTreasures} found
+          {dailyProgress.claimedTreasures} of {MAX_DAILY_TREASURES} found • {dailyClaimsRemaining} claims left
         </Text>
       </View>
+
+      {dailyClaimsRemaining <= 0 && (
+        <View style={[styles.limitReachedBanner, { backgroundColor: '#F59E0B15' }]}>
+          <AlertCircle size={18} color="#F59E0B" />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.limitReachedTitle, { color: '#F59E0B' }]}>Daily Limit Reached!</Text>
+            <Text style={[styles.limitReachedSub, { color: colors.textSecondary }]}>
+              You've claimed all {MAX_DAILY_TREASURES} treasures today. New treasures appear at midnight.
+            </Text>
+          </View>
+        </View>
+      )}
+
       {treasures.map((treasure, index) => renderTreasureCard(treasure, index))}
     </View>
   );
@@ -440,12 +580,11 @@ export default function ScavengerHuntScreen() {
     const stats = ScavengerHuntService.getHuntStats(claims, huntStreak);
     return (
       <View style={styles.statsContainer}>
-        {/* Overall Stats */}
         <View style={[styles.statsCard, { backgroundColor: colors.surface }]}>
           <Text style={[styles.statsCardTitle, { color: colors.text }]}>🏆 Hunt Statistics</Text>
           <View style={styles.statsGrid}>
             <View style={styles.statItem}>
-              <Text style={[styles.statNumber, { color: colors.primary }]}>{stats.totalTokens}</Text>
+              <Text style={[styles.statNumber, { color: '#0F4C75' }]}>{stats.totalTokens}</Text>
               <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Total MUSO</Text>
             </View>
             <View style={styles.statItem}>
@@ -463,7 +602,28 @@ export default function ScavengerHuntScreen() {
           </View>
         </View>
 
-        {/* Streak Card */}
+        <View style={[styles.statsCard, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.statsCardTitle, { color: colors.text }]}>📍 Daily Limits</Text>
+          <View style={styles.dailyLimitStats}>
+            <View style={styles.dailyLimitStatRow}>
+              <Text style={[styles.dailyLimitStatLabel, { color: colors.textSecondary }]}>Max Claims Per Day</Text>
+              <Text style={[styles.dailyLimitStatValue, { color: colors.text }]}>{MAX_DAILY_TREASURES}</Text>
+            </View>
+            <View style={styles.dailyLimitStatRow}>
+              <Text style={[styles.dailyLimitStatLabel, { color: colors.textSecondary }]}>Claimed Today</Text>
+              <Text style={[styles.dailyLimitStatValue, { color: '#10B981' }]}>{stats.todayClaims}</Text>
+            </View>
+            <View style={styles.dailyLimitStatRow}>
+              <Text style={[styles.dailyLimitStatLabel, { color: colors.textSecondary }]}>Remaining Today</Text>
+              <Text style={[styles.dailyLimitStatValue, { color: '#F59E0B' }]}>{stats.remainingToday}</Text>
+            </View>
+            <View style={styles.dailyLimitStatRow}>
+              <Text style={[styles.dailyLimitStatLabel, { color: colors.textSecondary }]}>Treasure Radius</Text>
+              <Text style={[styles.dailyLimitStatValue, { color: '#3B82F6' }]}>5 miles</Text>
+            </View>
+          </View>
+        </View>
+
         <View style={[styles.statsCard, { backgroundColor: colors.surface }]}>
           <Text style={[styles.statsCardTitle, { color: colors.text }]}>🔥 Streak Bonuses</Text>
           <View style={styles.streakGrid}>
@@ -490,7 +650,6 @@ export default function ScavengerHuntScreen() {
           </View>
         </View>
 
-        {/* Rarity Collection */}
         <View style={[styles.statsCard, { backgroundColor: colors.surface }]}>
           <Text style={[styles.statsCardTitle, { color: colors.text }]}>💎 Rarity Collection</Text>
           {Object.entries(RARITY_CONFIG).map(([key, config]) => {
@@ -507,35 +666,24 @@ export default function ScavengerHuntScreen() {
           })}
         </View>
 
-        {/* Today's Summary */}
         <View style={[styles.statsCard, { backgroundColor: colors.surface }]}>
           <Text style={[styles.statsCardTitle, { color: colors.text }]}>📅 Today's Progress</Text>
           <View style={styles.todayStats}>
             <View style={styles.todayStatRow}>
               <Text style={[styles.todayStatLabel, { color: colors.textSecondary }]}>Treasures Found</Text>
               <Text style={[styles.todayStatValue, { color: colors.text }]}>
-                {stats.todayClaims} / {dailyProgress.totalTreasures}
+                {stats.todayClaims} / {MAX_DAILY_TREASURES}
               </Text>
             </View>
             <View style={styles.todayStatRow}>
               <Text style={[styles.todayStatLabel, { color: colors.textSecondary }]}>Tokens Earned</Text>
               <Text style={[styles.todayStatValue, { color: '#F59E0B' }]}>{stats.todayTokens} MUSO</Text>
             </View>
-            <View style={styles.todayStatRow}>
-              <Text style={[styles.todayStatLabel, { color: colors.textSecondary }]}>Locations Discovered</Text>
-              <Text style={[styles.todayStatValue, { color: colors.primary }]}>
-                {stats.uniqueLocations} / {stats.totalLocations}
-              </Text>
-            </View>
           </View>
         </View>
       </View>
     );
   };
-
-  // ═══════════════════════════════════════════════════════════════
-  // 📱 AR CAMERA VIEW
-  // ═══════════════════════════════════════════════════════════════
 
   const renderARCamera = () => {
     if (!selectedTreasure) return null;
@@ -544,12 +692,10 @@ export default function ScavengerHuntScreen() {
     return (
       <Modal visible={showARCamera} animationType="fade" statusBarTranslucent>
         <View style={styles.arContainer}>
-          {/* Simulated Camera Background */}
           <LinearGradient
             colors={['#0a0a1a', '#1a1a3e', '#0d0d2b']}
             style={styles.arBackground}
           >
-            {/* Grid overlay for AR effect */}
             <View style={styles.arGrid}>
               {Array.from({ length: 8 }).map((_, i) => (
                 <View
@@ -565,7 +711,6 @@ export default function ScavengerHuntScreen() {
               ))}
             </View>
 
-            {/* Scanning line animation */}
             {isScanning && (
               <Animated.View
                 style={[
@@ -585,7 +730,6 @@ export default function ScavengerHuntScreen() {
               />
             )}
 
-            {/* 3D MUSO Token Model (Simulated) */}
             <View style={styles.arTokenCenter}>
               <Animated.View
                 style={[
@@ -598,10 +742,8 @@ export default function ScavengerHuntScreen() {
                   },
                 ]}
               >
-                {/* Glow ring */}
                 <View style={[styles.arGlowRing, { borderColor: rarity.color + '40' }]} />
 
-                {/* Token body */}
                 <Animated.View
                   style={[
                     styles.arTokenBody,
@@ -616,7 +758,6 @@ export default function ScavengerHuntScreen() {
                   <Text style={styles.arTokenLabel}>MUSO</Text>
                 </Animated.View>
 
-                {/* Sparkle particles */}
                 {[...Array(6)].map((_, i) => (
                   <Animated.View
                     key={i}
@@ -637,9 +778,7 @@ export default function ScavengerHuntScreen() {
               </Animated.View>
             </View>
 
-            {/* AR HUD Overlay */}
             <SafeAreaView style={styles.arHUD}>
-              {/* Top bar */}
               <View style={styles.arTopBar}>
                 <TouchableOpacity
                   style={styles.arCloseBtn}
@@ -662,9 +801,7 @@ export default function ScavengerHuntScreen() {
                 </View>
               </View>
 
-              {/* Bottom scan area */}
               <View style={styles.arBottomSection}>
-                {/* Scan progress */}
                 <View style={styles.arProgressContainer}>
                   <View style={styles.arProgressBg}>
                     <View
@@ -682,7 +819,6 @@ export default function ScavengerHuntScreen() {
                   </Text>
                 </View>
 
-                {/* Instructions */}
                 <View style={styles.arInstructions}>
                   <Camera size={20} color="#FFF" />
                   <Text style={styles.arInstructionText}>
@@ -692,11 +828,10 @@ export default function ScavengerHuntScreen() {
                   </Text>
                 </View>
 
-                {/* Geospatial anchor info */}
                 <View style={styles.arAnchorInfo}>
-                  <Navigation size={12} color="#8B5CF6" />
+                  <Navigation size={12} color="#38BDF8" />
                   <Text style={styles.arAnchorText}>
-                    Geospatial Anchor: {selectedTreasure.latitude.toFixed(4)}°N, {Math.abs(selectedTreasure.longitude).toFixed(4)}°W
+                    AR Anchor: {selectedTreasure.latitude.toFixed(4)}°N, {Math.abs(selectedTreasure.longitude).toFixed(4)}°W
                   </Text>
                 </View>
               </View>
@@ -707,29 +842,25 @@ export default function ScavengerHuntScreen() {
     );
   };
 
-  // ═══════════════════════════════════════════════════════════════
-  // 🎁 CLAIM MODAL
-  // ═══════════════════════════════════════════════════════════════
-
   const renderClaimModal = () => {
     if (!selectedTreasure) return null;
     const rarity = RARITY_CONFIG[selectedTreasure.rarity];
     const typeConfig = TREASURE_TYPE_CONFIG[selectedTreasure.treasureType];
+    const placeConfig = PLACE_TYPE_CONFIG[selectedTreasure.placeType];
     const claimed = isTreasureClaimed(selectedTreasure.id);
     const distance = treasureDistances.find(d => d.treasure.id === selectedTreasure.id);
+    const atDailyLimit = dailyClaimsRemaining <= 0;
 
     return (
       <Modal visible={showClaimModal} animationType="slide" transparent statusBarTranslucent>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
-            {/* Header */}
             <View style={styles.modalHeader}>
               <TouchableOpacity onPress={closeClaimModal}>
                 <X size={24} color={colors.text} />
               </TouchableOpacity>
             </View>
 
-            {/* Treasure Visual */}
             <View style={[styles.modalTreasureVisual, { backgroundColor: rarity.bgColor }]}>
               <Animated.View style={{ transform: [{ translateY: floatAnim }] }}>
                 <Text style={styles.modalTreasureIcon}>{selectedTreasure.icon}</Text>
@@ -739,16 +870,14 @@ export default function ScavengerHuntScreen() {
               </View>
             </View>
 
-            {/* Info */}
             <Text style={[styles.modalTreasureName, { color: colors.text }]}>{selectedTreasure.name}</Text>
             <Text style={[styles.modalDescription, { color: colors.textSecondary }]}>{selectedTreasure.description}</Text>
 
-            {/* Details */}
             <View style={styles.modalDetails}>
               <View style={styles.modalDetailRow}>
                 <MapPin size={16} color={colors.textSecondary} />
                 <Text style={[styles.modalDetailText, { color: colors.text }]}>
-                  {selectedTreasure.neighborhood} • {selectedTreasure.landmark}
+                  {placeConfig.icon} {placeConfig.label} • {selectedTreasure.neighborhood}
                 </Text>
               </View>
               <View style={styles.modalDetailRow}>
@@ -768,12 +897,17 @@ export default function ScavengerHuntScreen() {
               <View style={styles.modalDetailRow}>
                 <Compass size={16} color={colors.textSecondary} />
                 <Text style={[styles.modalDetailText, { color: colors.text }]}>
-                  {selectedTreasure.latitude.toFixed(4)}°N, {Math.abs(selectedTreasure.longitude).toFixed(4)}°W
+                  AR Anchor: {selectedTreasure.latitude.toFixed(4)}°N, {Math.abs(selectedTreasure.longitude).toFixed(4)}°W
+                </Text>
+              </View>
+              <View style={styles.modalDetailRow}>
+                <Target size={16} color={colors.textSecondary} />
+                <Text style={[styles.modalDetailText, { color: colors.text }]}>
+                  Claims remaining today: {dailyClaimsRemaining}
                 </Text>
               </View>
             </View>
 
-            {/* Hint */}
             <View style={[styles.hintBox, { backgroundColor: colors.background }]}>
               <Eye size={14} color="#F59E0B" />
               <Text style={[styles.hintText, { color: colors.textSecondary }]}>
@@ -781,7 +915,6 @@ export default function ScavengerHuntScreen() {
               </Text>
             </View>
 
-            {/* Claim Result */}
             {claimResult && (
               <Animated.View
                 style={[
@@ -799,8 +932,7 @@ export default function ScavengerHuntScreen() {
               </Animated.View>
             )}
 
-            {/* Action Button */}
-            {!claimed && !claimResult?.success && (
+            {!claimed && !claimResult?.success && !atDailyLimit && (
               <TouchableOpacity
                 style={[styles.scanButton, { backgroundColor: rarity.color }]}
                 onPress={handleStartARScan}
@@ -809,6 +941,15 @@ export default function ScavengerHuntScreen() {
                 <Camera size={20} color="#FFF" />
                 <Text style={styles.scanButtonText}>Open AR Scanner</Text>
               </TouchableOpacity>
+            )}
+
+            {atDailyLimit && !claimed && !claimResult?.success && (
+              <View style={[styles.limitReachedModal, { backgroundColor: '#F59E0B15' }]}>
+                <AlertCircle size={20} color="#F59E0B" />
+                <Text style={styles.limitReachedModalText}>
+                  Daily limit of {MAX_DAILY_TREASURES} treasures reached. Come back tomorrow!
+                </Text>
+              </View>
             )}
 
             {(claimed || claimResult?.success) && (
@@ -823,17 +964,13 @@ export default function ScavengerHuntScreen() {
     );
   };
 
-  // ═══════════════════════════════════════════════════════════════
-  // 📱 MAIN RENDER
-  // ═══════════════════════════════════════════════════════════════
-
   if (isLoading) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
         <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading treasures...</Text>
+          <ActivityIndicator size="large" color="#0F4C75" />
+          <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Placing treasures near you...</Text>
         </View>
       </SafeAreaView>
     );
@@ -848,43 +985,43 @@ export default function ScavengerHuntScreen() {
         contentContainerStyle={styles.scrollContent}
       >
         {renderHeader()}
+        {renderRadiusBanner()}
         {renderViewToggle()}
 
         {viewMode === 'map' && renderMapView()}
         {viewMode === 'list' && renderListView()}
         {viewMode === 'stats' && renderStatsView()}
 
-        {/* Bottom info */}
         <View style={[styles.infoSection, { backgroundColor: colors.surface }]}>
           <Text style={[styles.infoTitle, { color: colors.text }]}>🎯 How It Works</Text>
           <View style={styles.infoSteps}>
             <View style={styles.infoStep}>
-              <View style={[styles.infoStepIcon, { backgroundColor: '#8B5CF620' }]}>
-                <MapPin size={18} color="#8B5CF6" />
+              <View style={[styles.infoStepIcon, { backgroundColor: '#0F4C7520' }]}>
+                <LocateFixed size={18} color="#0F4C75" />
               </View>
-              <Text style={[styles.infoStepText, { color: colors.text }]}>Find treasure locations on the LA map</Text>
+              <Text style={[styles.infoStepText, { color: colors.text }]}>10 treasures are placed within 5 miles of you</Text>
             </View>
             <View style={styles.infoStep}>
-              <View style={[styles.infoStepIcon, { backgroundColor: '#3B82F620' }]}>
-                <Navigation size={18} color="#3B82F6" />
+              <View style={[styles.infoStepIcon, { backgroundColor: '#10B98120' }]}>
+                <TreePine size={18} color="#10B981" />
               </View>
-              <Text style={[styles.infoStepText, { color: colors.text }]}>Visit the real-world location</Text>
+              <Text style={[styles.infoStepText, { color: colors.text }]}>Find treasures at parks, gas stations & restaurants</Text>
             </View>
             <View style={styles.infoStep}>
               <View style={[styles.infoStepIcon, { backgroundColor: '#F59E0B20' }]}>
                 <Camera size={18} color="#F59E0B" />
               </View>
-              <Text style={[styles.infoStepText, { color: colors.text }]}>Open AR camera to scan for 3D MUSO Tokens</Text>
+              <Text style={[styles.infoStepText, { color: colors.text }]}>Open AR camera to scan the 3D MUSO Token anchor</Text>
             </View>
             <View style={styles.infoStep}>
-              <View style={[styles.infoStepIcon, { backgroundColor: '#10B98120' }]}>
-                <Coins size={18} color="#10B981" />
+              <View style={[styles.infoStepIcon, { backgroundColor: '#EF444420' }]}>
+                <Target size={18} color="#EF4444" />
               </View>
-              <Text style={[styles.infoStepText, { color: colors.text }]}>Collect tokens and build your streak!</Text>
+              <Text style={[styles.infoStepText, { color: colors.text }]}>Claim up to {MAX_DAILY_TREASURES} treasures per day max</Text>
             </View>
           </View>
           <Text style={[styles.infoNote, { color: colors.textSecondary }]}>
-            🔄 New treasures appear daily at 12:00 AM • Each treasure can be claimed once per day
+            🔄 New treasures appear daily at 12:00 AM • Max {MAX_DAILY_TREASURES} claims per day
           </Text>
         </View>
 
@@ -897,22 +1034,26 @@ export default function ScavengerHuntScreen() {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════
-// 🎨 STYLES
-// ═══════════════════════════════════════════════════════════════
-
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollContent: { paddingBottom: 20 },
   loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   loadingText: { fontSize: 14 },
 
-  // Header
   header: { padding: 20, paddingTop: 12 },
   headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  headerTitle: { fontSize: 26, fontWeight: '800', color: '#FFF' },
-  headerSubtitle: { fontSize: 13, color: '#E0D4F5', marginTop: 4 },
+  headerTitle: { fontSize: 26, fontWeight: '800' as const, color: '#FFF' },
+  headerSubtitle: { fontSize: 12, color: '#BAE6FD', marginTop: 4 },
   headerRight: { alignItems: 'flex-end' },
+  locationRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  relocateBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   streakBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -922,10 +1063,20 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     gap: 4,
   },
-  streakText: { color: '#F59E0B', fontSize: 16, fontWeight: '800' },
+  streakText: { color: '#F59E0B', fontSize: 16, fontWeight: '800' as const },
 
-  // Progress
-  progressSection: { marginTop: 16 },
+  dailyLimitBar: {
+    marginTop: 14,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 10,
+    padding: 10,
+  },
+  dailyLimitLeft: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+  dailyLimitText: { color: '#BAE6FD', fontSize: 13, fontWeight: '600' as const },
+  dailyLimitDots: { flexDirection: 'row', gap: 6, justifyContent: 'center' },
+  dailyLimitDot: { width: 20, height: 6, borderRadius: 3 },
+
+  progressSection: { marginTop: 12 },
   progressBarBg: {
     height: 8,
     backgroundColor: 'rgba(255,255,255,0.15)',
@@ -937,9 +1088,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#10B981',
     borderRadius: 4,
   },
-  progressText: { color: '#E0D4F5', fontSize: 12, marginTop: 6, textAlign: 'center' },
+  progressText: { color: '#BAE6FD', fontSize: 12, marginTop: 6, textAlign: 'center' },
 
-  // Streak bonus banner
   streakBonusBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -950,9 +1100,29 @@ const styles = StyleSheet.create({
     marginTop: 10,
     gap: 6,
   },
-  streakBonusText: { color: '#FDE68A', fontSize: 13, fontWeight: '700' },
+  streakBonusText: { color: '#FDE68A', fontSize: 13, fontWeight: '700' as const },
 
-  // View Toggle
+  radiusBanner: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    borderRadius: 14,
+    padding: 14,
+  },
+  radiusBannerContent: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  radiusBannerTitle: { fontSize: 14, fontWeight: '700' as const },
+  radiusBannerSub: { fontSize: 12, marginTop: 2 },
+  placeTypeRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  placeTypeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  placeTypeChipIcon: { fontSize: 12 },
+  placeTypeChipText: { fontSize: 11, fontWeight: '600' as const },
+
   viewToggle: {
     flexDirection: 'row',
     margin: 16,
@@ -968,9 +1138,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     gap: 6,
   },
-  viewToggleText: { fontSize: 13, fontWeight: '600' },
+  viewToggleText: { fontSize: 13, fontWeight: '600' as const },
 
-  // Map
   mapContainer: { marginHorizontal: 16 },
   mapPlaceholder: {
     height: 400,
@@ -982,6 +1151,32 @@ const styles = StyleSheet.create({
   markersOverlay: {
     ...StyleSheet.absoluteFillObject,
   },
+  playerMarker: {
+    position: 'absolute',
+    zIndex: 20,
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  playerPulseRing: {
+    position: 'absolute',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#3B82F6',
+  },
+  playerDot: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#3B82F6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: '#FFF',
+  },
+  playerDotIcon: { fontSize: 12 },
   mapMarker: {
     position: 'absolute',
     zIndex: 10,
@@ -1010,10 +1205,20 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 10,
   },
-  mapLegendTitle: { fontSize: 11, fontWeight: '700', marginBottom: 6 },
+  mapLegendTitle: { fontSize: 11, fontWeight: '700' as const, marginBottom: 6 },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 },
-  legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendText: { fontSize: 10 },
+  radiusIndicator: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
+  radiusIndicatorText: { fontSize: 10, fontWeight: '700' as const },
   osmAttribution: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1025,11 +1230,20 @@ const styles = StyleSheet.create({
   },
   osmText: { fontSize: 10 },
 
-  // Treasure Cards
   listContainer: { paddingHorizontal: 16 },
   listHeader: { marginBottom: 12 },
-  listTitle: { fontSize: 18, fontWeight: '700' },
+  listTitle: { fontSize: 18, fontWeight: '700' as const },
   listSubtitle: { fontSize: 13, marginTop: 2 },
+  limitReachedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  limitReachedTitle: { fontSize: 14, fontWeight: '700' as const },
+  limitReachedSub: { fontSize: 12, marginTop: 2 },
   treasureCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1048,25 +1262,29 @@ const styles = StyleSheet.create({
   treasureCardIcon: { fontSize: 24 },
   treasureCardCenter: { flex: 1 },
   treasureNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  treasureCardName: { fontSize: 15, fontWeight: '700' },
-  treasureCardLocation: { fontSize: 12, marginTop: 3 },
+  treasureCardName: { fontSize: 15, fontWeight: '700' as const, flexShrink: 1 },
+  treasureLocationRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
+  treasureCardLocation: { fontSize: 12, flexShrink: 1 },
   treasureCardMeta: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
   rarityTag: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6 },
-  rarityTagText: { fontSize: 10, fontWeight: '700' },
+  rarityTagText: { fontSize: 10, fontWeight: '700' as const },
   typeTag: { fontSize: 11 },
   treasureCardRight: { alignItems: 'flex-end', gap: 4 },
   rewardBadge: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  rewardText: { fontSize: 15, fontWeight: '800', color: '#F59E0B' },
+  rewardText: { fontSize: 15, fontWeight: '800' as const, color: '#F59E0B' },
   distanceText: { fontSize: 11 },
 
-  // Stats
   statsContainer: { paddingHorizontal: 16, gap: 12 },
   statsCard: { borderRadius: 16, padding: 16 },
-  statsCardTitle: { fontSize: 16, fontWeight: '700', marginBottom: 14 },
+  statsCardTitle: { fontSize: 16, fontWeight: '700' as const, marginBottom: 14 },
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap' },
   statItem: { width: '50%', alignItems: 'center', paddingVertical: 10 },
-  statNumber: { fontSize: 28, fontWeight: '800' },
+  statNumber: { fontSize: 28, fontWeight: '800' as const },
   statLabel: { fontSize: 12, marginTop: 4 },
+  dailyLimitStats: { gap: 10 },
+  dailyLimitStatRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  dailyLimitStatLabel: { fontSize: 14 },
+  dailyLimitStatValue: { fontSize: 14, fontWeight: '700' as const },
   streakGrid: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
   streakItem: {
     flexDirection: 'row',
@@ -1077,7 +1295,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
   },
-  streakDays: { fontSize: 14, fontWeight: '700' },
+  streakDays: { fontSize: 14, fontWeight: '700' as const },
   rarityRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1088,23 +1306,21 @@ const styles = StyleSheet.create({
   },
   rarityRowLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   rarityDot: { width: 10, height: 10, borderRadius: 5 },
-  rarityName: { fontSize: 14, fontWeight: '600' },
-  rarityCount: { fontSize: 18, fontWeight: '800' },
+  rarityName: { fontSize: 14, fontWeight: '600' as const },
+  rarityCount: { fontSize: 18, fontWeight: '800' as const },
   todayStats: { gap: 10 },
   todayStatRow: { flexDirection: 'row', justifyContent: 'space-between' },
   todayStatLabel: { fontSize: 14 },
-  todayStatValue: { fontSize: 14, fontWeight: '700' },
+  todayStatValue: { fontSize: 14, fontWeight: '700' as const },
 
-  // Info Section
   infoSection: { margin: 16, borderRadius: 16, padding: 16 },
-  infoTitle: { fontSize: 16, fontWeight: '700', marginBottom: 14 },
+  infoTitle: { fontSize: 16, fontWeight: '700' as const, marginBottom: 14 },
   infoSteps: { gap: 12 },
   infoStep: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   infoStepIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   infoStepText: { flex: 1, fontSize: 14, lineHeight: 20 },
   infoNote: { fontSize: 12, marginTop: 14, textAlign: 'center', fontStyle: 'italic' },
 
-  // Claim Modal
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
@@ -1131,12 +1347,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginTop: 12,
   },
-  modalRarityText: { fontSize: 13, fontWeight: '700' },
-  modalTreasureName: { fontSize: 22, fontWeight: '800', textAlign: 'center' },
+  modalRarityText: { fontSize: 13, fontWeight: '700' as const },
+  modalTreasureName: { fontSize: 22, fontWeight: '800' as const, textAlign: 'center' },
   modalDescription: { fontSize: 14, lineHeight: 20, textAlign: 'center', marginTop: 8, marginBottom: 16 },
   modalDetails: { gap: 10, marginBottom: 16 },
   modalDetailRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  modalDetailText: { fontSize: 14 },
+  modalDetailText: { fontSize: 14, flex: 1 },
   hintBox: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -1156,7 +1372,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   claimResultIcon: { fontSize: 24 },
-  claimResultText: { flex: 1, fontSize: 15, fontWeight: '700' },
+  claimResultText: { flex: 1, fontSize: 15, fontWeight: '700' as const },
   scanButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1165,7 +1381,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     gap: 10,
   },
-  scanButtonText: { fontSize: 17, fontWeight: '800', color: '#FFF' },
+  scanButtonText: { fontSize: 17, fontWeight: '800' as const, color: '#FFF' },
   claimedBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1174,14 +1390,23 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     gap: 8,
   },
-  claimedText: { fontSize: 15, fontWeight: '700', color: '#10B981' },
+  claimedText: { fontSize: 15, fontWeight: '700' as const, color: '#10B981' },
+  limitReachedModal: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    gap: 8,
+  },
+  limitReachedModalText: { fontSize: 14, fontWeight: '600' as const, color: '#F59E0B', flex: 1 },
 
-  // AR Camera
   arContainer: { flex: 1 },
   arBackground: { flex: 1 },
   arGrid: { ...StyleSheet.absoluteFillObject },
-  arGridLineH: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: '#8B5CF6' },
-  arGridLineV: { position: 'absolute', top: 0, bottom: 0, width: 1, backgroundColor: '#8B5CF6' },
+  arGridLineH: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: '#38BDF8' },
+  arGridLineV: { position: 'absolute', top: 0, bottom: 0, width: 1, backgroundColor: '#38BDF8' },
   scanLine: { position: 'absolute', left: 0, right: 0, height: 3 },
   arTokenCenter: {
     flex: 1,
@@ -1214,8 +1439,8 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 8,
   },
-  arTokenSymbol: { fontSize: 36, fontWeight: '900', color: '#FFF' },
-  arTokenLabel: { fontSize: 10, fontWeight: '700', color: '#FFF', marginTop: -2 },
+  arTokenSymbol: { fontSize: 36, fontWeight: '900' as const, color: '#FFF' },
+  arTokenLabel: { fontSize: 10, fontWeight: '700' as const, color: '#FFF', marginTop: -2 },
   arParticle: {
     position: 'absolute',
     width: 6,
@@ -1238,11 +1463,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   arTreasureInfo: { alignItems: 'center' },
-  arTreasureName: { color: '#FFF', fontSize: 16, fontWeight: '700' },
+  arTreasureName: { color: '#FFF', fontSize: 16, fontWeight: '700' as const },
   arRarityBadge: { paddingHorizontal: 10, paddingVertical: 2, borderRadius: 8, marginTop: 4 },
-  arRarityText: { fontSize: 11, fontWeight: '700' },
+  arRarityText: { fontSize: 11, fontWeight: '700' as const },
   arRewardInfo: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  arRewardText: { color: '#F59E0B', fontSize: 18, fontWeight: '800' },
+  arRewardText: { color: '#F59E0B', fontSize: 18, fontWeight: '800' as const },
   arBottomSection: { padding: 20 },
   arProgressContainer: { marginBottom: 16 },
   arProgressBg: {
@@ -1252,7 +1477,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   arProgressFill: { height: '100%', borderRadius: 4 },
-  arProgressText: { color: '#FFF', fontSize: 13, textAlign: 'center', marginTop: 6, fontWeight: '600' },
+  arProgressText: { color: '#FFF', fontSize: 13, textAlign: 'center', marginTop: 6, fontWeight: '600' as const },
   arInstructions: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1269,5 +1494,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
   },
-  arAnchorText: { color: '#A78BFA', fontSize: 11, fontWeight: '600' },
+  arAnchorText: { color: '#7DD3FC', fontSize: 11, fontWeight: '600' as const },
 });

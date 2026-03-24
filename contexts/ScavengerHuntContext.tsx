@@ -1,7 +1,6 @@
-// Scavenger Hunt Context - State management for MUSO Token Treasure Hunt
-
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import {
   TreasureLocation,
   TreasureClaim,
@@ -9,14 +8,14 @@ import {
   HuntStreak,
   PlayerLocation,
   TreasureDistance,
-  ScavengerHuntState,
+  MAX_DAILY_TREASURES,
 } from '../types/scavengerHunt';
 import { ScavengerHuntService } from '../services/ScavengerHuntService';
 
 const STORAGE_KEY = '@scavenger_hunt_state';
+const LOCATION_STORAGE_KEY = '@scavenger_hunt_last_location';
 
 interface ScavengerHuntContextValue {
-  // State
   treasures: TreasureLocation[];
   dailyProgress: DailyHuntProgress;
   huntStreak: HuntStreak;
@@ -28,8 +27,9 @@ interface ScavengerHuntContextValue {
   treasureDistances: TreasureDistance[];
   huntActive: boolean;
   totalTokensEarned: number;
+  locationPermissionGranted: boolean;
+  dailyClaimsRemaining: number;
 
-  // Actions
   setPlayerLocation: (location: PlayerLocation) => void;
   selectTreasure: (treasure: TreasureLocation | null) => void;
   setShowARView: (show: boolean) => void;
@@ -37,6 +37,8 @@ interface ScavengerHuntContextValue {
   isTreasureClaimed: (treasureId: string) => boolean;
   refreshDailyTreasures: () => void;
   getStreakBonusLabel: () => string | null;
+  requestLocationPermission: () => Promise<boolean>;
+  regenerateTreasuresForLocation: (lat: number, lon: number) => void;
 }
 
 const ScavengerHuntContext = createContext<ScavengerHuntContextValue | undefined>(undefined);
@@ -45,7 +47,7 @@ export function ScavengerHuntProvider({ children }: { children: React.ReactNode 
   const [treasures, setTreasures] = useState<TreasureLocation[]>([]);
   const [claims, setClaims] = useState<TreasureClaim[]>([]);
   const [dailyProgress, setDailyProgress] = useState<DailyHuntProgress>(
-    ScavengerHuntService.createDailyProgress(0)
+    ScavengerHuntService.createDailyProgress(MAX_DAILY_TREASURES)
   );
   const [huntStreak, setHuntStreak] = useState<HuntStreak>({
     currentStreak: 0,
@@ -56,20 +58,23 @@ export function ScavengerHuntProvider({ children }: { children: React.ReactNode 
   const [isLoading, setIsLoading] = useState(true);
   const [selectedTreasure, setSelectedTreasure] = useState<TreasureLocation | null>(null);
   const [showARView, setShowARView] = useState(false);
-  const [playerLocation, setPlayerLocation] = useState<PlayerLocation | null>(null);
+  const [playerLocation, setPlayerLocationState] = useState<PlayerLocation | null>(null);
   const [treasureDistances, setTreasureDistances] = useState<TreasureDistance[]>([]);
-  const [huntActive, setHuntActive] = useState(true);
+  const [huntActive] = useState(true);
   const [totalTokensEarned, setTotalTokensEarned] = useState(0);
+  const [locationPermissionGranted, setLocationPermissionGranted] = useState(false);
   const initialized = useRef(false);
+  const treasuresGeneratedForDay = useRef<string | null>(null);
 
-  // Load persisted state
+  const dailyClaimsRemaining = MAX_DAILY_TREASURES - ScavengerHuntService.getTodayClaimCount(claims);
+
   useEffect(() => {
     if (initialized.current) return;
     initialized.current = true;
-    loadState();
+    void loadState();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Update distances when player location changes
   useEffect(() => {
     if (playerLocation && treasures.length > 0) {
       const distances = ScavengerHuntService.getTreasureDistances(
@@ -81,12 +86,30 @@ export function ScavengerHuntProvider({ children }: { children: React.ReactNode 
     }
   }, [playerLocation, treasures]);
 
+  const generateTreasuresForLocation = useCallback((lat: number, lon: number) => {
+    const todayKey = ScavengerHuntService.getTodayKey();
+    const gridKey = `${todayKey}_${Math.round(lat * 100)}_${Math.round(lon * 100)}`;
+
+    if (treasuresGeneratedForDay.current === gridKey) {
+      console.log('[ScavengerHunt] Treasures already generated for this location grid today');
+      return;
+    }
+
+    console.log(`[ScavengerHunt] Generating ${MAX_DAILY_TREASURES} treasures within 5mi of ${lat.toFixed(4)}, ${lon.toFixed(4)}`);
+    const generated = ScavengerHuntService.generateTreasuresAroundPlayer(lat, lon, todayKey);
+    setTreasures(generated);
+    treasuresGeneratedForDay.current = gridKey;
+
+    AsyncStorage.setItem(LOCATION_STORAGE_KEY, JSON.stringify({ lat, lon, dayKey: todayKey })).catch(
+      (err) => console.error('[ScavengerHunt] Failed to save location:', err)
+    );
+  }, []);
+
   const loadState = async () => {
     try {
       setIsLoading(true);
       const stored = await AsyncStorage.getItem(STORAGE_KEY);
       const todayKey = ScavengerHuntService.getTodayKey();
-      const todayTreasures = ScavengerHuntService.getTodaysTreasures();
 
       if (stored) {
         const parsed = JSON.parse(stored);
@@ -99,14 +122,10 @@ export function ScavengerHuntProvider({ children }: { children: React.ReactNode 
         });
         setTotalTokensEarned(parsed.totalTokensEarned || 0);
 
-        // Check if daily progress needs reset
         if (parsed.dailyProgress?.dayKey === todayKey) {
           setDailyProgress(parsed.dailyProgress);
         } else {
-          // New day - reset daily progress
-          const newProgress = ScavengerHuntService.createDailyProgress(todayTreasures.length);
-
-          // Update streak
+          const newProgress = ScavengerHuntService.createDailyProgress(MAX_DAILY_TREASURES);
           const updatedStreak = ScavengerHuntService.updateStreak(
             parsed.huntStreak || { currentStreak: 0, longestStreak: 0, lastHuntDate: null, totalDaysHunted: 0 },
             false
@@ -115,15 +134,28 @@ export function ScavengerHuntProvider({ children }: { children: React.ReactNode 
           setDailyProgress(newProgress);
         }
       } else {
-        setDailyProgress(ScavengerHuntService.createDailyProgress(todayTreasures.length));
+        setDailyProgress(ScavengerHuntService.createDailyProgress(MAX_DAILY_TREASURES));
       }
 
-      setTreasures(todayTreasures);
+      const lastLoc = await AsyncStorage.getItem(LOCATION_STORAGE_KEY);
+      if (lastLoc) {
+        const locData = JSON.parse(lastLoc);
+        if (locData.dayKey === todayKey && locData.lat && locData.lon) {
+          console.log('[ScavengerHunt] Restoring treasures from last known location');
+          generateTreasuresForLocation(locData.lat, locData.lon);
+        } else {
+          const fallback = ScavengerHuntService.generateTreasuresAroundPlayer(34.0522, -118.2437);
+          setTreasures(fallback);
+        }
+      } else {
+        const fallback = ScavengerHuntService.generateTreasuresAroundPlayer(34.0522, -118.2437);
+        setTreasures(fallback);
+      }
     } catch (error) {
       console.error('[ScavengerHunt] Failed to load state:', error);
-      const todayTreasures = ScavengerHuntService.getTodaysTreasures();
-      setTreasures(todayTreasures);
-      setDailyProgress(ScavengerHuntService.createDailyProgress(todayTreasures.length));
+      const fallback = ScavengerHuntService.generateTreasuresAroundPlayer(34.0522, -118.2437);
+      setTreasures(fallback);
+      setDailyProgress(ScavengerHuntService.createDailyProgress(MAX_DAILY_TREASURES));
     } finally {
       setIsLoading(false);
     }
@@ -147,21 +179,96 @@ export function ScavengerHuntProvider({ children }: { children: React.ReactNode 
     }
   }, []);
 
+  const setPlayerLocation = useCallback((location: PlayerLocation) => {
+    setPlayerLocationState(location);
+    generateTreasuresForLocation(location.latitude, location.longitude);
+  }, [generateTreasuresForLocation]);
+
+  const requestLocationPermission = useCallback(async (): Promise<boolean> => {
+    try {
+      if (Platform.OS === 'web') {
+        return new Promise((resolve) => {
+          if (!navigator.geolocation) {
+            console.log('[ScavengerHunt] Geolocation not available on web');
+            resolve(false);
+            return;
+          }
+          navigator.geolocation.getCurrentPosition(
+            (position) => {
+              const loc: PlayerLocation = {
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude,
+                accuracy: position.coords.accuracy,
+                timestamp: position.timestamp,
+              };
+              setPlayerLocation(loc);
+              setLocationPermissionGranted(true);
+              console.log(`[ScavengerHunt] Web location: ${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}`);
+              resolve(true);
+            },
+            (error) => {
+              console.log('[ScavengerHunt] Web geolocation error:', error.message);
+              resolve(false);
+            },
+            { enableHighAccuracy: true, timeout: 10000 }
+          );
+        });
+      }
+
+      const Location = require('expo-location');
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        console.log('[ScavengerHunt] Location permission denied');
+        setLocationPermissionGranted(false);
+        return false;
+      }
+
+      setLocationPermissionGranted(true);
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+      const loc: PlayerLocation = {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+        accuracy: position.coords.accuracy,
+        timestamp: position.timestamp,
+      };
+
+      setPlayerLocation(loc);
+      console.log(`[ScavengerHunt] Device location: ${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}`);
+      return true;
+    } catch (error) {
+      console.error('[ScavengerHunt] Location error:', error);
+      return false;
+    }
+  }, [setPlayerLocation]);
+
+  const regenerateTreasuresForLocation = useCallback((lat: number, lon: number) => {
+    treasuresGeneratedForDay.current = null;
+    generateTreasuresForLocation(lat, lon);
+  }, [generateTreasuresForLocation]);
+
   const claimTreasure = useCallback((treasureId: string): { success: boolean; tokensAwarded: number; message: string } => {
+    if (!ScavengerHuntService.canClaimMore(claims)) {
+      return {
+        success: false,
+        tokensAwarded: 0,
+        message: `Daily limit reached! You can claim up to ${MAX_DAILY_TREASURES} treasures per day. Come back tomorrow!`,
+      };
+    }
+
     const treasure = treasures.find(t => t.id === treasureId);
     if (!treasure) {
       return { success: false, tokensAwarded: 0, message: 'Treasure not found!' };
     }
 
-    // Check if already claimed today
     if (ScavengerHuntService.isTreasureClaimedToday(treasureId, claims)) {
       return { success: false, tokensAwarded: 0, message: 'Already claimed today! Come back tomorrow.' };
     }
 
-    // Calculate reward
     const reward = ScavengerHuntService.calculateReward(treasure, huntStreak.currentStreak);
 
-    // Create claim
     const newClaim = ScavengerHuntService.createClaim(
       treasureId,
       'player',
@@ -170,7 +277,6 @@ export function ScavengerHuntProvider({ children }: { children: React.ReactNode 
       reward.streakMultiplier
     );
 
-    // Update state
     const updatedClaims = [newClaim, ...claims];
     const updatedProgress: DailyHuntProgress = {
       ...dailyProgress,
@@ -178,7 +284,7 @@ export function ScavengerHuntProvider({ children }: { children: React.ReactNode 
       totalTokensEarned: dailyProgress.totalTokensEarned + reward.totalReward,
       claimedIds: [...dailyProgress.claimedIds, treasureId],
       bonusTokensEarned: dailyProgress.bonusTokensEarned + (reward.totalReward - reward.baseReward),
-      completedAt: dailyProgress.claimedTreasures + 1 >= dailyProgress.totalTreasures ? Date.now() : null,
+      completedAt: dailyProgress.claimedTreasures + 1 >= MAX_DAILY_TREASURES ? Date.now() : null,
     };
     const updatedStreak = ScavengerHuntService.updateStreak(huntStreak, true);
     const updatedTotalTokens = totalTokensEarned + reward.totalReward;
@@ -188,13 +294,13 @@ export function ScavengerHuntProvider({ children }: { children: React.ReactNode 
     setHuntStreak(updatedStreak);
     setTotalTokensEarned(updatedTotalTokens);
 
-    // Persist
     void saveState(updatedClaims, updatedProgress, updatedStreak, updatedTotalTokens);
 
+    const remaining = MAX_DAILY_TREASURES - ScavengerHuntService.getTodayClaimCount(updatedClaims);
     const streakLabel = ScavengerHuntService.getStreakBonusLabel(updatedStreak.currentStreak);
     const message = streakLabel
-      ? `+${reward.totalReward} MUSO! ${streakLabel}`
-      : `+${reward.totalReward} MUSO Tokens collected!`;
+      ? `+${reward.totalReward} MUSO! ${streakLabel} (${remaining} left today)`
+      : `+${reward.totalReward} MUSO Tokens collected! (${remaining} left today)`;
 
     return { success: true, tokensAwarded: reward.totalReward, message };
   }, [treasures, claims, dailyProgress, huntStreak, totalTokensEarned, saveState]);
@@ -204,15 +310,20 @@ export function ScavengerHuntProvider({ children }: { children: React.ReactNode 
   }, [claims]);
 
   const refreshDailyTreasures = useCallback(() => {
-    const todayTreasures = ScavengerHuntService.getTodaysTreasures();
-    setTreasures(todayTreasures);
+    if (playerLocation) {
+      treasuresGeneratedForDay.current = null;
+      generateTreasuresForLocation(playerLocation.latitude, playerLocation.longitude);
+    } else {
+      const fallback = ScavengerHuntService.generateTreasuresAroundPlayer(34.0522, -118.2437);
+      setTreasures(fallback);
+    }
 
     const todayKey = ScavengerHuntService.getTodayKey();
     if (dailyProgress.dayKey !== todayKey) {
-      const newProgress = ScavengerHuntService.createDailyProgress(todayTreasures.length);
+      const newProgress = ScavengerHuntService.createDailyProgress(MAX_DAILY_TREASURES);
       setDailyProgress(newProgress);
     }
-  }, [dailyProgress.dayKey]);
+  }, [dailyProgress.dayKey, playerLocation, generateTreasuresForLocation]);
 
   const selectTreasure = useCallback((treasure: TreasureLocation | null) => {
     setSelectedTreasure(treasure);
@@ -234,6 +345,8 @@ export function ScavengerHuntProvider({ children }: { children: React.ReactNode 
     treasureDistances,
     huntActive,
     totalTokensEarned,
+    locationPermissionGranted,
+    dailyClaimsRemaining,
     setPlayerLocation,
     selectTreasure,
     setShowARView,
@@ -241,6 +354,8 @@ export function ScavengerHuntProvider({ children }: { children: React.ReactNode 
     isTreasureClaimed,
     refreshDailyTreasures,
     getStreakBonusLabel,
+    requestLocationPermission,
+    regenerateTreasuresForLocation,
   };
 
   return (
