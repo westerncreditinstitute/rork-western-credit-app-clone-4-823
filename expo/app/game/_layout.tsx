@@ -11,6 +11,7 @@ import { MapProvider } from '@/contexts/MapContext';
 import { AIAgentProvider } from '@/contexts/AIAgentContext';
 import { SocialFeedProvider } from '@/contexts/SocialFeedContext';
 import { ScavengerHuntProvider } from '@/contexts/ScavengerHuntContext';
+import { City3DProvider } from '@/contexts/City3DContext';
 
 const GameProviders = memo(function GameProviders({ children }: { children: React.ReactNode }) {
   return (
@@ -24,7 +25,9 @@ const GameProviders = memo(function GameProviders({ children }: { children: Reac
                   <SocialFeedProvider>
                     <AIAgentProvider>
                       <ScavengerHuntProvider>
-                        {children}
+                        <City3DProvider>
+                          {children}
+                        </City3DProvider>
                       </ScavengerHuntProvider>
                     </AIAgentProvider>
                   </SocialFeedProvider>
@@ -94,6 +97,7 @@ export default function GameLayout() {
         <Stack.Screen name="agent-discovery" options={{ title: 'Discover Agents', headerShown: false }} />
         <Stack.Screen name="live-feed" options={{ title: 'Live Feed', headerShown: false }} />
         <Stack.Screen name="scavenger-hunt" options={{ title: 'Treasure Hunt', headerShown: false }} />
+        <Stack.Screen name="city3d" options={{ title: '3D LA City', headerShown: false }} />
       </Stack>
     </GameProviders>
   );
