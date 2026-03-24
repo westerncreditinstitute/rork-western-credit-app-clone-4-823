@@ -163,24 +163,20 @@ class TerrainService {
     const district = DISTRICTS[districtId];
     const params = TERRAIN_PARAMS[districtId];
     
-    // Create elevation grid
+    console.log(`[TerrainService] Generating terrain for ${districtId} (${resolution}x${resolution})`);
+    
     const elevation: number[][] = [];
     
     for (let y = 0; y < resolution; y++) {
       const row: number[] = [];
       for (let x = 0; x < resolution; x++) {
-        // Calculate world position
         const worldX = tileX * resolution + x;
         const worldY = tileY * resolution + y;
         
-        // Get elevation from multiple sources
-        let elevationValue = await this.getElevation(
-          district.center.lat + (y / resolution - 0.5) * 0.01,
-          district.center.lon + (x / resolution - 0.5) * 0.01,
-          params
-        );
+        const lat = district.center.lat + (y / resolution - 0.5) * 0.01;
+        const lon = district.center.lon + (x / resolution - 0.5) * 0.01;
         
-        // Apply procedural variation
+        let elevationValue = this.generateProceduralElevation(lat, lon, params);
         elevationValue += this.noiseGenerator.fbm(worldX * 0.1, worldY * 0.1) * params.hilliness * 50;
         
         row.push(elevationValue);
@@ -188,19 +184,22 @@ class TerrainService {
       elevation.push(row);
     }
     
-    // Generate vegetation based on terrain
+    console.log(`[TerrainService] Elevation grid complete, generating vegetation...`);
+    
     const vegetation = this.generateVegetation(
       districtId,
       elevation,
       params.vegetationDensity
     );
     
+    console.log(`[TerrainService] Terrain generation complete for ${districtId}`);
+    
     return {
       id: `terrain-${districtId}-${tileX}-${tileY}`,
       coordinates: { x: tileX, y: tileY },
       elevation,
       resolution,
-      dataSource: 'procedural', // Will be 'usgs_3dep' when API is available
+      dataSource: 'procedural',
       vegetation,
       roads: []
     };
