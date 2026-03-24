@@ -38,18 +38,21 @@ import {
   TreePine,
   UtensilsCrossed,
   AlertCircle,
+  BookOpen,
+  Star,
+  Sparkles,
 } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useGame } from '@/contexts/GameContext';
 import { useScavengerHunt } from '@/contexts/ScavengerHuntContext';
 import { ScavengerHuntService } from '@/services/ScavengerHuntService';
-import { RARITY_CONFIG, TREASURE_TYPE_CONFIG, PLACE_TYPE_CONFIG, MAX_DAILY_TREASURES, TreasureLocation } from '@/types/scavengerHunt';
+import { RARITY_CONFIG, TREASURE_TYPE_CONFIG, PLACE_TYPE_CONFIG, MAX_DAILY_TREASURES, STREAK_BONUSES, TreasureLocation } from '@/types/scavengerHunt';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-type ViewMode = 'map' | 'list' | 'stats';
+type ViewMode = 'map' | 'list' | 'legend' | 'stats';
 
 export default function ScavengerHuntScreen() {
   const { colors, isDark } = useTheme();
@@ -362,7 +365,7 @@ export default function ScavengerHuntScreen() {
 
   const renderViewToggle = () => (
     <View style={[styles.viewToggle, { backgroundColor: colors.surface }]}>
-      {(['map', 'list', 'stats'] as ViewMode[]).map(mode => (
+      {(['map', 'list', 'legend', 'stats'] as ViewMode[]).map(mode => (
         <TouchableOpacity
           key={mode}
           style={[styles.viewToggleBtn, viewMode === mode && { backgroundColor: '#0F4C75' }]}
@@ -371,9 +374,10 @@ export default function ScavengerHuntScreen() {
             setViewMode(mode);
           }}
         >
-          {mode === 'map' && <MapIcon size={16} color={viewMode === mode ? '#FFF' : colors.textSecondary} />}
-          {mode === 'list' && <Target size={16} color={viewMode === mode ? '#FFF' : colors.textSecondary} />}
-          {mode === 'stats' && <Trophy size={16} color={viewMode === mode ? '#FFF' : colors.textSecondary} />}
+          {mode === 'map' && <MapIcon size={14} color={viewMode === mode ? '#FFF' : colors.textSecondary} />}
+          {mode === 'list' && <Target size={14} color={viewMode === mode ? '#FFF' : colors.textSecondary} />}
+          {mode === 'legend' && <BookOpen size={14} color={viewMode === mode ? '#FFF' : colors.textSecondary} />}
+          {mode === 'stats' && <Trophy size={14} color={viewMode === mode ? '#FFF' : colors.textSecondary} />}
           <Text style={[styles.viewToggleText, { color: viewMode === mode ? '#FFF' : colors.textSecondary }]}>
             {mode.charAt(0).toUpperCase() + mode.slice(1)}
           </Text>
@@ -601,6 +605,215 @@ export default function ScavengerHuntScreen() {
       {treasures.map((treasure, index) => renderTreasureCard(treasure, index))}
     </View>
   );
+
+  const renderLegendView = () => {
+    const treasureTypes = Object.entries(TREASURE_TYPE_CONFIG) as [string, { label: string; icon: string; baseReward: number }][];
+    const rarities = Object.entries(RARITY_CONFIG) as [string, { color: string; glowIntensity: number; label: string; multiplier: number; bgColor: string }][];
+    const placeTypes = Object.entries(PLACE_TYPE_CONFIG) as [string, { label: string; icon: string; priority: number }][];
+    const streaks = Object.entries(STREAK_BONUSES) as [string, { multiplier: number; label: string }][];
+
+    return (
+      <View style={styles.legendContainer}>
+        <View style={[styles.legendSection, { backgroundColor: colors.surface }]}> 
+          <View style={styles.legendSectionHeader}>
+            <View style={[styles.legendSectionIconWrap, { backgroundColor: '#F59E0B18' }]}>
+              <Gift size={18} color="#F59E0B" />
+            </View>
+            <View>
+              <Text style={[styles.legendSectionTitle, { color: colors.text }]}>Treasure Types</Text>
+              <Text style={[styles.legendSectionSub, { color: colors.textSecondary }]}>What you can discover</Text>
+            </View>
+          </View>
+          {treasureTypes.map(([key, config], index) => (
+            <View
+              key={key}
+              style={[
+                styles.legendRow,
+                index < treasureTypes.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border + '40' },
+              ]}
+            >
+              <View style={[styles.legendItemIcon, { backgroundColor: '#F59E0B10' }]}>
+                <Text style={styles.legendItemEmoji}>{config.icon}</Text>
+              </View>
+              <View style={styles.legendItemInfo}>
+                <Text style={[styles.legendItemName, { color: colors.text }]}>{config.label}</Text>
+                <Text style={[styles.legendItemDesc, { color: colors.textSecondary }]}>Base reward</Text>
+              </View>
+              <View style={styles.legendItemValue}>
+                <Coins size={14} color="#F59E0B" />
+                <Text style={styles.legendItemReward}>{config.baseReward}</Text>
+              </View>
+            </View>
+          ))}
+          <View style={[styles.legendNote, { backgroundColor: isDark ? '#1E3A5F' : '#FEF3C7' }]}>
+            <Sparkles size={13} color="#F59E0B" />
+            <Text style={[styles.legendNoteText, { color: isDark ? '#FDE68A' : '#92400E' }]}>
+              Final reward = Base × Rarity Multiplier × Streak Bonus
+            </Text>
+          </View>
+        </View>
+
+        <View style={[styles.legendSection, { backgroundColor: colors.surface }]}>
+          <View style={styles.legendSectionHeader}>
+            <View style={[styles.legendSectionIconWrap, { backgroundColor: '#8B5CF618' }]}>
+              <Star size={18} color="#8B5CF6" />
+            </View>
+            <View>
+              <Text style={[styles.legendSectionTitle, { color: colors.text }]}>Rarity Tiers</Text>
+              <Text style={[styles.legendSectionSub, { color: colors.textSecondary }]}>Higher rarity = bigger rewards</Text>
+            </View>
+          </View>
+          {rarities.map(([key, config], index) => (
+            <View
+              key={key}
+              style={[
+                styles.legendRow,
+                index < rarities.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border + '40' },
+              ]}
+            >
+              <View style={[styles.legendRarityDot, { backgroundColor: config.bgColor, borderColor: config.color }]}>
+                <View style={[styles.legendRarityInner, { backgroundColor: config.color }]} />
+              </View>
+              <View style={styles.legendItemInfo}>
+                <Text style={[styles.legendItemName, { color: config.color }]}>{config.label}</Text>
+                <View style={styles.legendGlowBar}>
+                  <View style={[styles.legendGlowFill, { width: `${config.glowIntensity * 100}%`, backgroundColor: config.color }]} />
+                </View>
+              </View>
+              <View style={[styles.legendMultiplierBadge, { backgroundColor: config.bgColor }]}>
+                <Text style={[styles.legendMultiplierText, { color: config.color }]}>×{config.multiplier}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+
+        <View style={[styles.legendSection, { backgroundColor: colors.surface }]}>
+          <View style={styles.legendSectionHeader}>
+            <View style={[styles.legendSectionIconWrap, { backgroundColor: '#10B98118' }]}>
+              <MapPin size={18} color="#10B981" />
+            </View>
+            <View>
+              <Text style={[styles.legendSectionTitle, { color: colors.text }]}>Location Types</Text>
+              <Text style={[styles.legendSectionSub, { color: colors.textSecondary }]}>Where treasures spawn</Text>
+            </View>
+          </View>
+          {placeTypes.map(([key, config], index) => (
+            <View
+              key={key}
+              style={[
+                styles.legendRow,
+                index < placeTypes.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border + '40' },
+              ]}
+            >
+              <View style={[styles.legendItemIcon, { backgroundColor: config.priority === 1 ? '#10B98110' : config.priority === 2 ? '#3B82F610' : '#9CA3AF10' }]}>
+                <Text style={styles.legendItemEmoji}>{config.icon}</Text>
+              </View>
+              <View style={styles.legendItemInfo}>
+                <Text style={[styles.legendItemName, { color: colors.text }]}>{config.label}</Text>
+                <Text style={[styles.legendItemDesc, { color: colors.textSecondary }]}>
+                  {config.priority === 1 ? 'High priority' : config.priority === 2 ? 'Medium priority' : 'Low priority'}
+                </Text>
+              </View>
+              <View style={[styles.legendPriorityBadge, {
+                backgroundColor: config.priority === 1 ? '#10B98118' : config.priority === 2 ? '#3B82F618' : '#9CA3AF18',
+              }]}>
+                <Text style={[styles.legendPriorityText, {
+                  color: config.priority === 1 ? '#10B981' : config.priority === 2 ? '#3B82F6' : '#9CA3AF',
+                }]}>P{config.priority}</Text>
+              </View>
+            </View>
+          ))}
+          <View style={[styles.legendNote, { backgroundColor: isDark ? '#064E3B' : '#ECFDF5' }]}>
+            <TreePine size={13} color="#10B981" />
+            <Text style={[styles.legendNoteText, { color: isDark ? '#6EE7B7' : '#065F46' }]}>
+              Parks give hints only — gas stations & restaurants show exact names
+            </Text>
+          </View>
+        </View>
+
+        <View style={[styles.legendSection, { backgroundColor: colors.surface }]}>
+          <View style={styles.legendSectionHeader}>
+            <View style={[styles.legendSectionIconWrap, { backgroundColor: '#EF444418' }]}>
+              <Flame size={18} color="#EF4444" />
+            </View>
+            <View>
+              <Text style={[styles.legendSectionTitle, { color: colors.text }]}>Streak Bonuses</Text>
+              <Text style={[styles.legendSectionSub, { color: colors.textSecondary }]}>Hunt daily for multipliers</Text>
+            </View>
+          </View>
+          {streaks.map(([days, config], index) => {
+            const active = huntStreak.currentStreak >= Number(days);
+            return (
+              <View
+                key={days}
+                style={[
+                  styles.legendRow,
+                  index < streaks.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border + '40' },
+                ]}
+              >
+                <View style={[
+                  styles.legendStreakIcon,
+                  { backgroundColor: active ? '#F59E0B18' : colors.background },
+                ]}>
+                  {active ? <Unlock size={16} color="#F59E0B" /> : <Lock size={16} color={colors.textSecondary} />}
+                </View>
+                <View style={styles.legendItemInfo}>
+                  <Text style={[styles.legendItemName, { color: active ? '#F59E0B' : colors.text }]}>
+                    {days}-Day Streak
+                  </Text>
+                  <Text style={[styles.legendItemDesc, { color: colors.textSecondary }]}>{config.label}</Text>
+                </View>
+                <View style={[styles.legendMultiplierBadge, {
+                  backgroundColor: active ? '#F59E0B18' : colors.background,
+                }]}>
+                  <Text style={[styles.legendMultiplierText, {
+                    color: active ? '#F59E0B' : colors.textSecondary,
+                  }]}>×{config.multiplier}</Text>
+                </View>
+              </View>
+            );
+          })}
+        </View>
+
+        <View style={[styles.legendSection, { backgroundColor: colors.surface }]}>
+          <View style={styles.legendSectionHeader}>
+            <View style={[styles.legendSectionIconWrap, { backgroundColor: '#0F4C7518' }]}>
+              <Coins size={18} color="#0F4C75" />
+            </View>
+            <View>
+              <Text style={[styles.legendSectionTitle, { color: colors.text }]}>Reward Examples</Text>
+              <Text style={[styles.legendSectionSub, { color: colors.textSecondary }]}>Potential MUSO earnings</Text>
+            </View>
+          </View>
+          {[
+            { type: 'Coin Pile', rarity: 'Common', base: 25, mult: 1.0, total: 25, icon: '🪙', rarityColor: '#9CA3AF' },
+            { type: 'Treasure Chest', rarity: 'Rare', base: 50, mult: 1.5, total: 75, icon: '📦', rarityColor: '#3B82F6' },
+            { type: 'Golden MUSO', rarity: 'Epic', base: 100, mult: 2.0, total: 200, icon: '🏆', rarityColor: '#8B5CF6' },
+            { type: 'Token Fountain', rarity: 'Legendary', base: 200, mult: 3.0, total: 600, icon: '⛲', rarityColor: '#F59E0B' },
+          ].map((example, index) => (
+            <View
+              key={index}
+              style={[
+                styles.legendExampleRow,
+                index < 3 && { borderBottomWidth: 1, borderBottomColor: colors.border + '40' },
+              ]}
+            >
+              <Text style={styles.legendExampleIcon}>{example.icon}</Text>
+              <View style={styles.legendExampleInfo}>
+                <Text style={[styles.legendExampleName, { color: colors.text }]}>{example.type}</Text>
+                <Text style={[styles.legendExampleCalc, { color: colors.textSecondary }]}>
+                  {example.base} × {example.mult} = <Text style={{ color: example.rarityColor, fontWeight: '700' as const }}>{example.total} MUSO</Text>
+                </Text>
+              </View>
+              <View style={[styles.legendExampleBadge, { backgroundColor: example.rarityColor + '18' }]}>
+                <Text style={[styles.legendExampleBadgeText, { color: example.rarityColor }]}>{example.rarity}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      </View>
+    );
+  };
 
   const renderStatsView = () => {
     const stats = ScavengerHuntService.getHuntStats(claims, huntStreak);
@@ -1049,6 +1262,7 @@ export default function ScavengerHuntScreen() {
 
         {viewMode === 'map' && renderMapView()}
         {viewMode === 'list' && renderListView()}
+        {viewMode === 'legend' && renderLegendView()}
         {viewMode === 'stats' && renderStatsView()}
 
         <View style={[styles.infoSection, { backgroundColor: colors.surface }]}>
@@ -1332,6 +1546,107 @@ const styles = StyleSheet.create({
   rewardBadge: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   rewardText: { fontSize: 15, fontWeight: '800' as const, color: '#F59E0B' },
   distanceText: { fontSize: 11 },
+
+  legendContainer: { paddingHorizontal: 16, gap: 12 },
+  legendSection: { borderRadius: 16, padding: 16, overflow: 'hidden' },
+  legendSectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
+  legendSectionIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  legendSectionTitle: { fontSize: 16, fontWeight: '700' as const },
+  legendSectionSub: { fontSize: 12, marginTop: 1 },
+  legendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    gap: 12,
+  },
+  legendItemIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  legendItemEmoji: { fontSize: 22 },
+  legendItemInfo: { flex: 1 },
+  legendItemName: { fontSize: 15, fontWeight: '600' as const },
+  legendItemDesc: { fontSize: 12, marginTop: 2 },
+  legendItemValue: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  legendItemReward: { fontSize: 16, fontWeight: '800' as const, color: '#F59E0B' },
+  legendRarityDot: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  legendRarityInner: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+  },
+  legendGlowBar: {
+    height: 4,
+    backgroundColor: 'rgba(128,128,128,0.15)',
+    borderRadius: 2,
+    marginTop: 6,
+    overflow: 'hidden',
+  },
+  legendGlowFill: {
+    height: '100%',
+    borderRadius: 2,
+  },
+  legendMultiplierBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  legendMultiplierText: { fontSize: 15, fontWeight: '800' as const },
+  legendPriorityBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  legendPriorityText: { fontSize: 12, fontWeight: '700' as const },
+  legendStreakIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  legendNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  legendNoteText: { fontSize: 12, flex: 1, lineHeight: 16 },
+  legendExampleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    gap: 12,
+  },
+  legendExampleIcon: { fontSize: 28 },
+  legendExampleInfo: { flex: 1 },
+  legendExampleName: { fontSize: 14, fontWeight: '600' as const },
+  legendExampleCalc: { fontSize: 12, marginTop: 2 },
+  legendExampleBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  legendExampleBadgeText: { fontSize: 11, fontWeight: '700' as const },
 
   statsContainer: { paddingHorizontal: 16, gap: 12 },
   statsCard: { borderRadius: 16, padding: 16 },
