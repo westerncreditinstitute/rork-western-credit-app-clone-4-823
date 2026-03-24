@@ -44,6 +44,7 @@ import {
   Star,
   Sparkles,
   ScanLine,
+  ChevronLeft,
 } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useGame } from '@/contexts/GameContext';
@@ -1154,16 +1155,19 @@ export default function ScavengerHuntScreen() {
               </Animated.View>
             </View>
 
-            <SafeAreaView style={styles.arHUD}>
+            <SafeAreaView style={styles.arHUD} pointerEvents="box-none">
               <View style={styles.arTopBar}>
                 <TouchableOpacity
-                  style={styles.arCloseBtn}
+                  style={styles.arBackBtn}
                   onPress={() => {
                     setShowLegendPreview(false);
                     setLegendPreviewType(null);
                   }}
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
-                  <X size={24} color="#FFF" />
+                  <ChevronLeft size={22} color="#FFF" />
+                  <Text style={styles.arBackBtnText}>Back</Text>
                 </TouchableOpacity>
                 <View style={styles.arTreasureInfo}>
                   <Text style={styles.arTreasureName}>AR Preview</Text>
@@ -2240,6 +2244,22 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  arBackBtn: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    paddingLeft: 8,
+    borderRadius: 22,
+    gap: 4,
+    zIndex: 100,
+  },
+  arBackBtnText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '600' as const,
   },
   arTreasureInfo: { alignItems: 'center' },
   arTreasureName: { color: '#FFF', fontSize: 16, fontWeight: '700' as const },
