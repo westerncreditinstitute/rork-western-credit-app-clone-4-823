@@ -1114,7 +1114,7 @@ export default function ScavengerHuntScreen() {
     const typeColor = treasureTypeColors[legendPreviewType.key] || '#F59E0B';
 
     return (
-      <Modal visible={showLegendPreview} animationType="fade" statusBarTranslucent>
+      <Modal visible={showLegendPreview} animationType="fade" statusBarTranslucent onRequestClose={() => { setShowLegendPreview(false); setLegendPreviewType(null); }}>
         <View style={styles.arContainer}>
           {renderCameraBackground()}
 
