@@ -14,7 +14,14 @@ import {
   RoadSegment
 } from '../types/city3d';
 
-const OVERPASS_API_URL = 'https://overpass-api.de/api/interpreter';
+const OVERPASS_API_URLS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+];
+
+const MAX_RETRIES = 2;
+const RETRY_DELAY_MS = 2000;
 
 // District building counts for procedural generation
 export const DISTRICT_BUILDING_COUNTS: Record<DistrictId, number> = {
@@ -177,31 +184,20 @@ class OSMDataService {
   }): string {
     const { minLat, maxLat, minLon, maxLon } = bounds;
     
+    const latRange = maxLat - minLat;
+    const lonRange = maxLon - minLon;
+    const clampedMinLat = minLat + latRange * 0.25;
+    const clampedMaxLat = maxLat - latRange * 0.25;
+    const clampedMinLon = minLon + lonRange * 0.25;
+    const clampedMaxLon = maxLon - lonRange * 0.25;
+
     return `
-      [out:json][timeout:60];
+      [out:json][timeout:90][maxsize:10485760];
       (
-        // Buildings
-        way["building"](${minLat},${minLon},${maxLat},${maxLon});
-        relation["building"](${minLat},${minLon},${maxLat},${maxLon});
-        
-        // Roads
-        way["highway"](${minLat},${minLon},${maxLat},${maxLon});
-        
-        // Landuse
-        way["landuse"](${minLat},${minLon},${maxLat},${maxLon});
-        relation["landuse"](${minLat},${minLon},${maxLat},${maxLon});
-        
-        // Natural features
-        way["natural"](${minLat},${minLon},${maxLat},${maxLon});
-        relation["natural"](${minLat},${minLon},${maxLat},${maxLon});
-        
-        // Amenities
-        way["amenity"](${minLat},${minLon},${maxLat},${maxLon});
-        node["amenity"](${minLat},${minLon},${maxLat},${maxLon});
-        
-        // Tourism
-        way["tourism"](${minLat},${minLon},${maxLat},${maxLon});
-        node["tourism"](${minLat},${minLon},${maxLat},${maxLon});
+        way["building"](${clampedMinLat},${clampedMinLon},${clampedMaxLat},${clampedMaxLon});
+        way["highway"~"^(motorway|trunk|primary|secondary|tertiary|residential)$"](${clampedMinLat},${clampedMinLon},${clampedMaxLat},${clampedMaxLon});
+        node["amenity"~"^(theatre|cinema|restaurant|cafe|bar|hospital|school|university)$"](${clampedMinLat},${clampedMinLon},${clampedMaxLat},${clampedMaxLon});
+        node["tourism"](${clampedMinLat},${clampedMinLon},${clampedMaxLat},${clampedMaxLon});
       );
       out body;
       >;
@@ -213,30 +209,60 @@ class OSMDataService {
    * Execute Overpass API query with rate limiting
    */
   private async executeOverpassQuery(query: string): Promise<any> {
-    // Rate limiting: wait if queue is processing
     return new Promise((resolve, reject) => {
       this.requestQueue.push(async () => {
-        try {
-          const response = await fetch(OVERPASS_API_URL, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: `data=${encodeURIComponent(query)}`
-          });
+        let lastError: Error | null = null;
 
-          if (!response.ok) {
-            throw new Error(`Overpass API error: ${response.status}`);
+        for (let urlIndex = 0; urlIndex < OVERPASS_API_URLS.length; urlIndex++) {
+          const apiUrl = OVERPASS_API_URLS[urlIndex];
+
+          for (let retry = 0; retry <= MAX_RETRIES; retry++) {
+            try {
+              if (retry > 0) {
+                console.log(`[OSMDataService] Retry ${retry}/${MAX_RETRIES} for ${apiUrl}`);
+                await new Promise(r => setTimeout(r, RETRY_DELAY_MS * retry));
+              }
+
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 90000);
+
+              const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `data=${encodeURIComponent(query)}`,
+                signal: controller.signal,
+              });
+
+              clearTimeout(timeoutId);
+
+              if (response.status === 429 || response.status === 504 || response.status === 503) {
+                console.warn(`[OSMDataService] ${apiUrl} returned ${response.status}, trying next...`);
+                lastError = new Error(`Overpass API error: ${response.status}`);
+                break;
+              }
+
+              if (!response.ok) {
+                lastError = new Error(`Overpass API error: ${response.status}`);
+                continue;
+              }
+
+              const data = await response.json();
+              console.log(`[OSMDataService] Successfully fetched from ${apiUrl}`);
+              resolve(data);
+              return;
+            } catch (error: any) {
+              console.warn(`[OSMDataService] Request failed for ${apiUrl}:`, error?.message);
+              lastError = error instanceof Error ? error : new Error(String(error));
+            }
           }
-
-          const data = await response.json();
-          resolve(data);
-        } catch (error) {
-          reject(error);
         }
+
+        reject(lastError ?? new Error('All Overpass API endpoints failed'));
       });
 
-      this.processQueue();
+      void this.processQueue();
     });
   }
 
