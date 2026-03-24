@@ -20,7 +20,11 @@ interface OverpassElement {
   tags?: Record<string, string>;
 }
 
-const OVERPASS_API = 'https://overpass-api.de/api/interpreter';
+const OVERPASS_APIS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+];
 
 const PARK_HINT_TEMPLATES = [
   'Look near the main entrance of the park, where the walking trails begin.',
@@ -77,18 +81,37 @@ export class PlacesService {
         out center tags;
       `;
 
-      const response = await fetch(OVERPASS_API, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: `data=${encodeURIComponent(query)}`,
-      });
+      let data: any = null;
+      for (const apiUrl of OVERPASS_APIS) {
+        try {
+          console.log(`[PlacesService] Trying Overpass endpoint: ${apiUrl}`);
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 12000);
+          const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `data=${encodeURIComponent(query)}`,
+            signal: controller.signal,
+          });
+          clearTimeout(timeoutId);
 
-      if (!response.ok) {
-        console.log(`[PlacesService] Overpass API returned ${response.status}`);
-        return [];
+          if (!response.ok) {
+            console.log(`[PlacesService] ${apiUrl} returned ${response.status}`);
+            continue;
+          }
+          data = await response.json();
+          console.log(`[PlacesService] Success from ${apiUrl}`);
+          break;
+        } catch (endpointError) {
+          console.warn(`[PlacesService] ${apiUrl} failed:`, endpointError);
+          continue;
+        }
       }
 
-      const data = await response.json();
+      if (!data) {
+        console.log('[PlacesService] All Overpass endpoints failed, returning empty');
+        return [];
+      }
       const elements: OverpassElement[] = data.elements || [];
 
       console.log(`[PlacesService] Received ${elements.length} raw POI elements`);
