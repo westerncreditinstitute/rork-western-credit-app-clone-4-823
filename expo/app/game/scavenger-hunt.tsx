@@ -47,6 +47,7 @@ import {
 } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useGame } from '@/contexts/GameContext';
+import { useWalletUnlock } from '@/contexts/WalletUnlockContext';
 import { useScavengerHunt } from '@/contexts/ScavengerHuntContext';
 import { ScavengerHuntService } from '@/services/ScavengerHuntService';
 import { RARITY_CONFIG, TREASURE_TYPE_CONFIG, PLACE_TYPE_CONFIG, MAX_DAILY_TREASURES, STREAK_BONUSES, TreasureLocation } from '@/types/scavengerHunt';
@@ -67,6 +68,7 @@ export default function ScavengerHuntScreen() {
   const { colors, isDark } = useTheme();
   const router = useRouter();
   const { mintTokens } = useGame();
+  const { isWalletUnlocked } = useWalletUnlock();
   const {
     treasures,
     dailyProgress,
@@ -429,11 +431,19 @@ export default function ScavengerHuntScreen() {
     setShowARCamera(false);
 
     if (result.success) {
-      mintTokens(result.tokensAwarded, 'Scavenger Hunt: ' + selectedTreasure.name, {
-        source: 'scavenger_hunt',
-        category: 'treasure_claim',
-        relatedId: selectedTreasure.id,
-      });
+      if (isWalletUnlocked) {
+        mintTokens(result.tokensAwarded, 'Scavenger Hunt: ' + selectedTreasure.name, {
+          source: 'scavenger_hunt',
+          category: 'treasure_claim',
+          relatedId: selectedTreasure.id,
+        });
+      } else {
+        console.log('[ScavengerHunt] Wallet locked — tokens not minted');
+        Alert.alert(
+          'MUSO Wallet Locked',
+          'You need to unlock your MUSO Wallet ($25) to earn MUSO tokens. Visit the Token Wallet page to activate.',
+        );
+      }
 
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
@@ -447,7 +457,7 @@ export default function ScavengerHuntScreen() {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTreasure, claimTreasure, mintTokens]);
+  }, [selectedTreasure, claimTreasure, mintTokens, isWalletUnlocked]);
 
   const closeClaimModal = useCallback(() => {
     setShowClaimModal(false);

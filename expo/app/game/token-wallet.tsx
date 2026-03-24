@@ -12,9 +12,13 @@ import {
   Linking,
   Platform,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as Haptics from 'expo-haptics';
 import { useGame } from '@/contexts/GameContext';
+import { useWalletUnlock } from '@/contexts/WalletUnlockContext';
 import { ExchangeRateService } from '../../services/ExchangeRateService';
 import { MUSOTokenStatsService, MUSOTokenStats } from '../../services/MUSOTokenStatsService';
 import {
@@ -45,6 +49,12 @@ import {
   Info,
   ChevronRight,
   CircleDot,
+  Lock,
+  Unlock,
+  CreditCard,
+  CheckCircle,
+  X,
+  Sparkles,
 } from 'lucide-react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -119,9 +129,227 @@ const SectionCard = ({ title, icon: Icon, iconColor, children, onPress }: {
 // Main Component
 // ============================================================
 
+const LockedWalletScreen = () => {
+  const insets = useSafeAreaInsets();
+  const { unlockWallet, paypalUrl } = useWalletUnlock();
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const lockAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const shineAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(lockAnim, {
+      toValue: 1,
+      duration: 800,
+      useNativeDriver: true,
+    }).start();
+
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1.05, duration: 1500, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 1500, useNativeDriver: true }),
+      ])
+    );
+    pulse.start();
+
+    const shine = Animated.loop(
+      Animated.sequence([
+        Animated.timing(shineAnim, { toValue: 1, duration: 2000, useNativeDriver: true }),
+        Animated.timing(shineAnim, { toValue: 0, duration: 2000, useNativeDriver: true }),
+      ])
+    );
+    shine.start();
+
+    return () => {
+      pulse.stop();
+      shine.stop();
+    };
+  }, [lockAnim, pulseAnim, shineAnim]);
+
+  const handlePayPalPress = useCallback(() => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Linking.openURL(paypalUrl).catch((err) => {
+      console.error('[WalletUnlock] Failed to open PayPal URL:', err);
+      Alert.alert('Error', 'Could not open PayPal. Please try again.');
+    });
+  }, [paypalUrl]);
+
+  const handleConfirmPayment = useCallback(() => {
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    unlockWallet();
+    setShowConfirmModal(false);
+  }, [unlockWallet]);
+
+  const shineOpacity = shineAnim.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [0.3, 0.8, 0.3],
+  });
+
+  return (
+    <View style={[lockedStyles.container, { paddingTop: insets.top }]}>
+      <LinearGradient
+        colors={['#0F0A2E', '#1A1145', '#251660']}
+        style={StyleSheet.absoluteFill}
+      />
+
+      <ScrollView
+        contentContainerStyle={lockedStyles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <Animated.View
+          style={[
+            lockedStyles.heroSection,
+            {
+              opacity: lockAnim,
+              transform: [
+                { translateY: lockAnim.interpolate({ inputRange: [0, 1], outputRange: [40, 0] }) },
+              ],
+            },
+          ]}
+        >
+          <Animated.View style={[lockedStyles.lockIconOuter, { transform: [{ scale: pulseAnim }] }]}>
+            <LinearGradient
+              colors={['#D4A017', '#F5C842', '#D4A017']}
+              style={lockedStyles.lockIconGradient}
+            >
+              <Lock size={48} color="#1A1145" />
+            </LinearGradient>
+          </Animated.View>
+
+          <Text style={lockedStyles.heroTitle}>MUSO Wallet</Text>
+          <Text style={lockedStyles.heroSubtitle}>Locked</Text>
+
+          <Animated.View style={[lockedStyles.dividerLine, { opacity: shineOpacity }]} />
+
+          <Text style={lockedStyles.description}>
+            Unlock your MUSO Wallet to start earning and managing MUSO tokens.
+            Your wallet gives you access to the full token economy, transactions, and the mainnet swap program.
+          </Text>
+        </Animated.View>
+
+        <View style={lockedStyles.priceCard}>
+          <View style={lockedStyles.priceCardHeader}>
+            <Wallet size={20} color="#F5C842" />
+            <Text style={lockedStyles.priceCardTitle}>MUSO Wallet Activation</Text>
+          </View>
+          <View style={lockedStyles.priceRow}>
+            <Text style={lockedStyles.priceLabel}>One-time payment</Text>
+            <Text style={lockedStyles.priceValue}>$25.00</Text>
+          </View>
+          <View style={lockedStyles.benefitsList}>
+            {[
+              'Full MUSO token wallet access',
+              'Earn tokens from gameplay & activities',
+              'View network stats & economy data',
+              'Mainnet swap program eligibility',
+              'Transaction history & analytics',
+            ].map((benefit, index) => (
+              <View key={index} style={lockedStyles.benefitRow}>
+                <CheckCircle size={16} color="#10B981" />
+                <Text style={lockedStyles.benefitText}>{benefit}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        <TouchableOpacity
+          style={lockedStyles.paypalButton}
+          onPress={handlePayPalPress}
+          activeOpacity={0.85}
+          testID="paypal-unlock-button"
+        >
+          <LinearGradient
+            colors={['#0070BA', '#003087']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={lockedStyles.paypalButtonGradient}
+          >
+            <CreditCard size={22} color="#FFFFFF" />
+            <Text style={lockedStyles.paypalButtonText}>Pay with PayPal — $25</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={lockedStyles.confirmButton}
+          onPress={() => {
+            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            setShowConfirmModal(true);
+          }}
+          activeOpacity={0.8}
+          testID="confirm-payment-button"
+        >
+          <Unlock size={18} color="#F5C842" />
+          <Text style={lockedStyles.confirmButtonText}>I've completed payment — Activate my wallet</Text>
+        </TouchableOpacity>
+
+        <View style={lockedStyles.agentNotice}>
+          <Sparkles size={16} color="#8B5CF6" />
+          <Text style={lockedStyles.agentNoticeText}>
+            AI Agents receive the MUSO Wallet for free as part of their membership.
+          </Text>
+        </View>
+
+        <View style={{ height: 40 }} />
+      </ScrollView>
+
+      <Modal
+        visible={showConfirmModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowConfirmModal(false)}
+      >
+        <View style={lockedStyles.modalOverlay}>
+          <View style={lockedStyles.modalContent}>
+            <TouchableOpacity
+              style={lockedStyles.modalClose}
+              onPress={() => setShowConfirmModal(false)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <X size={20} color="#9CA3AF" />
+            </TouchableOpacity>
+
+            <View style={lockedStyles.modalIconWrap}>
+              <Unlock size={32} color="#F5C842" />
+            </View>
+            <Text style={lockedStyles.modalTitle}>Confirm Wallet Activation</Text>
+            <Text style={lockedStyles.modalDesc}>
+              By confirming, you verify that you have completed the $25 PayPal payment for your MUSO Wallet activation. Your wallet will be unlocked immediately.
+            </Text>
+
+            <TouchableOpacity
+              style={lockedStyles.modalConfirmBtn}
+              onPress={handleConfirmPayment}
+              activeOpacity={0.85}
+              testID="modal-confirm-button"
+            >
+              <LinearGradient
+                colors={['#D4A017', '#F5C842']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={lockedStyles.modalConfirmGradient}
+              >
+                <CheckCircle size={20} color="#1A1145" />
+                <Text style={lockedStyles.modalConfirmText}>Yes, Activate My Wallet</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={lockedStyles.modalCancelBtn}
+              onPress={() => setShowConfirmModal(false)}
+            >
+              <Text style={lockedStyles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+};
+
 export default function TokenWalletScreen() {
   const insets = useSafeAreaInsets();
   const { gameState, syncTokensWithBalance, isLoading } = useGame();
+  const { isWalletUnlocked, isCheckingStatus } = useWalletUnlock();
   const [refreshing, setRefreshing] = useState(false);
   const [tokenStats, setTokenStats] = useState<MUSOTokenStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
@@ -195,6 +423,19 @@ export default function TokenWalletScreen() {
 
   const networkStatus = tokenStats?.network.status || 'offline';
   const networkColor = networkStatus === 'online' ? '#10B981' : networkStatus === 'degraded' ? '#F59E0B' : '#EF4444';
+
+  if (isCheckingStatus) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top, justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#8B5CF6" />
+        <Text style={{ marginTop: 12, fontSize: 14, color: '#9CA3AF' }}>Loading wallet...</Text>
+      </View>
+    );
+  }
+
+  if (!isWalletUnlocked) {
+    return <LockedWalletScreen />;
+  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -1401,5 +1642,239 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600' as const,
     color: '#8B5CF6',
+  },
+});
+
+const lockedStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: 24,
+    alignItems: 'center',
+  },
+  heroSection: {
+    alignItems: 'center',
+    marginBottom: 32,
+    marginTop: 40,
+  },
+  lockIconOuter: {
+    marginBottom: 24,
+  },
+  lockIconGradient: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Platform.select({
+      ios: { shadowColor: '#F5C842', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.4, shadowRadius: 16 },
+      android: { elevation: 12 },
+    }),
+  },
+  heroTitle: {
+    fontSize: 32,
+    fontWeight: '800' as const,
+    color: '#FFFFFF',
+    letterSpacing: -0.5,
+    marginBottom: 4,
+  },
+  heroSubtitle: {
+    fontSize: 18,
+    fontWeight: '600' as const,
+    color: '#F5C842',
+    letterSpacing: 4,
+    textTransform: 'uppercase',
+    marginBottom: 20,
+  },
+  dividerLine: {
+    width: 60,
+    height: 2,
+    backgroundColor: '#F5C842',
+    borderRadius: 1,
+    marginBottom: 20,
+  },
+  description: {
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.7)',
+    textAlign: 'center',
+    lineHeight: 22,
+    paddingHorizontal: 8,
+  },
+  priceCard: {
+    width: '100%',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(245,200,66,0.2)',
+  },
+  priceCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 16,
+  },
+  priceCardTitle: {
+    fontSize: 17,
+    fontWeight: '700' as const,
+    color: '#FFFFFF',
+  },
+  priceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: 'rgba(245,200,66,0.08)',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  priceLabel: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.6)',
+  },
+  priceValue: {
+    fontSize: 28,
+    fontWeight: '800' as const,
+    color: '#F5C842',
+  },
+  benefitsList: {
+    gap: 12,
+  },
+  benefitRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  benefitText: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.8)',
+  },
+  paypalButton: {
+    width: '100%',
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginBottom: 16,
+    ...Platform.select({
+      ios: { shadowColor: '#0070BA', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 },
+      android: { elevation: 6 },
+    }),
+  },
+  paypalButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 18,
+  },
+  paypalButtonText: {
+    fontSize: 17,
+    fontWeight: '700' as const,
+    color: '#FFFFFF',
+  },
+  confirmButton: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 16,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: 'rgba(245,200,66,0.3)',
+    backgroundColor: 'rgba(245,200,66,0.06)',
+    marginBottom: 24,
+  },
+  confirmButtonText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: '#F5C842',
+  },
+  agentNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(139,92,246,0.1)',
+    borderRadius: 12,
+    padding: 14,
+    width: '100%',
+  },
+  agentNoticeText: {
+    flex: 1,
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.6)',
+    lineHeight: 18,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalContent: {
+    width: '100%',
+    backgroundColor: '#1A1145',
+    borderRadius: 24,
+    padding: 28,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(245,200,66,0.2)',
+  },
+  modalClose: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    zIndex: 1,
+  },
+  modalIconWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(245,200,66,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '800' as const,
+    color: '#FFFFFF',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  modalDesc: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.6)',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  modalConfirmBtn: {
+    width: '100%',
+    borderRadius: 14,
+    overflow: 'hidden',
+    marginBottom: 12,
+  },
+  modalConfirmGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 16,
+  },
+  modalConfirmText: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: '#1A1145',
+  },
+  modalCancelBtn: {
+    paddingVertical: 12,
+  },
+  modalCancelText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: 'rgba(255,255,255,0.5)',
   },
 });

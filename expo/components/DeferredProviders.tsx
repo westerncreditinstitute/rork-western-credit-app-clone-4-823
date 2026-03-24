@@ -9,6 +9,7 @@ import { BusinessProvider } from '@/contexts/BusinessContext';
 import { TokenProvider } from '@/contexts/TokenContext';
 import { DisputesProvider } from '@/contexts/DisputesContext';
 import { SocialFeedProvider } from '@/contexts/SocialFeedContext';
+import { WalletUnlockProvider } from '@/contexts/WalletUnlockContext';
 
 interface Props {
   children: ReactNode;
@@ -38,9 +39,11 @@ export function DeferredProviders({ children }: Props) {
             <BusinessProvider>
               <TokenProvider>
                 <DisputesProvider>
-                  <SocialFeedProvider>
-                    {children}
-                  </SocialFeedProvider>
+                  <WalletUnlockProvider>
+                    <SocialFeedProvider>
+                      {children}
+                    </SocialFeedProvider>
+                  </WalletUnlockProvider>
                 </DisputesProvider>
               </TokenProvider>
             </BusinessProvider>
