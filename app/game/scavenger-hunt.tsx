@@ -102,6 +102,11 @@ export default function ScavengerHuntScreen() {
   const claimScaleAnim = useRef(new Animated.Value(0)).current;
   const shimmerAnim = useRef(new Animated.Value(0)).current;
   const locationPulse = useRef(new Animated.Value(0)).current;
+  const holdProgressAnim = useRef(new Animated.Value(0)).current;
+  const holdTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [holdProgress, setHoldProgress] = useState<number>(0);
+  const [isClaiming, setIsClaiming] = useState(false);
+  const [holdStarted, setHoldStarted] = useState(false);
 
   useEffect(() => {
     Animated.loop(
@@ -214,7 +219,11 @@ export default function ScavengerHuntScreen() {
     setShowARCamera(true);
     setIsScanning(true);
     setArScanProgress(0);
+    setHoldProgress(0);
+    setHoldStarted(false);
+    setIsClaiming(false);
     setCameraReady(false);
+    holdProgressAnim.setValue(0);
 
     Animated.loop(
       Animated.timing(scanLineAnim, {
@@ -231,15 +240,46 @@ export default function ScavengerHuntScreen() {
         progress = 100;
         clearInterval(interval);
         setArScanProgress(100);
-        setTimeout(() => {
-          handleClaimTreasure();
-        }, 500);
+        setHoldStarted(true);
       } else {
         setArScanProgress(Math.min(progress, 99));
       }
     }, 400);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTreasure, dailyClaimsRemaining, handleRequestCameraPermission]);
+
+  useEffect(() => {
+    if (!holdStarted || isClaiming) return;
+
+    console.log('[TreasureHunt] Hold-to-claim started, hold camera steady...');
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    let hp = 0;
+    holdTimerRef.current = setInterval(() => {
+      hp += 4;
+      if (hp >= 100) {
+        hp = 100;
+        if (holdTimerRef.current) clearInterval(holdTimerRef.current);
+        setHoldProgress(100);
+        holdProgressAnim.setValue(1);
+        setIsClaiming(true);
+        console.log('[TreasureHunt] Hold complete, claiming treasure!');
+        setTimeout(() => {
+          handleClaimTreasure();
+        }, 300);
+      } else {
+        setHoldProgress(hp);
+        holdProgressAnim.setValue(hp / 100);
+      }
+    }, 100);
+
+    return () => {
+      if (holdTimerRef.current) {
+        clearInterval(holdTimerRef.current);
+        holdTimerRef.current = null;
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [holdStarted, isClaiming]);
 
   const handleClaimTreasure = useCallback(() => {
     if (!selectedTreasure) return;
@@ -275,6 +315,14 @@ export default function ScavengerHuntScreen() {
     setClaimResult(null);
     selectTreasure(null);
     claimScaleAnim.setValue(0);
+    setHoldProgress(0);
+    setHoldStarted(false);
+    setIsClaiming(false);
+    holdProgressAnim.setValue(0);
+    if (holdTimerRef.current) {
+      clearInterval(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectTreasure]);
 
@@ -1077,9 +1125,9 @@ export default function ScavengerHuntScreen() {
                 <View style={[styles.arPreviewGlow, { borderColor: typeColor + '50', shadowColor: typeColor }]} />
                 <View style={[styles.arPreviewBody, { backgroundColor: typeColor + '20', borderColor: typeColor }]}>
                   {legendPreviewType.imageUrl && legendPreviewType.key === 'treasure_chest' ? (
-                    <AnimatedTreasureChest imageUrl={legendPreviewType.imageUrl} size={SCREEN_HEIGHT * 0.55} />
+                    <AnimatedTreasureChest imageUrl={legendPreviewType.imageUrl} size={140} />
                   ) : legendPreviewType.imageUrl && legendPreviewType.key === 'token_fountain' ? (
-                    <AnimatedTokenFountain imageUrl={legendPreviewType.imageUrl} size={SCREEN_HEIGHT * 0.55} />
+                    <AnimatedTokenFountain imageUrl={legendPreviewType.imageUrl} size={140} />
                   ) : legendPreviewType.imageUrl ? (
                     <Image source={{ uri: legendPreviewType.imageUrl }} style={styles.arPreviewImage} resizeMode="contain" />
                   ) : (
@@ -1093,8 +1141,8 @@ export default function ScavengerHuntScreen() {
                       styles.arParticle,
                       {
                         backgroundColor: typeColor,
-                        left: (SCREEN_WIDTH * 0.45) + Math.cos((i * Math.PI * 2) / 8) * (SCREEN_HEIGHT * 0.32),
-                        top: (SCREEN_HEIGHT * 0.35) + Math.sin((i * Math.PI * 2) / 8) * (SCREEN_HEIGHT * 0.32),
+                        left: (SCREEN_WIDTH * 0.45) + Math.cos((i * Math.PI * 2) / 8) * 100,
+                        top: (SCREEN_HEIGHT * 0.35) + Math.sin((i * Math.PI * 2) / 8) * 100,
                         opacity: shimmerAnim.interpolate({
                           inputRange: [0, 0.5, 1],
                           outputRange: [0.2, 0.9, 0.2],
@@ -1168,6 +1216,7 @@ export default function ScavengerHuntScreen() {
   const renderARCamera = () => {
     if (!selectedTreasure) return null;
     const rarity = RARITY_CONFIG[selectedTreasure.rarity];
+    const typeConfig = TREASURE_TYPE_CONFIG[selectedTreasure.treasureType];
 
     return (
       <Modal visible={showARCamera} animationType="fade" statusBarTranslucent>
@@ -1212,40 +1261,43 @@ export default function ScavengerHuntScreen() {
             <View style={styles.arTokenCenter}>
               <Animated.View
                 style={[
-                  styles.arTokenOuter,
+                  styles.arScanTreasureOuter,
                   {
                     transform: [
                       { translateY: floatAnim },
-                      { scale: arScanProgress >= 100 ? 1.2 : 1 },
+                      { scale: arScanProgress >= 100 ? 1 : 0.9 },
                     ],
                   },
                 ]}
               >
-                <View style={[styles.arGlowRing, { borderColor: rarity.color + '40' }]} />
+                <View style={[styles.arScanGlowRing, { borderColor: rarity.color + '40', shadowColor: rarity.color }]} />
 
-                <Animated.View
-                  style={[
-                    styles.arTokenBody,
-                    {
-                      backgroundColor: selectedTreasure.modelColor,
-                      borderColor: rarity.color,
-                      transform: [{ rotateY: coinRotation }],
-                    },
-                  ]}
-                >
-                  <Text style={styles.arTokenSymbol}>M</Text>
-                  <Text style={styles.arTokenLabel}>MUSO</Text>
-                </Animated.View>
+                <View style={[styles.arScanTreasureBody, { backgroundColor: rarity.color + '15', borderColor: rarity.color }]}>
+                  {typeConfig.imageUrl && selectedTreasure.treasureType === 'treasure_chest' ? (
+                    <AnimatedTreasureChest imageUrl={typeConfig.imageUrl} size={SCREEN_HEIGHT * 0.45} />
+                  ) : typeConfig.imageUrl && selectedTreasure.treasureType === 'token_fountain' ? (
+                    <AnimatedTokenFountain imageUrl={typeConfig.imageUrl} size={SCREEN_HEIGHT * 0.45} />
+                  ) : typeConfig.imageUrl ? (
+                    <Image source={{ uri: typeConfig.imageUrl }} style={styles.arScanTreasureImage} resizeMode="contain" />
+                  ) : (
+                    <View style={[styles.arTokenBody, { backgroundColor: selectedTreasure.modelColor, borderColor: rarity.color }]}>
+                      <Animated.View style={{ transform: [{ rotateY: coinRotation }] }}>
+                        <Text style={styles.arTokenSymbol}>M</Text>
+                        <Text style={styles.arTokenLabel}>MUSO</Text>
+                      </Animated.View>
+                    </View>
+                  )}
+                </View>
 
-                {[...Array(6)].map((_, i) => (
+                {[...Array(8)].map((_, i) => (
                   <Animated.View
                     key={i}
                     style={[
                       styles.arParticle,
                       {
                         backgroundColor: rarity.color,
-                        left: 40 + Math.cos((i * Math.PI * 2) / 6) * 55,
-                        top: 40 + Math.sin((i * Math.PI * 2) / 6) * 55,
+                        left: (SCREEN_WIDTH * 0.4) + Math.cos((i * Math.PI * 2) / 8) * (SCREEN_HEIGHT * 0.28),
+                        top: (SCREEN_HEIGHT * 0.28) + Math.sin((i * Math.PI * 2) / 8) * (SCREEN_HEIGHT * 0.28),
                         opacity: shimmerAnim.interpolate({
                           inputRange: [0, 0.5, 1],
                           outputRange: [0.3, 1, 0.3],
@@ -1281,29 +1333,55 @@ export default function ScavengerHuntScreen() {
               </View>
 
               <View style={styles.arBottomSection}>
-                <View style={styles.arProgressContainer}>
-                  <View style={styles.arProgressBg}>
-                    <View
-                      style={[
-                        styles.arProgressFill,
-                        {
-                          width: `${arScanProgress}%`,
-                          backgroundColor: arScanProgress >= 100 ? '#10B981' : rarity.color,
-                        },
-                      ]}
-                    />
+                {arScanProgress < 100 ? (
+                  <View style={styles.arProgressContainer}>
+                    <View style={styles.arProgressBg}>
+                      <View
+                        style={[
+                          styles.arProgressFill,
+                          {
+                            width: `${arScanProgress}%`,
+                            backgroundColor: rarity.color,
+                          },
+                        ]}
+                      />
+                    </View>
+                    <Text style={styles.arProgressText}>
+                      Scanning... {Math.round(arScanProgress)}%
+                    </Text>
                   </View>
-                  <Text style={styles.arProgressText}>
-                    {arScanProgress >= 100 ? '✅ MUSO Token Detected!' : `Scanning... ${Math.round(arScanProgress)}%`}
-                  </Text>
-                </View>
+                ) : (
+                  <View style={styles.arProgressContainer}>
+                    <Text style={[styles.arProgressText, { fontSize: 15, marginBottom: 8 }]}>
+                      {isClaiming ? '🎉 Treasure Claimed!' : '✅ Treasure Found — Hold Camera Steady!'}
+                    </Text>
+                    <View style={styles.holdProgressBarBg}>
+                      <View
+                        style={[
+                          styles.holdProgressBarFill,
+                          {
+                            width: `${holdProgress}%`,
+                            backgroundColor: holdProgress >= 100 ? '#10B981' : '#F59E0B',
+                          },
+                        ]}
+                      />
+                    </View>
+                    <Text style={[styles.arProgressText, { marginTop: 6 }]}>
+                      {isClaiming
+                        ? `+${selectedTreasure.tokenReward} MUSO Tokens Added!`
+                        : `Claiming... ${Math.round(holdProgress)}%`}
+                    </Text>
+                  </View>
+                )}
 
                 <View style={styles.arInstructions}>
-                  <Camera size={20} color="#FFF" />
+                  {arScanProgress >= 100 ? <Target size={20} color="#10B981" /> : <Camera size={20} color="#FFF" />}
                   <Text style={styles.arInstructionText}>
-                    {isScanning
-                      ? 'Hold steady — detecting MUSO Token anchor...'
-                      : 'Point your camera to scan for the hidden treasure'}
+                    {isClaiming
+                      ? 'Treasure claimed! MUSO tokens have been added to your account.'
+                      : arScanProgress >= 100
+                        ? 'Keep your camera aimed at the treasure — hold steady to claim it!'
+                        : 'Point your camera to scan for the hidden treasure'}
                   </Text>
                 </View>
 
@@ -2200,16 +2278,16 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
   },
   arPreviewOuter: {
-    width: SCREEN_WIDTH * 0.9,
-    height: SCREEN_HEIGHT * 0.7,
+    width: SCREEN_WIDTH * 0.7,
+    height: SCREEN_HEIGHT * 0.4,
     alignItems: 'center',
     justifyContent: 'center',
   },
   arPreviewGlow: {
     position: 'absolute',
-    width: SCREEN_HEIGHT * 0.6,
-    height: SCREEN_HEIGHT * 0.6,
-    borderRadius: SCREEN_HEIGHT * 0.3,
+    width: 200,
+    height: 200,
+    borderRadius: 100,
     borderWidth: 3,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.6,
@@ -2217,9 +2295,9 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   arPreviewBody: {
-    width: SCREEN_HEIGHT * 0.55,
-    height: SCREEN_HEIGHT * 0.55,
-    borderRadius: SCREEN_HEIGHT * 0.275,
+    width: 180,
+    height: 180,
+    borderRadius: 90,
     borderWidth: 3,
     alignItems: 'center',
     justifyContent: 'center',
@@ -2230,11 +2308,55 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   arPreviewIcon: {
-    fontSize: 200,
+    fontSize: 72,
   },
   arPreviewImage: {
+    width: 130,
+    height: 130,
+  },
+  arScanTreasureOuter: {
+    width: SCREEN_WIDTH * 0.9,
+    height: SCREEN_HEIGHT * 0.6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  arScanGlowRing: {
+    position: 'absolute',
     width: SCREEN_HEIGHT * 0.5,
     height: SCREEN_HEIGHT * 0.5,
+    borderRadius: SCREEN_HEIGHT * 0.25,
+    borderWidth: 3,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 30,
+    elevation: 10,
+  },
+  arScanTreasureBody: {
+    width: SCREEN_HEIGHT * 0.48,
+    height: SCREEN_HEIGHT * 0.48,
+    borderRadius: 24,
+    borderWidth: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.5,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  arScanTreasureImage: {
+    width: SCREEN_HEIGHT * 0.42,
+    height: SCREEN_HEIGHT * 0.42,
+  },
+  holdProgressBarBg: {
+    height: 12,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
+  holdProgressBarFill: {
+    height: '100%',
+    borderRadius: 6,
   },
   arPreviewInfoCard: {
     backgroundColor: 'rgba(0,0,0,0.6)',
