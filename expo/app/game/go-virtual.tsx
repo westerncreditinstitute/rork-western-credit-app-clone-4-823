@@ -10,6 +10,7 @@ import {
   Modal,
   Platform,
   Dimensions,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
@@ -34,10 +35,24 @@ import {
   ArrowUp,
   ArrowDown,
   ShoppingBag,
+  Coins,
+  Trophy,
+  Target,
+  Flame,
+  Gift,
+  Sparkles,
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useGame } from '@/contexts/GameContext';
+import { useScavengerHunt } from '@/contexts/ScavengerHuntContext';
+import { useWalletUnlock } from '@/contexts/WalletUnlockContext';
+import { RARITY_CONFIG, TREASURE_TYPE_CONFIG, MAX_DAILY_TREASURES, TreasureLocation } from '@/types/scavengerHunt';
+import AnimatedTreasureChest from '@/components/AnimatedTreasureChest';
+import AnimatedTokenFountain from '@/components/AnimatedTokenFountain';
+import AnimatedGoldenMuso from '@/components/AnimatedGoldenMuso';
+import AnimatedCrystalVault from '@/components/AnimatedCrystalVault';
+import AnimatedCoinPile from '@/components/AnimatedCoinPile';
 import {
   getCity3DConfig,
   getCityIdMapping,
@@ -67,10 +82,29 @@ const BUILDING_TYPE_ICONS: Record<string, typeof Building2> = {
 
 type ViewMode = 'landing' | 'overhead' | 'street';
 
+interface BlockTreasure {
+  treasure: TreasureLocation;
+  blockX: number;
+  blockY: number;
+}
+
 export default function GoVirtualScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
-  const { gameState } = useGame();
+  const { gameState, mintTokens } = useGame();
+  const { isWalletUnlocked } = useWalletUnlock();
+  const {
+    treasures,
+    dailyProgress,
+    huntStreak,
+    dailyClaimsRemaining,
+    selectedTreasure,
+    selectTreasure,
+    claimTreasure,
+    isTreasureClaimed,
+    refreshDailyTreasures: _refreshDailyTreasures,
+    isLoading: _huntLoading,
+  } = useScavengerHunt();
 
   const cityId = gameState.lifestyle?.cityId || 'city_los_angeles';
   const mapped3DCityId = useMemo(() => getCityIdMapping(cityId), [cityId]);
@@ -82,6 +116,10 @@ export default function GoVirtualScreen() {
   const [showBuildingModal, setShowBuildingModal] = useState(false);
   const [visitedBlocks, setVisitedBlocks] = useState<Set<string>>(new Set(['0_0']));
   const [showMiniMap, setShowMiniMap] = useState(true);
+  const [showTreasureModal, setShowTreasureModal] = useState(false);
+  const [showTreasurePanel] = useState(true);
+  const [_claimedInSession, setClaimedInSession] = useState<Set<string>>(new Set());
+  const [claimResult, setClaimResult] = useState<{ success: boolean; tokensAwarded: number; message: string } | null>(null);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
@@ -90,6 +128,8 @@ export default function GoVirtualScreen() {
   const viewTransition = useRef(new Animated.Value(0)).current;
   const streetTransition = useRef(new Animated.Value(1)).current;
   const buildingEntrance = useRef(new Animated.Value(0)).current;
+  const treasureGlow = useRef(new Animated.Value(0)).current;
+  const treasureBounce = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.parallel([
@@ -105,8 +145,49 @@ export default function GoVirtualScreen() {
       ])
     );
     pulse.start();
-    return () => pulse.stop();
-  }, [fadeAnim, slideAnim, heroScale, pulseAnim]);
+
+    const glow = Animated.loop(
+      Animated.sequence([
+        Animated.timing(treasureGlow, { toValue: 1, duration: 1200, useNativeDriver: true }),
+        Animated.timing(treasureGlow, { toValue: 0, duration: 1200, useNativeDriver: true }),
+      ])
+    );
+    glow.start();
+
+    const bounce = Animated.loop(
+      Animated.sequence([
+        Animated.timing(treasureBounce, { toValue: -8, duration: 1000, useNativeDriver: true }),
+        Animated.timing(treasureBounce, { toValue: 0, duration: 1000, useNativeDriver: true }),
+      ])
+    );
+    bounce.start();
+
+    return () => {
+      pulse.stop();
+      glow.stop();
+      bounce.stop();
+    };
+  }, [fadeAnim, slideAnim, heroScale, pulseAnim, treasureGlow, treasureBounce]);
+
+  const blockTreasures = useMemo((): BlockTreasure[] => {
+    if (!city3D || treasures.length === 0) return [];
+    const totalBlocks = city3D.blocks.length;
+    return treasures.map((treasure, index) => ({
+      treasure,
+      blockX: city3D.blocks[index % totalBlocks].gridX,
+      blockY: city3D.blocks[index % totalBlocks].gridY,
+    }));
+  }, [city3D, treasures]);
+
+  const currentBlockTreasures = useMemo(() => {
+    return blockTreasures.filter(
+      bt => bt.blockX === playerPos.blockX && bt.blockY === playerPos.blockY
+    );
+  }, [blockTreasures, playerPos.blockX, playerPos.blockY]);
+
+  const unclaimedTreasureCount = useMemo(() => {
+    return blockTreasures.filter(bt => !isTreasureClaimed(bt.treasure.id)).length;
+  }, [blockTreasures, isTreasureClaimed]);
 
   const currentBlock = useMemo(() => {
     if (!city3D) return null;
@@ -124,7 +205,7 @@ export default function GoVirtualScreen() {
 
   const handleEnterCity = useCallback((mode: ViewMode) => {
     if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     }
     Animated.timing(viewTransition, {
       toValue: 1,
@@ -153,7 +234,7 @@ export default function GoVirtualScreen() {
   const handleMove = useCallback((direction: 'forward' | 'backward') => {
     if (!city3D) return;
     if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
     animateStreetTransition(() => {
       setPlayerPos(prev => {
@@ -169,7 +250,7 @@ export default function GoVirtualScreen() {
 
   const handleTurn = useCallback((direction: 'left' | 'right') => {
     if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     setPlayerPos(prev => ({
       ...prev,
@@ -180,7 +261,7 @@ export default function GoVirtualScreen() {
 
   const handleSelectBuilding = useCallback((building: Building3D) => {
     if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     setSelectedBuilding(building);
     setShowBuildingModal(true);
@@ -190,7 +271,7 @@ export default function GoVirtualScreen() {
   const handleBlockTap = useCallback((x: number, y: number) => {
     if (!city3D) return;
     if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
     const targetBlock = getBlockAt(city3D, x, y);
     if (targetBlock) {
@@ -201,6 +282,57 @@ export default function GoVirtualScreen() {
     }
   }, [city3D, animateStreetTransition]);
 
+  const handleTreasureTap = useCallback((treasure: TreasureLocation) => {
+    if (Platform.OS !== 'web') {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+    selectTreasure(treasure);
+    setClaimResult(null);
+    setShowTreasureModal(true);
+    console.log('[GoVirtual3D] Tapped treasure:', treasure.name);
+  }, [selectTreasure]);
+
+  const handleClaimTreasureInCity = useCallback(() => {
+    if (!selectedTreasure) return;
+    if (dailyClaimsRemaining <= 0) {
+      Alert.alert('Daily Limit Reached', `You've claimed all ${MAX_DAILY_TREASURES} treasures for today. Come back tomorrow!`);
+      return;
+    }
+
+    const result = claimTreasure(selectedTreasure.id);
+    setClaimResult(result);
+
+    if (result.success) {
+      setClaimedInSession(prev => new Set(prev).add(selectedTreasure.id));
+      if (isWalletUnlocked) {
+        mintTokens(result.tokensAwarded, 'Scavenger Hunt: ' + selectedTreasure.name, {
+          source: 'scavenger_hunt',
+          category: 'treasure_claim',
+          relatedId: selectedTreasure.id,
+        });
+      } else {
+        Alert.alert(
+          'MUSO Wallet Locked',
+          'You need to unlock your MUSO Wallet ($25) to earn MUSO tokens. Visit the Token Wallet page to activate.',
+        );
+      }
+      if (Platform.OS !== 'web') {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+      console.log('[GoVirtual3D] Treasure claimed:', selectedTreasure.name, 'tokens:', result.tokensAwarded);
+    } else {
+      if (Platform.OS !== 'web') {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      }
+    }
+  }, [selectedTreasure, dailyClaimsRemaining, claimTreasure, isWalletUnlocked, mintTokens]);
+
+  const closeTreasureModal = useCallback(() => {
+    setShowTreasureModal(false);
+    setClaimResult(null);
+    selectTreasure(null);
+  }, [selectTreasure]);
+
   useEffect(() => {
     if (viewMode === 'street') {
       buildingEntrance.setValue(0);
@@ -208,12 +340,36 @@ export default function GoVirtualScreen() {
     }
   }, [viewMode, buildingEntrance]);
 
+  const renderTreasureIcon = useCallback((treasure: TreasureLocation, size: number) => {
+    const typeConfig = TREASURE_TYPE_CONFIG[treasure.treasureType];
+    if (typeConfig.imageUrl && treasure.treasureType === 'treasure_chest') {
+      return <AnimatedTreasureChest imageUrl={typeConfig.imageUrl} size={size} />;
+    } else if (typeConfig.imageUrl && treasure.treasureType === 'token_fountain') {
+      return <AnimatedTokenFountain imageUrl={typeConfig.imageUrl} size={size} />;
+    } else if (typeConfig.imageUrl && treasure.treasureType === 'golden_muso') {
+      return <AnimatedGoldenMuso imageUrl={typeConfig.imageUrl} size={size} />;
+    } else if (typeConfig.imageUrl && treasure.treasureType === 'crystal_vault') {
+      return <AnimatedCrystalVault imageUrl={typeConfig.imageUrl} size={size} />;
+    } else if (typeConfig.imageUrl && treasure.treasureType === 'coin_pile') {
+      return <AnimatedCoinPile imageUrl={typeConfig.imageUrl} size={size} />;
+    } else if (typeConfig.imageUrl) {
+      return <Image source={{ uri: typeConfig.imageUrl }} style={{ width: size, height: size }} resizeMode="contain" />;
+    }
+    return <Text style={{ fontSize: size * 0.6 }}>{treasure.icon}</Text>;
+  }, []);
+
+  const getBlockTreasureCount = useCallback((blockX: number, blockY: number): number => {
+    return blockTreasures.filter(
+      bt => bt.blockX === blockX && bt.blockY === blockY && !isTreasureClaimed(bt.treasure.id)
+    ).length;
+  }, [blockTreasures, isTreasureClaimed]);
+
   if (!city3D) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <Stack.Screen options={{ title: 'Go Virtual', headerShown: true }} />
         <View style={styles.errorContainer}>
-          <MapPin size={48} color={colors.textLight} />
+          <MapPin size={48} color={colors.textSecondary} />
           <Text style={[styles.errorText, { color: colors.text }]}>City not available</Text>
           <Text style={[styles.errorSubtext, { color: colors.textSecondary }]}>
             Your current city doesn&apos;t have virtual exploration yet.
@@ -266,20 +422,43 @@ export default function GoVirtualScreen() {
                 </View>
               </View>
 
-              <View style={styles.quickFactsRow}>
-                {city3D.quickFacts.map((fact, i) => (
-                  <View key={i} style={styles.quickFactChip}>
-                    <Text style={styles.quickFactText}>{fact}</Text>
-                  </View>
-                ))}
-              </View>
+              {treasures.length > 0 && (
+                <View style={styles.treasureHuntBanner}>
+                  <LinearGradient
+                    colors={['rgba(245,158,11,0.15)', 'rgba(245,158,11,0.05)']}
+                    style={styles.treasureHuntBannerGradient}
+                  >
+                    <View style={styles.treasureHuntBannerLeft}>
+                      <Animated.View style={{ transform: [{ translateY: treasureBounce }] }}>
+                        <Text style={styles.treasureHuntEmoji}>🗺️</Text>
+                      </Animated.View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.treasureHuntBannerTitle}>Treasure Hunt Active!</Text>
+                        <Text style={styles.treasureHuntBannerSub}>
+                          {unclaimedTreasureCount} treasures hidden in the city · {dailyClaimsRemaining} claims left
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.treasureHuntBannerStats}>
+                      <View style={styles.treasureHuntStatChip}>
+                        <Flame size={10} color="#F59E0B" />
+                        <Text style={styles.treasureHuntStatText}>{huntStreak.currentStreak}d</Text>
+                      </View>
+                      <View style={styles.treasureHuntStatChip}>
+                        <Coins size={10} color="#F59E0B" />
+                        <Text style={styles.treasureHuntStatText}>{dailyProgress.totalTokensEarned}</Text>
+                      </View>
+                    </View>
+                  </LinearGradient>
+                </View>
+              )}
 
               <View style={styles.enterButtonsRow}>
                 <Animated.View style={[styles.enterButtonWrapper, { transform: [{ scale: pulseAnim }] }]}>
                   <TouchableOpacity style={styles.enterButton} onPress={() => handleEnterCity('street')} activeOpacity={0.85}>
                     <LinearGradient colors={['#FF6B35', '#FF4444', '#CC2936']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.enterButtonGradient}>
                       <Footprints size={20} color="#FFF" />
-                      <Text style={styles.enterButtonText}>Walk the Streets</Text>
+                      <Text style={styles.enterButtonText}>Walk & Hunt Treasures</Text>
                     </LinearGradient>
                   </TouchableOpacity>
                 </Animated.View>
@@ -292,7 +471,7 @@ export default function GoVirtualScreen() {
                 </TouchableOpacity>
               </View>
 
-              <Text style={styles.enterSubtext}>Explore {city3D.cityName} in 3D Virtual Reality</Text>
+              <Text style={styles.enterSubtext}>Explore {city3D.cityName} in 3D · Find Hidden MUSO Treasures</Text>
             </Animated.View>
           </SafeAreaView>
         </View>
@@ -314,7 +493,7 @@ export default function GoVirtualScreen() {
               </TouchableOpacity>
               <View style={styles.overheadHeaderCenter}>
                 <Text style={styles.overheadCityLabel}>{city3D.cityName}</Text>
-                <Text style={styles.overheadSubLabel}>CITY OVERVIEW</Text>
+                <Text style={styles.overheadSubLabel}>TREASURE HUNT MAP</Text>
               </View>
               <TouchableOpacity style={styles.overheadBackBtn} onPress={() => { setViewMode('street'); }}>
                 <Footprints size={18} color="#FFF" />
@@ -326,6 +505,7 @@ export default function GoVirtualScreen() {
             {city3D.blocks.map((block) => {
               const isPlayerHere = block.gridX === playerPos.blockX && block.gridY === playerPos.blockY;
               const isVisited = visitedBlocks.has(`${block.gridX}_${block.gridY}`);
+              const blockTreasureCount = getBlockTreasureCount(block.gridX, block.gridY);
               const offsetX = (block.gridX - block.gridY) * 95;
               const offsetY = (block.gridX + block.gridY) * 55;
 
@@ -387,6 +567,15 @@ export default function GoVirtualScreen() {
                     </View>
                   )}
 
+                  {blockTreasureCount > 0 && (
+                    <Animated.View style={[styles.isoTreasureMarker, { opacity: treasureGlow.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }) }]}>
+                      <View style={styles.isoTreasureBadge}>
+                        <Text style={styles.isoTreasureIcon}>💰</Text>
+                        <Text style={styles.isoTreasureCount}>{blockTreasureCount}</Text>
+                      </View>
+                    </Animated.View>
+                  )}
+
                   <Text style={styles.isoBlockLabel} numberOfLines={1}>{block.neighborhood}</Text>
                   <Text style={styles.isoBlockStreet} numberOfLines={1}>{block.streetName}</Text>
                 </TouchableOpacity>
@@ -397,7 +586,11 @@ export default function GoVirtualScreen() {
           <View style={styles.overheadLegend}>
             <View style={styles.legendItem}>
               <View style={[styles.legendDot, { backgroundColor: '#FF6B35' }]} />
-              <Text style={styles.legendText}>Your Location</Text>
+              <Text style={styles.legendText}>You</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <Text style={{ fontSize: 10 }}>💰</Text>
+              <Text style={styles.legendText}>Treasure</Text>
             </View>
             <View style={styles.legendItem}>
               <View style={[styles.legendDot, { backgroundColor: '#10B981' }]} />
@@ -416,15 +609,13 @@ export default function GoVirtualScreen() {
             </View>
             <View style={styles.overheadStatDivider} />
             <View style={styles.overheadStatItem}>
-              <Text style={styles.overheadStatNumber}>{city3D.blocks.length}</Text>
-              <Text style={styles.overheadStatLabel}>Total</Text>
+              <Text style={[styles.overheadStatNumber, { color: '#F59E0B' }]}>{unclaimedTreasureCount}</Text>
+              <Text style={styles.overheadStatLabel}>Treasures</Text>
             </View>
             <View style={styles.overheadStatDivider} />
             <View style={styles.overheadStatItem}>
-              <Text style={styles.overheadStatNumber}>
-                {city3D.blocks.reduce((a, b) => a + b.buildings.filter(bl => bl.isForSale).length, 0)}
-              </Text>
-              <Text style={styles.overheadStatLabel}>For Sale</Text>
+              <Text style={styles.overheadStatNumber}>{dailyClaimsRemaining}</Text>
+              <Text style={styles.overheadStatLabel}>Claims Left</Text>
             </View>
           </View>
         </View>
@@ -459,6 +650,11 @@ export default function GoVirtualScreen() {
           <View style={styles.compassDirectionDot}>
             <Text style={styles.compassDirectionText}>{getDirectionLabel(playerPos.facing)}</Text>
           </View>
+          {currentBlockTreasures.length > 0 && (
+            <View style={styles.compassTreasureIndicator}>
+              <Text style={styles.compassTreasureText}>💰 {currentBlockTreasures.filter(bt => !isTreasureClaimed(bt.treasure.id)).length}</Text>
+            </View>
+          )}
         </View>
 
         <Animated.View style={[styles.streetView, { opacity: streetTransition }]}>
@@ -477,7 +673,7 @@ export default function GoVirtualScreen() {
             </View>
 
             <Animated.View style={[styles.buildingsLeft, { transform: [{ scale: buildingEntrance }] }]}>
-              {currentBlock?.buildings.slice(0, 2).map((building, index) => (
+              {currentBlock?.buildings.slice(0, 2).map((building) => (
                 <TouchableOpacity
                   key={building.id}
                   style={[styles.streetBuilding, styles.streetBuildingLeft]}
@@ -493,22 +689,16 @@ export default function GoVirtualScreen() {
                     },
                   ]}>
                     <View style={[styles.buildingRoof, { backgroundColor: building.accentColor }]} />
-
                     <View style={styles.windowGrid}>
                       {Array.from({ length: Math.min(building.floors, 8) }).map((_, fi) => (
                         <View key={fi} style={styles.windowRow}>
                           {Array.from({ length: 3 }).map((__, wi) => (
-                            <View
-                              key={wi}
-                              style={[styles.windowPane, { backgroundColor: building.windowColor }]}
-                            />
+                            <View key={wi} style={[styles.windowPane, { backgroundColor: building.windowColor }]} />
                           ))}
                         </View>
                       ))}
                     </View>
-
                     <View style={[styles.buildingDoor, { backgroundColor: building.accentColor }]} />
-
                     {building.isForSale && (
                       <View style={styles.forSaleBanner}>
                         <DollarSign size={8} color="#FFF" />
@@ -516,17 +706,13 @@ export default function GoVirtualScreen() {
                       </View>
                     )}
                   </View>
-
                   <Text style={styles.buildingLabel} numberOfLines={1}>{building.name}</Text>
-                  {building.type === 'residential' && (
-                    <Text style={styles.buildingFloors}>{building.floors}F</Text>
-                  )}
                 </TouchableOpacity>
               ))}
             </Animated.View>
 
             <Animated.View style={[styles.buildingsRight, { transform: [{ scale: buildingEntrance }] }]}>
-              {currentBlock?.buildings.slice(1, 3).map((building, index) => (
+              {currentBlock?.buildings.slice(1, 3).map((building) => (
                 <TouchableOpacity
                   key={building.id}
                   style={[styles.streetBuilding, styles.streetBuildingRight]}
@@ -542,22 +728,16 @@ export default function GoVirtualScreen() {
                     },
                   ]}>
                     <View style={[styles.buildingRoof, { backgroundColor: building.accentColor }]} />
-
                     <View style={styles.windowGrid}>
                       {Array.from({ length: Math.min(building.floors, 8) }).map((_, fi) => (
                         <View key={fi} style={styles.windowRow}>
                           {Array.from({ length: 3 }).map((__, wi) => (
-                            <View
-                              key={wi}
-                              style={[styles.windowPane, { backgroundColor: building.windowColor }]}
-                            />
+                            <View key={wi} style={[styles.windowPane, { backgroundColor: building.windowColor }]} />
                           ))}
                         </View>
                       ))}
                     </View>
-
                     <View style={[styles.buildingDoor, { backgroundColor: building.accentColor }]} />
-
                     {building.isForSale && (
                       <View style={styles.forSaleBanner}>
                         <DollarSign size={8} color="#FFF" />
@@ -565,14 +745,43 @@ export default function GoVirtualScreen() {
                       </View>
                     )}
                   </View>
-
                   <Text style={styles.buildingLabel} numberOfLines={1}>{building.name}</Text>
-                  {building.type === 'residential' && (
-                    <Text style={styles.buildingFloors}>{building.floors}F</Text>
-                  )}
                 </TouchableOpacity>
               ))}
             </Animated.View>
+
+            {currentBlockTreasures.filter(bt => !isTreasureClaimed(bt.treasure.id)).length > 0 && (
+              <View style={styles.streetTreasureFloat}>
+                {currentBlockTreasures.filter(bt => !isTreasureClaimed(bt.treasure.id)).slice(0, 2).map((bt, idx) => {
+                  const rarity = RARITY_CONFIG[bt.treasure.rarity];
+                  return (
+                    <TouchableOpacity
+                      key={bt.treasure.id}
+                      onPress={() => handleTreasureTap(bt.treasure)}
+                      activeOpacity={0.7}
+                    >
+                      <Animated.View
+                        style={[
+                          styles.streetTreasureItem,
+                          {
+                            transform: [{ translateY: treasureBounce }],
+                            left: idx === 0 ? -20 : 20,
+                          },
+                        ]}
+                      >
+                        <View style={[styles.streetTreasureGlow, { backgroundColor: rarity.color + '30', borderColor: rarity.color }]}>
+                          {renderTreasureIcon(bt.treasure, 44)}
+                        </View>
+                        <View style={[styles.streetTreasureReward, { backgroundColor: rarity.color }]}>
+                          <Coins size={8} color="#FFF" />
+                          <Text style={styles.streetTreasureRewardText}>{bt.treasure.tokenReward}</Text>
+                        </View>
+                      </Animated.View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
 
             {forwardBlock && (
               <View style={styles.distantBuildings}>
@@ -600,47 +809,95 @@ export default function GoVirtualScreen() {
           <View style={styles.blockInfoContent}>
             <Text style={styles.blockInfoName}>{currentBlock?.name || 'Unknown'}</Text>
             <Text style={styles.blockInfoDetails}>
-              {currentBlock?.buildings.length || 0} buildings · {currentBlock?.buildings.filter(b => b.isForSale).length || 0} for sale
+              {currentBlock?.buildings.length || 0} buildings · {currentBlockTreasures.filter(bt => !isTreasureClaimed(bt.treasure.id)).length} treasures nearby
             </Text>
           </View>
         </View>
 
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.buildingCarousel}
-          contentContainerStyle={styles.buildingCarouselContent}
-        >
-          {currentBlock?.buildings.map((building) => {
-            const IconComp = BUILDING_TYPE_ICONS[building.type] || Building2;
-            return (
-              <TouchableOpacity
-                key={building.id}
-                style={styles.buildingCard}
-                onPress={() => handleSelectBuilding(building)}
-                activeOpacity={0.8}
-              >
-                <View style={[styles.buildingCardIcon, { backgroundColor: building.color + '30' }]}>
-                  <IconComp size={18} color={building.accentColor} />
-                </View>
-                <View style={styles.buildingCardInfo}>
-                  <Text style={styles.buildingCardName} numberOfLines={1}>{building.name}</Text>
-                  <Text style={styles.buildingCardType}>
-                    {building.type.charAt(0).toUpperCase() + building.type.slice(1)} · {building.floors}F
-                  </Text>
-                </View>
-                {building.isForSale && (
-                  <View style={styles.buildingCardSale}>
-                    <Text style={styles.buildingCardPrice}>
-                      ${((building.propertyValue || 0) / 1000000).toFixed(1)}M
+        {showTreasurePanel && currentBlockTreasures.length > 0 && (
+          <View style={styles.treasurePanelContainer}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.treasurePanelContent}
+            >
+              {currentBlockTreasures.map((bt) => {
+                const claimed = isTreasureClaimed(bt.treasure.id);
+                const rarity = RARITY_CONFIG[bt.treasure.rarity];
+                return (
+                  <TouchableOpacity
+                    key={bt.treasure.id}
+                    style={[
+                      styles.treasurePanelCard,
+                      { borderColor: claimed ? 'rgba(255,255,255,0.1)' : rarity.color, opacity: claimed ? 0.5 : 1 },
+                    ]}
+                    onPress={() => !claimed && handleTreasureTap(bt.treasure)}
+                    disabled={claimed}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.treasurePanelIcon, { backgroundColor: rarity.bgColor }]}>
+                      {claimed ? (
+                        <Text style={{ fontSize: 20 }}>✅</Text>
+                      ) : (
+                        renderTreasureIcon(bt.treasure, 32)
+                      )}
+                    </View>
+                    <View style={styles.treasurePanelInfo}>
+                      <Text style={styles.treasurePanelName} numberOfLines={1}>{bt.treasure.name}</Text>
+                      <View style={styles.treasurePanelRewardRow}>
+                        <View style={[styles.treasurePanelRarity, { backgroundColor: rarity.bgColor }]}>
+                          <Text style={[styles.treasurePanelRarityText, { color: rarity.color }]}>{rarity.label}</Text>
+                        </View>
+                        <Coins size={10} color="#F59E0B" />
+                        <Text style={styles.treasurePanelRewardText}>{bt.treasure.tokenReward}</Text>
+                      </View>
+                    </View>
+                    {!claimed && <ChevronRight size={14} color="rgba(255,255,255,0.4)" />}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
+
+        {currentBlockTreasures.length === 0 && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.buildingCarousel}
+            contentContainerStyle={styles.buildingCarouselContent}
+          >
+            {currentBlock?.buildings.map((building) => {
+              const IconComp = BUILDING_TYPE_ICONS[building.type] || Building2;
+              return (
+                <TouchableOpacity
+                  key={building.id}
+                  style={styles.buildingCard}
+                  onPress={() => handleSelectBuilding(building)}
+                  activeOpacity={0.8}
+                >
+                  <View style={[styles.buildingCardIcon, { backgroundColor: building.color + '30' }]}>
+                    <IconComp size={18} color={building.accentColor} />
+                  </View>
+                  <View style={styles.buildingCardInfo}>
+                    <Text style={styles.buildingCardName} numberOfLines={1}>{building.name}</Text>
+                    <Text style={styles.buildingCardType}>
+                      {building.type.charAt(0).toUpperCase() + building.type.slice(1)} · {building.floors}F
                     </Text>
                   </View>
-                )}
-                <ChevronRight size={14} color="rgba(255,255,255,0.4)" />
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+                  {building.isForSale && (
+                    <View style={styles.buildingCardSale}>
+                      <Text style={styles.buildingCardPrice}>
+                        ${((building.propertyValue || 0) / 1000000).toFixed(1)}M
+                      </Text>
+                    </View>
+                  )}
+                  <ChevronRight size={14} color="rgba(255,255,255,0.4)" />
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        )}
 
         <View style={styles.controlsContainer}>
           <View style={styles.controlsRow}>
@@ -674,6 +931,7 @@ export default function GoVirtualScreen() {
             {city3D.blocks.map((block) => {
               const isPlayer = block.gridX === playerPos.blockX && block.gridY === playerPos.blockY;
               const isVisited = visitedBlocks.has(`${block.gridX}_${block.gridY}`);
+              const hasTreasure = getBlockTreasureCount(block.gridX, block.gridY) > 0;
               return (
                 <TouchableOpacity
                   key={block.id}
@@ -682,7 +940,7 @@ export default function GoVirtualScreen() {
                     {
                       left: 6 + block.gridX * 22,
                       top: 18 + block.gridY * 22,
-                      backgroundColor: isPlayer ? '#FF6B35' : isVisited ? '#3B82F6' : '#333',
+                      backgroundColor: isPlayer ? '#FF6B35' : hasTreasure ? '#F59E0B' : isVisited ? '#3B82F6' : '#333',
                     },
                   ]}
                   onPress={() => handleBlockTap(block.gridX, block.gridY)}
@@ -703,8 +961,13 @@ export default function GoVirtualScreen() {
             <Footprints size={12} color="#FF6B35" />
             <Text style={styles.statsFloaterText}>{visitedBlocks.size}/{city3D.blocks.length}</Text>
           </View>
+          <View style={[styles.statsFloaterItem, { marginTop: 4 }]}>
+            <Coins size={12} color="#F59E0B" />
+            <Text style={styles.statsFloaterText}>{dailyProgress.totalTokensEarned}</Text>
+          </View>
         </View>
 
+        {/* Building Detail Modal */}
         <Modal visible={showBuildingModal && selectedBuilding !== null} transparent animationType="slide">
           <View style={styles.modalOverlay}>
             <View style={[styles.modalContent, { backgroundColor: isDark ? '#1A1A2E' : '#FFFFFF' }]}>
@@ -762,10 +1025,7 @@ export default function GoVirtualScreen() {
 
                   {selectedBuilding.isForSale && (
                     <View style={styles.modalSaleSection}>
-                      <LinearGradient
-                        colors={['#10B98120', '#10B98110']}
-                        style={styles.modalSaleGradient}
-                      >
+                      <LinearGradient colors={['#10B98120', '#10B98110']} style={styles.modalSaleGradient}>
                         <View style={styles.modalSaleRow}>
                           <View>
                             <Text style={[styles.modalSaleLabel, { color: colors.textSecondary }]}>Purchase Price</Text>
@@ -789,12 +1049,7 @@ export default function GoVirtualScreen() {
                           router.push('/game/real-estate' as any);
                         }}
                       >
-                        <LinearGradient
-                          colors={['#10B981', '#059669']}
-                          start={{ x: 0, y: 0 }}
-                          end={{ x: 1, y: 0 }}
-                          style={styles.modalBuyGradient}
-                        >
+                        <LinearGradient colors={['#10B981', '#059669']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.modalBuyGradient}>
                           <ShoppingBag size={18} color="#FFF" />
                           <Text style={styles.modalBuyText}>View in Real Estate</Text>
                         </LinearGradient>
@@ -803,16 +1058,120 @@ export default function GoVirtualScreen() {
                   )}
 
                   {!selectedBuilding.isForSale && (
-                    <TouchableOpacity
-                      style={styles.modalExploreButton}
-                      onPress={() => setShowBuildingModal(false)}
-                    >
+                    <TouchableOpacity style={styles.modalExploreButton} onPress={() => setShowBuildingModal(false)}>
                       <Eye size={18} color="#FFF" />
                       <Text style={styles.modalExploreText}>Continue Exploring</Text>
                     </TouchableOpacity>
                   )}
                 </>
               )}
+            </View>
+          </View>
+        </Modal>
+
+        {/* Treasure Claim Modal */}
+        <Modal visible={showTreasureModal && selectedTreasure !== null} transparent animationType="slide">
+          <View style={styles.modalOverlay}>
+            <View style={[styles.treasureModalContent, { backgroundColor: isDark ? '#1A1A2E' : '#FFFFFF' }]}>
+              {selectedTreasure && (() => {
+                const rarity = RARITY_CONFIG[selectedTreasure.rarity];
+                const typeConfig = TREASURE_TYPE_CONFIG[selectedTreasure.treasureType];
+                const claimed = isTreasureClaimed(selectedTreasure.id);
+                const atDailyLimit = dailyClaimsRemaining <= 0;
+
+                return (
+                  <>
+                    <View style={styles.treasureModalHeader}>
+                      <TouchableOpacity onPress={closeTreasureModal} style={styles.treasureModalClose}>
+                        <X size={22} color={colors.textSecondary} />
+                      </TouchableOpacity>
+                    </View>
+
+                    <View style={[styles.treasureModalVisual, { backgroundColor: rarity.bgColor }]}>
+                      <Animated.View style={{ transform: [{ translateY: treasureBounce }] }}>
+                        {renderTreasureIcon(selectedTreasure, 100)}
+                      </Animated.View>
+                      <View style={[styles.treasureModalRarityBadge, { backgroundColor: rarity.color + '25', borderColor: rarity.color }]}>
+                        <Text style={[styles.treasureModalRarityText, { color: rarity.color }]}>{rarity.label}</Text>
+                      </View>
+                    </View>
+
+                    <Text style={[styles.treasureModalName, { color: colors.text }]}>{selectedTreasure.name}</Text>
+                    <Text style={[styles.treasureModalDesc, { color: colors.textSecondary }]}>{selectedTreasure.description}</Text>
+
+                    <View style={styles.treasureModalDetailsRow}>
+                      <View style={[styles.treasureModalDetailChip, { backgroundColor: isDark ? '#252540' : '#F5F5F5' }]}>
+                        <Gift size={14} color={rarity.color} />
+                        <Text style={[styles.treasureModalDetailText, { color: colors.text }]}>{typeConfig.label}</Text>
+                      </View>
+                      <View style={[styles.treasureModalDetailChip, { backgroundColor: isDark ? '#252540' : '#F5F5F5' }]}>
+                        <Coins size={14} color="#F59E0B" />
+                        <Text style={[styles.treasureModalDetailText, { color: colors.text }]}>{selectedTreasure.tokenReward} MUSO</Text>
+                      </View>
+                      <View style={[styles.treasureModalDetailChip, { backgroundColor: isDark ? '#252540' : '#F5F5F5' }]}>
+                        <Target size={14} color="#3B82F6" />
+                        <Text style={[styles.treasureModalDetailText, { color: colors.text }]}>{dailyClaimsRemaining} left</Text>
+                      </View>
+                    </View>
+
+                    <View style={[styles.treasureModalHint, { backgroundColor: isDark ? '#1E3A5F' : '#FEF3C7' }]}>
+                      <Eye size={14} color={isDark ? '#FDE68A' : '#92400E'} />
+                      <Text style={[styles.treasureModalHintText, { color: isDark ? '#FDE68A' : '#92400E' }]}>
+                        {selectedTreasure.searchHint || selectedTreasure.hint}
+                      </Text>
+                    </View>
+
+                    {claimResult && (
+                      <View style={[
+                        styles.treasureClaimResult,
+                        { backgroundColor: claimResult.success ? '#10B98120' : '#EF444420', borderColor: claimResult.success ? '#10B981' : '#EF4444' },
+                      ]}>
+                        <Text style={{ fontSize: 24 }}>{claimResult.success ? '🎉' : '⏰'}</Text>
+                        <Text style={[styles.treasureClaimResultText, { color: claimResult.success ? '#10B981' : '#EF4444' }]}>
+                          {claimResult.message}
+                        </Text>
+                        {claimResult.success && (
+                          <Text style={[styles.treasureClaimTokens, { color: '#F59E0B' }]}>
+                            +{claimResult.tokensAwarded} MUSO Tokens
+                          </Text>
+                        )}
+                      </View>
+                    )}
+
+                    {!claimed && !claimResult?.success && !atDailyLimit && (
+                      <TouchableOpacity
+                        style={[styles.treasureClaimButton, { backgroundColor: rarity.color }]}
+                        onPress={handleClaimTreasureInCity}
+                        activeOpacity={0.8}
+                      >
+                        <LinearGradient
+                          colors={[rarity.color, rarity.color + 'CC']}
+                          style={styles.treasureClaimButtonGradient}
+                        >
+                          <Sparkles size={20} color="#FFF" />
+                          <Text style={styles.treasureClaimButtonText}>Claim Treasure</Text>
+                        </LinearGradient>
+                      </TouchableOpacity>
+                    )}
+
+                    {atDailyLimit && !claimed && !claimResult?.success && (
+                      <View style={styles.treasureLimitBanner}>
+                        <Target size={18} color="#F59E0B" />
+                        <Text style={styles.treasureLimitText}>
+                          Daily limit of {MAX_DAILY_TREASURES} reached. Come back tomorrow!
+                        </Text>
+                      </View>
+                    )}
+
+                    {(claimed || claimResult?.success) && !claimResult && (
+                      <View style={styles.treasureClaimedBanner}>
+                        <Trophy size={18} color="#10B981" />
+                        <Text style={styles.treasureClaimedText}>Already Claimed ✓</Text>
+                      </View>
+                    )}
+                  </>
+                );
+              })()}
             </View>
           </View>
         </Modal>
@@ -841,9 +1200,17 @@ const styles = StyleSheet.create({
   cityStatsRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
   cityStatChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.12)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 16 },
   cityStatText: { color: 'rgba(255,255,255,0.8)', fontSize: 11, fontWeight: '600' as const },
-  quickFactsRow: { flexDirection: 'row', gap: 8, marginBottom: 24, flexWrap: 'wrap' },
-  quickFactChip: { backgroundColor: 'rgba(255,255,255,0.08)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
-  quickFactText: { color: 'rgba(255,255,255,0.75)', fontSize: 12, fontWeight: '500' as const },
+
+  treasureHuntBanner: { marginBottom: 16, borderRadius: 16, overflow: 'hidden' },
+  treasureHuntBannerGradient: { padding: 14, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(245,158,11,0.2)' },
+  treasureHuntBannerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
+  treasureHuntEmoji: { fontSize: 28 },
+  treasureHuntBannerTitle: { fontSize: 15, fontWeight: '800' as const, color: '#FDE68A' },
+  treasureHuntBannerSub: { fontSize: 11, color: 'rgba(253,230,138,0.7)', marginTop: 2 },
+  treasureHuntBannerStats: { flexDirection: 'row', gap: 8 },
+  treasureHuntStatChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(245,158,11,0.15)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+  treasureHuntStatText: { fontSize: 11, fontWeight: '700' as const, color: '#FDE68A' },
+
   enterButtonsRow: { gap: 10 },
   enterButtonWrapper: {},
   enterButton: { borderRadius: 16, overflow: 'hidden', shadowColor: '#FF4444', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.4, shadowRadius: 16, elevation: 8 },
@@ -869,11 +1236,15 @@ const styles = StyleSheet.create({
   isoForSaleDot: { position: 'absolute', top: 2, right: 2, width: 6, height: 6, borderRadius: 3, backgroundColor: '#10B981' },
   isoPlayerMarker: { position: 'absolute', top: -8, alignSelf: 'center' },
   isoPlayerDot: { width: 14, height: 14, borderRadius: 7, backgroundColor: '#FF6B35', borderWidth: 2, borderColor: '#FFF', shadowColor: '#FF6B35', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 6, elevation: 4 },
+  isoTreasureMarker: { position: 'absolute', top: -20, right: 10 },
+  isoTreasureBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(245,158,11,0.9)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10, gap: 2 },
+  isoTreasureIcon: { fontSize: 10 },
+  isoTreasureCount: { fontSize: 10, fontWeight: '800' as const, color: '#FFF' },
   isoBlockLabel: { fontSize: 11, fontWeight: '700' as const, color: '#FFF', marginTop: 4 },
   isoBlockStreet: { fontSize: 9, color: 'rgba(255,255,255,0.5)' },
 
-  overheadLegend: { flexDirection: 'row', justifyContent: 'center', gap: 20, paddingVertical: 10 },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  overheadLegend: { flexDirection: 'row', justifyContent: 'center', gap: 14, paddingVertical: 10, flexWrap: 'wrap' },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendText: { fontSize: 11, color: 'rgba(255,255,255,0.7)' },
 
@@ -894,6 +1265,8 @@ const styles = StyleSheet.create({
   compassText: { fontSize: 11, color: 'rgba(255,255,255,0.7)', fontWeight: '500' as const },
   compassDirectionDot: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#FF6B35', justifyContent: 'center', alignItems: 'center' },
   compassDirectionText: { fontSize: 10, fontWeight: '800' as const, color: '#FFF' },
+  compassTreasureIndicator: { backgroundColor: 'rgba(245,158,11,0.3)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
+  compassTreasureText: { fontSize: 10, fontWeight: '700' as const, color: '#FDE68A' },
 
   streetView: { flex: 1, marginTop: 90 },
   streetScene: { flex: 1, position: 'relative', overflow: 'hidden' },
@@ -922,7 +1295,12 @@ const styles = StyleSheet.create({
   forSaleText: { fontSize: 6, fontWeight: '800' as const, color: '#FFF', letterSpacing: 1 },
 
   buildingLabel: { fontSize: 8, fontWeight: '700' as const, color: 'rgba(255,255,255,0.7)', marginTop: 2, maxWidth: 80, textAlign: 'center' as const },
-  buildingFloors: { fontSize: 7, color: 'rgba(255,255,255,0.4)' },
+
+  streetTreasureFloat: { position: 'absolute', top: '25%' as any, alignSelf: 'center', alignItems: 'center', zIndex: 3 },
+  streetTreasureItem: { alignItems: 'center', marginBottom: 8 },
+  streetTreasureGlow: { width: 60, height: 60, borderRadius: 30, borderWidth: 2, justifyContent: 'center', alignItems: 'center', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.6, shadowRadius: 12, elevation: 6 },
+  streetTreasureReward: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, marginTop: 4 },
+  streetTreasureRewardText: { fontSize: 10, fontWeight: '800' as const, color: '#FFF' },
 
   distantBuildings: { position: 'absolute', top: 20, left: '30%' as any, right: '30%' as any, height: 60, alignItems: 'center' },
   distantBuilding: { position: 'absolute', bottom: 12, borderTopLeftRadius: 2, borderTopRightRadius: 2 },
@@ -932,6 +1310,17 @@ const styles = StyleSheet.create({
   blockInfoContent: { backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 8 },
   blockInfoName: { fontSize: 14, fontWeight: '700' as const, color: '#FFF' },
   blockInfoDetails: { fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 2 },
+
+  treasurePanelContainer: { maxHeight: 80, paddingHorizontal: 0 },
+  treasurePanelContent: { paddingHorizontal: 12, gap: 8 },
+  treasurePanelCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(245,158,11,0.08)', borderRadius: 14, paddingHorizontal: 10, paddingVertical: 8, gap: 8, minWidth: 200, borderWidth: 1.5 },
+  treasurePanelIcon: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  treasurePanelInfo: { flex: 1 },
+  treasurePanelName: { fontSize: 12, fontWeight: '700' as const, color: '#FFF' },
+  treasurePanelRewardRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
+  treasurePanelRarity: { paddingHorizontal: 6, paddingVertical: 1, borderRadius: 6 },
+  treasurePanelRarityText: { fontSize: 9, fontWeight: '700' as const },
+  treasurePanelRewardText: { fontSize: 11, fontWeight: '700' as const, color: '#F59E0B' },
 
   buildingCarousel: { maxHeight: 72, paddingHorizontal: 0 },
   buildingCarouselContent: { paddingHorizontal: 12, gap: 8 },
@@ -987,4 +1376,28 @@ const styles = StyleSheet.create({
   modalBuyText: { color: '#FFF', fontSize: 15, fontWeight: '700' as const },
   modalExploreButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#3B82F6', paddingVertical: 15, borderRadius: 14, gap: 10 },
   modalExploreText: { color: '#FFF', fontSize: 15, fontWeight: '700' as const },
+
+  treasureModalContent: { borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, maxHeight: '85%' },
+  treasureModalHeader: { flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 8 },
+  treasureModalClose: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.06)', justifyContent: 'center', alignItems: 'center' },
+  treasureModalVisual: { alignItems: 'center', paddingVertical: 24, borderRadius: 20, marginBottom: 16 },
+  treasureModalRarityBadge: { paddingHorizontal: 14, paddingVertical: 4, borderRadius: 12, borderWidth: 1.5, marginTop: 12 },
+  treasureModalRarityText: { fontSize: 12, fontWeight: '800' as const },
+  treasureModalName: { fontSize: 22, fontWeight: '800' as const, letterSpacing: -0.5, marginBottom: 6 },
+  treasureModalDesc: { fontSize: 13, lineHeight: 20, marginBottom: 16 },
+  treasureModalDetailsRow: { flexDirection: 'row', gap: 8, marginBottom: 16, flexWrap: 'wrap' },
+  treasureModalDetailChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12 },
+  treasureModalDetailText: { fontSize: 12, fontWeight: '600' as const },
+  treasureModalHint: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, padding: 14, borderRadius: 14, marginBottom: 16 },
+  treasureModalHintText: { fontSize: 12, lineHeight: 18, flex: 1 },
+  treasureClaimResult: { padding: 16, borderRadius: 16, borderWidth: 1.5, alignItems: 'center', gap: 6, marginBottom: 16 },
+  treasureClaimResultText: { fontSize: 14, fontWeight: '700' as const, textAlign: 'center' as const },
+  treasureClaimTokens: { fontSize: 18, fontWeight: '900' as const },
+  treasureClaimButton: { borderRadius: 16, overflow: 'hidden', marginBottom: 12 },
+  treasureClaimButtonGradient: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 16, gap: 10 },
+  treasureClaimButtonText: { color: '#FFF', fontSize: 16, fontWeight: '800' as const },
+  treasureLimitBanner: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: 'rgba(245,158,11,0.1)', padding: 14, borderRadius: 14 },
+  treasureLimitText: { fontSize: 13, color: '#F59E0B', fontWeight: '600' as const, flex: 1 },
+  treasureClaimedBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: 'rgba(16,185,129,0.1)', padding: 14, borderRadius: 14 },
+  treasureClaimedText: { fontSize: 15, color: '#10B981', fontWeight: '700' as const },
 });
