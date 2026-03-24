@@ -113,10 +113,10 @@ export const TREASURE_TYPE_CONFIG: Record<TreasureType, {
   imageUrl?: string;
   isGif?: boolean;
 }> = {
-  coin_pile: { label: 'Coin Pile', icon: '🪙', baseReward: 25 },
+  coin_pile: { label: 'Coin Pile', icon: '🪙', baseReward: 25, imageUrl: 'https://r2-pub.rork.com/generated-images/4b803844-8d02-40c1-9cbe-a8860f16195d.png' },
   treasure_chest: { label: 'Treasure Chest', icon: '📦', baseReward: 50, imageUrl: 'https://r2-pub.rork.com/generated-images/aa4f3e96-cf4a-43e4-a9a5-0c725dd138bf.png' },
-  golden_muso: { label: 'Golden MUSO', icon: '🏆', baseReward: 100 },
-  crystal_vault: { label: 'Crystal Vault', icon: '💎', baseReward: 150 },
+  golden_muso: { label: 'Golden MUSO', icon: '🏆', baseReward: 100, imageUrl: 'https://r2-pub.rork.com/generated-images/a445dfe8-2179-4d36-a837-025a4901f20d.png' },
+  crystal_vault: { label: 'Crystal Vault', icon: '💎', baseReward: 150, imageUrl: 'https://r2-pub.rork.com/generated-images/a8ad8d91-9351-4751-874f-0f92d6cfe109.png' },
   token_fountain: { label: 'Token Fountain', icon: '⛲', baseReward: 200, imageUrl: 'https://r2-pub.rork.com/generated-images/29c8bd7b-2bf0-4275-93fa-b109ef9cb539.png' },
 };
 

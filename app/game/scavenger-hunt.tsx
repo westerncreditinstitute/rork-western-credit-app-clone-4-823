@@ -52,6 +52,9 @@ import { ScavengerHuntService } from '@/services/ScavengerHuntService';
 import { RARITY_CONFIG, TREASURE_TYPE_CONFIG, PLACE_TYPE_CONFIG, MAX_DAILY_TREASURES, STREAK_BONUSES, TreasureLocation } from '@/types/scavengerHunt';
 import AnimatedTreasureChest from '@/components/AnimatedTreasureChest';
 import AnimatedTokenFountain from '@/components/AnimatedTokenFountain';
+import AnimatedGoldenMuso from '@/components/AnimatedGoldenMuso';
+import AnimatedCrystalVault from '@/components/AnimatedCrystalVault';
+import AnimatedCoinPile from '@/components/AnimatedCoinPile';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -622,6 +625,12 @@ export default function ScavengerHuntScreen() {
               <AnimatedTreasureChest imageUrl={typeConfig.imageUrl} size={40} />
             ) : !claimed && typeConfig.imageUrl && treasure.treasureType === 'token_fountain' ? (
               <AnimatedTokenFountain imageUrl={typeConfig.imageUrl} size={40} />
+            ) : !claimed && typeConfig.imageUrl && treasure.treasureType === 'golden_muso' ? (
+              <AnimatedGoldenMuso imageUrl={typeConfig.imageUrl} size={40} />
+            ) : !claimed && typeConfig.imageUrl && treasure.treasureType === 'crystal_vault' ? (
+              <AnimatedCrystalVault imageUrl={typeConfig.imageUrl} size={40} />
+            ) : !claimed && typeConfig.imageUrl && treasure.treasureType === 'coin_pile' ? (
+              <AnimatedCoinPile imageUrl={typeConfig.imageUrl} size={40} />
             ) : !claimed && typeConfig.imageUrl ? (
               <Image source={{ uri: typeConfig.imageUrl }} style={styles.treasureCardImage} resizeMode="contain" />
             ) : (
@@ -751,6 +760,12 @@ export default function ScavengerHuntScreen() {
                   <AnimatedTreasureChest imageUrl={config.imageUrl} size={36} />
                 ) : config.imageUrl && key === 'token_fountain' ? (
                   <AnimatedTokenFountain imageUrl={config.imageUrl} size={36} />
+                ) : config.imageUrl && key === 'golden_muso' ? (
+                  <AnimatedGoldenMuso imageUrl={config.imageUrl} size={36} />
+                ) : config.imageUrl && key === 'crystal_vault' ? (
+                  <AnimatedCrystalVault imageUrl={config.imageUrl} size={36} />
+                ) : config.imageUrl && key === 'coin_pile' ? (
+                  <AnimatedCoinPile imageUrl={config.imageUrl} size={36} />
                 ) : config.imageUrl ? (
                   <Image source={{ uri: config.imageUrl }} style={styles.legendItemImage} resizeMode="contain" />
                 ) : (
@@ -909,9 +924,9 @@ export default function ScavengerHuntScreen() {
             </View>
           </View>
           {[
-            { type: 'Coin Pile', rarity: 'Common', base: 25, mult: 1.0, total: 25, icon: '🪙', rarityColor: '#9CA3AF', imageUrl: undefined as string | undefined },
+            { type: 'Coin Pile', rarity: 'Common', base: 25, mult: 1.0, total: 25, icon: '🪙', rarityColor: '#9CA3AF', imageUrl: TREASURE_TYPE_CONFIG.coin_pile.imageUrl },
             { type: 'Treasure Chest', rarity: 'Rare', base: 50, mult: 1.5, total: 75, icon: '📦', rarityColor: '#3B82F6', imageUrl: TREASURE_TYPE_CONFIG.treasure_chest.imageUrl },
-            { type: 'Golden MUSO', rarity: 'Epic', base: 100, mult: 2.0, total: 200, icon: '🏆', rarityColor: '#8B5CF6', imageUrl: undefined as string | undefined },
+            { type: 'Golden MUSO', rarity: 'Epic', base: 100, mult: 2.0, total: 200, icon: '🏆', rarityColor: '#8B5CF6', imageUrl: TREASURE_TYPE_CONFIG.golden_muso.imageUrl },
             { type: 'Token Fountain', rarity: 'Legendary', base: 200, mult: 3.0, total: 600, icon: '⛲', rarityColor: '#F59E0B', imageUrl: TREASURE_TYPE_CONFIG.token_fountain.imageUrl },
           ].map((example, index) => (
             <View
@@ -925,6 +940,12 @@ export default function ScavengerHuntScreen() {
                 <AnimatedTreasureChest imageUrl={example.imageUrl} size={36} />
               ) : example.imageUrl && example.type === 'Token Fountain' ? (
                 <AnimatedTokenFountain imageUrl={example.imageUrl} size={36} />
+              ) : example.imageUrl && example.type === 'Golden MUSO' ? (
+                <AnimatedGoldenMuso imageUrl={example.imageUrl} size={36} />
+              ) : example.imageUrl && example.type === 'Crystal Vault' ? (
+                <AnimatedCrystalVault imageUrl={example.imageUrl} size={36} />
+              ) : example.imageUrl && example.type === 'Coin Pile' ? (
+                <AnimatedCoinPile imageUrl={example.imageUrl} size={36} />
               ) : example.imageUrl ? (
                 <Image source={{ uri: example.imageUrl }} style={styles.legendExampleImage} resizeMode="contain" />
               ) : (
@@ -1128,6 +1149,12 @@ export default function ScavengerHuntScreen() {
                     <AnimatedTreasureChest imageUrl={legendPreviewType.imageUrl} size={140} />
                   ) : legendPreviewType.imageUrl && legendPreviewType.key === 'token_fountain' ? (
                     <AnimatedTokenFountain imageUrl={legendPreviewType.imageUrl} size={140} />
+                  ) : legendPreviewType.imageUrl && legendPreviewType.key === 'golden_muso' ? (
+                    <AnimatedGoldenMuso imageUrl={legendPreviewType.imageUrl} size={140} />
+                  ) : legendPreviewType.imageUrl && legendPreviewType.key === 'crystal_vault' ? (
+                    <AnimatedCrystalVault imageUrl={legendPreviewType.imageUrl} size={140} />
+                  ) : legendPreviewType.imageUrl && legendPreviewType.key === 'coin_pile' ? (
+                    <AnimatedCoinPile imageUrl={legendPreviewType.imageUrl} size={140} />
                   ) : legendPreviewType.imageUrl ? (
                     <Image source={{ uri: legendPreviewType.imageUrl }} style={styles.arPreviewImage} resizeMode="contain" />
                   ) : (
@@ -1187,6 +1214,12 @@ export default function ScavengerHuntScreen() {
                       <AnimatedTreasureChest imageUrl={legendPreviewType.imageUrl} size={44} />
                     ) : legendPreviewType.imageUrl && legendPreviewType.key === 'token_fountain' ? (
                       <AnimatedTokenFountain imageUrl={legendPreviewType.imageUrl} size={44} />
+                    ) : legendPreviewType.imageUrl && legendPreviewType.key === 'golden_muso' ? (
+                      <AnimatedGoldenMuso imageUrl={legendPreviewType.imageUrl} size={44} />
+                    ) : legendPreviewType.imageUrl && legendPreviewType.key === 'crystal_vault' ? (
+                      <AnimatedCrystalVault imageUrl={legendPreviewType.imageUrl} size={44} />
+                    ) : legendPreviewType.imageUrl && legendPreviewType.key === 'coin_pile' ? (
+                      <AnimatedCoinPile imageUrl={legendPreviewType.imageUrl} size={44} />
                     ) : legendPreviewType.imageUrl ? (
                       <Image source={{ uri: legendPreviewType.imageUrl }} style={styles.arPreviewInfoImage} resizeMode="contain" />
                     ) : (
@@ -1280,6 +1313,12 @@ export default function ScavengerHuntScreen() {
                     <AnimatedTreasureChest imageUrl={typeConfig.imageUrl} size={SCREEN_HEIGHT * 0.45} />
                   ) : typeConfig.imageUrl && selectedTreasure.treasureType === 'token_fountain' ? (
                     <AnimatedTokenFountain imageUrl={typeConfig.imageUrl} size={SCREEN_HEIGHT * 0.45} />
+                  ) : typeConfig.imageUrl && selectedTreasure.treasureType === 'golden_muso' ? (
+                    <AnimatedGoldenMuso imageUrl={typeConfig.imageUrl} size={SCREEN_HEIGHT * 0.45} />
+                  ) : typeConfig.imageUrl && selectedTreasure.treasureType === 'crystal_vault' ? (
+                    <AnimatedCrystalVault imageUrl={typeConfig.imageUrl} size={SCREEN_HEIGHT * 0.45} />
+                  ) : typeConfig.imageUrl && selectedTreasure.treasureType === 'coin_pile' ? (
+                    <AnimatedCoinPile imageUrl={typeConfig.imageUrl} size={SCREEN_HEIGHT * 0.45} />
                   ) : typeConfig.imageUrl ? (
                     <Image source={{ uri: typeConfig.imageUrl }} style={styles.arScanTreasureImage} resizeMode="contain" />
                   ) : (
@@ -1427,6 +1466,12 @@ export default function ScavengerHuntScreen() {
                   <AnimatedTreasureChest imageUrl={typeConfig.imageUrl} size={120} />
                 ) : typeConfig.imageUrl && selectedTreasure.treasureType === 'token_fountain' ? (
                   <AnimatedTokenFountain imageUrl={typeConfig.imageUrl} size={120} />
+                ) : typeConfig.imageUrl && selectedTreasure.treasureType === 'golden_muso' ? (
+                  <AnimatedGoldenMuso imageUrl={typeConfig.imageUrl} size={120} />
+                ) : typeConfig.imageUrl && selectedTreasure.treasureType === 'crystal_vault' ? (
+                  <AnimatedCrystalVault imageUrl={typeConfig.imageUrl} size={120} />
+                ) : typeConfig.imageUrl && selectedTreasure.treasureType === 'coin_pile' ? (
+                  <AnimatedCoinPile imageUrl={typeConfig.imageUrl} size={120} />
                 ) : typeConfig.imageUrl ? (
                   <Image source={{ uri: typeConfig.imageUrl }} style={styles.modalTreasureImage} resizeMode="contain" />
                 ) : (
