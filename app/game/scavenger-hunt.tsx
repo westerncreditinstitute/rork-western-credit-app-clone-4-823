@@ -185,22 +185,34 @@ export default function ScavengerHuntScreen() {
   }, [cameraPermission]);
 
   const handleRequestCameraPermission = useCallback(async () => {
-    console.log('[TreasureHunt] Requesting camera permission...');
+    console.log('[TreasureHunt] Requesting camera permission... Platform:', Platform.OS);
     if (Platform.OS === 'web') {
       console.log('[TreasureHunt] Web platform: skipping native camera permission');
       setPermissionGranted(true);
       return true;
     }
-    if (!cameraPermission?.granted) {
+    try {
+      if (cameraPermission?.granted) {
+        console.log('[TreasureHunt] Camera permission already granted');
+        setPermissionGranted(true);
+        return true;
+      }
+      console.log('[TreasureHunt] Requesting camera permission from OS...');
       const result = await requestCameraPermission();
-      console.log('[TreasureHunt] Camera permission result:', result?.granted);
+      console.log('[TreasureHunt] Camera permission result:', JSON.stringify(result));
       if (result?.granted) {
         setPermissionGranted(true);
+        return true;
       }
-      return result?.granted ?? false;
+      if (result?.canAskAgain === false) {
+        console.log('[TreasureHunt] Camera permission permanently denied');
+      }
+      return false;
+    } catch (error) {
+      console.log('[TreasureHunt] Camera permission error:', error);
+      setPermissionGranted(true);
+      return true;
     }
-    setPermissionGranted(true);
-    return true;
   }, [cameraPermission, requestCameraPermission]);
 
   const handleLegendPreview = useCallback(async (typeConfig: { key: string; label: string; icon: string; baseReward: number }) => {
@@ -245,7 +257,9 @@ export default function ScavengerHuntScreen() {
       return;
     }
 
+    console.log('[TreasureHunt] Starting AR scan for treasure:', selectedTreasure.name);
     const granted = await handleRequestCameraPermission();
+    console.log('[TreasureHunt] Permission result for AR scan:', granted);
     if (!granted) {
       Alert.alert(
         'Camera Permission Required',
@@ -256,6 +270,7 @@ export default function ScavengerHuntScreen() {
     }
 
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    console.log('[TreasureHunt] Opening AR camera modal...');
     setShowARCamera(true);
     setIsScanning(false);
     setArScanProgress(0);
@@ -312,14 +327,24 @@ export default function ScavengerHuntScreen() {
   }, [showARCamera, cameraReady, scanPhase]);
 
   useEffect(() => {
-    if (Platform.OS === 'web' && showARCamera && scanPhase === 'waiting_camera') {
-      const timer = setTimeout(() => {
-        console.log('[TreasureHunt] Web fallback: treating camera as ready');
-        setCameraReady(true);
-      }, 1000);
-      return () => clearTimeout(timer);
+    if (showARCamera && scanPhase === 'waiting_camera') {
+      if (Platform.OS === 'web') {
+        const timer = setTimeout(() => {
+          console.log('[TreasureHunt] Web fallback: treating camera as ready');
+          setCameraReady(true);
+        }, 1000);
+        return () => clearTimeout(timer);
+      } else {
+        const nativeFallbackTimer = setTimeout(() => {
+          if (!cameraReady) {
+            console.log('[TreasureHunt] Native fallback: onCameraReady did not fire after 4s, forcing ready');
+            setCameraReady(true);
+          }
+        }, 4000);
+        return () => clearTimeout(nativeFallbackTimer);
+      }
     }
-  }, [showARCamera, scanPhase]);
+  }, [showARCamera, scanPhase, cameraReady]);
 
   const handleHoldStart = useCallback(() => {
     if (scanPhase !== 'ready' || isClaiming || !isNearTreasure) return;
@@ -1157,8 +1182,9 @@ export default function ScavengerHuntScreen() {
   };
 
   const renderCameraBackground = () => {
-    if (Platform.OS === 'web' || !permissionGranted) {
-      console.log('[TreasureHunt] Showing gradient fallback. Web:', Platform.OS === 'web', 'Permission:', permissionGranted);
+    const hasPermission = permissionGranted || cameraPermission?.granted;
+    if (Platform.OS === 'web') {
+      console.log('[TreasureHunt] Web platform: showing gradient fallback');
       return (
         <LinearGradient
           colors={['#0a0a1a', '#1a1a3e', '#0d0d2b']}
@@ -1166,7 +1192,16 @@ export default function ScavengerHuntScreen() {
         />
       );
     }
-    console.log('[TreasureHunt] Rendering CameraView');
+    if (!hasPermission) {
+      console.log('[TreasureHunt] No camera permission, showing gradient. permissionGranted:', permissionGranted, 'hookGranted:', cameraPermission?.granted);
+      return (
+        <LinearGradient
+          colors={['#0a0a1a', '#1a1a3e', '#0d0d2b']}
+          style={StyleSheet.absoluteFill}
+        />
+      );
+    }
+    console.log('[TreasureHunt] Rendering CameraView component');
     return (
       <CameraView
         style={StyleSheet.absoluteFill}
@@ -1177,7 +1212,8 @@ export default function ScavengerHuntScreen() {
         }}
         onMountError={(e) => {
           console.log('[TreasureHunt] Camera mount error:', e.message);
-          setCameraReady(false);
+          Alert.alert('Camera Error', 'Failed to open camera: ' + e.message);
+          setCameraReady(true);
         }}
       />
     );
