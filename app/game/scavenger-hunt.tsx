@@ -50,6 +50,8 @@ import { useGame } from '@/contexts/GameContext';
 import { useScavengerHunt } from '@/contexts/ScavengerHuntContext';
 import { ScavengerHuntService } from '@/services/ScavengerHuntService';
 import { RARITY_CONFIG, TREASURE_TYPE_CONFIG, PLACE_TYPE_CONFIG, MAX_DAILY_TREASURES, STREAK_BONUSES, TreasureLocation } from '@/types/scavengerHunt';
+import AnimatedTreasureChest from '@/components/AnimatedTreasureChest';
+import AnimatedTokenFountain from '@/components/AnimatedTokenFountain';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -568,7 +570,11 @@ export default function ScavengerHuntScreen() {
       >
         <View style={styles.treasureCardLeft}>
           <View style={[styles.treasureIconWrap, { backgroundColor: rarity.bgColor }]}>
-            {!claimed && typeConfig.imageUrl ? (
+            {!claimed && typeConfig.imageUrl && treasure.treasureType === 'treasure_chest' ? (
+              <AnimatedTreasureChest imageUrl={typeConfig.imageUrl} size={40} />
+            ) : !claimed && typeConfig.imageUrl && treasure.treasureType === 'token_fountain' ? (
+              <AnimatedTokenFountain imageUrl={typeConfig.imageUrl} size={40} />
+            ) : !claimed && typeConfig.imageUrl ? (
               <Image source={{ uri: typeConfig.imageUrl }} style={styles.treasureCardImage} resizeMode="contain" />
             ) : (
               <Text style={styles.treasureCardIcon}>{claimed ? '✅' : treasure.icon}</Text>
@@ -693,7 +699,11 @@ export default function ScavengerHuntScreen() {
               onPress={() => handleLegendPreview({ key, ...config })}
             >
               <View style={[styles.legendItemIcon, { backgroundColor: '#F59E0B10' }]}>
-                {config.imageUrl ? (
+                {config.imageUrl && key === 'treasure_chest' ? (
+                  <AnimatedTreasureChest imageUrl={config.imageUrl} size={36} />
+                ) : config.imageUrl && key === 'token_fountain' ? (
+                  <AnimatedTokenFountain imageUrl={config.imageUrl} size={36} />
+                ) : config.imageUrl ? (
                   <Image source={{ uri: config.imageUrl }} style={styles.legendItemImage} resizeMode="contain" />
                 ) : (
                   <Text style={styles.legendItemEmoji}>{config.icon}</Text>
@@ -863,7 +873,11 @@ export default function ScavengerHuntScreen() {
                 index < 3 && { borderBottomWidth: 1, borderBottomColor: colors.border + '40' },
               ]}
             >
-              {example.imageUrl ? (
+              {example.imageUrl && example.type === 'Treasure Chest' ? (
+                <AnimatedTreasureChest imageUrl={example.imageUrl} size={36} />
+              ) : example.imageUrl && example.type === 'Token Fountain' ? (
+                <AnimatedTokenFountain imageUrl={example.imageUrl} size={36} />
+              ) : example.imageUrl ? (
                 <Image source={{ uri: example.imageUrl }} style={styles.legendExampleImage} resizeMode="contain" />
               ) : (
                 <Text style={styles.legendExampleIcon}>{example.icon}</Text>
@@ -1062,7 +1076,11 @@ export default function ScavengerHuntScreen() {
               >
                 <View style={[styles.arPreviewGlow, { borderColor: typeColor + '50', shadowColor: typeColor }]} />
                 <View style={[styles.arPreviewBody, { backgroundColor: typeColor + '20', borderColor: typeColor }]}>
-                  {legendPreviewType.imageUrl ? (
+                  {legendPreviewType.imageUrl && legendPreviewType.key === 'treasure_chest' ? (
+                    <AnimatedTreasureChest imageUrl={legendPreviewType.imageUrl} size={SCREEN_WIDTH * 0.4} />
+                  ) : legendPreviewType.imageUrl && legendPreviewType.key === 'token_fountain' ? (
+                    <AnimatedTokenFountain imageUrl={legendPreviewType.imageUrl} size={SCREEN_WIDTH * 0.4} />
+                  ) : legendPreviewType.imageUrl ? (
                     <Image source={{ uri: legendPreviewType.imageUrl }} style={styles.arPreviewImage} resizeMode="contain" />
                   ) : (
                     <Text style={styles.arPreviewIcon}>{legendPreviewType.icon}</Text>
@@ -1114,7 +1132,11 @@ export default function ScavengerHuntScreen() {
               <View style={styles.arBottomSection}>
                 <View style={styles.arPreviewInfoCard}>
                   <View style={styles.arPreviewInfoHeader}>
-                    {legendPreviewType.imageUrl ? (
+                    {legendPreviewType.imageUrl && legendPreviewType.key === 'treasure_chest' ? (
+                      <AnimatedTreasureChest imageUrl={legendPreviewType.imageUrl} size={44} />
+                    ) : legendPreviewType.imageUrl && legendPreviewType.key === 'token_fountain' ? (
+                      <AnimatedTokenFountain imageUrl={legendPreviewType.imageUrl} size={44} />
+                    ) : legendPreviewType.imageUrl ? (
                       <Image source={{ uri: legendPreviewType.imageUrl }} style={styles.arPreviewInfoImage} resizeMode="contain" />
                     ) : (
                       <Text style={styles.arPreviewInfoEmoji}>{legendPreviewType.icon}</Text>
@@ -1320,7 +1342,11 @@ export default function ScavengerHuntScreen() {
 
             <View style={[styles.modalTreasureVisual, { backgroundColor: rarity.bgColor }]}>
               <Animated.View style={{ transform: [{ translateY: floatAnim }] }}>
-                {typeConfig.imageUrl ? (
+                {typeConfig.imageUrl && selectedTreasure.treasureType === 'treasure_chest' ? (
+                  <AnimatedTreasureChest imageUrl={typeConfig.imageUrl} size={120} />
+                ) : typeConfig.imageUrl && selectedTreasure.treasureType === 'token_fountain' ? (
+                  <AnimatedTokenFountain imageUrl={typeConfig.imageUrl} size={120} />
+                ) : typeConfig.imageUrl ? (
                   <Image source={{ uri: typeConfig.imageUrl }} style={styles.modalTreasureImage} resizeMode="contain" />
                 ) : (
                   <Text style={styles.modalTreasureIcon}>{selectedTreasure.icon}</Text>
