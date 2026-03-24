@@ -96,7 +96,7 @@ export default function ScavengerHuntScreen() {
   const [showLegendPreview, setShowLegendPreview] = useState(false);
   const [legendPreviewType, setLegendPreviewType] = useState<{ key: string; label: string; icon: string; baseReward: number; imageUrl?: string; isGif?: boolean } | null>(null);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
-  const [_cameraReady, setCameraReady] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const floatAnim = useRef(new Animated.Value(0)).current;
@@ -109,7 +109,11 @@ export default function ScavengerHuntScreen() {
   const holdTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [holdProgress, setHoldProgress] = useState<number>(0);
   const [isClaiming, setIsClaiming] = useState(false);
-  const [holdStarted, setHoldStarted] = useState(false);
+  const [isHolding, setIsHolding] = useState(false);
+  const [proximityChecked, setProximityChecked] = useState(false);
+  const [isNearTreasure, setIsNearTreasure] = useState(false);
+  const [scanPhase, setScanPhase] = useState<'waiting_camera' | 'scanning' | 'ready' | 'claiming' | 'claimed'>('waiting_camera');
+  const CLAIM_PROXIMITY_METERS = 200;
 
   useEffect(() => {
     Animated.loop(
@@ -200,6 +204,23 @@ export default function ScavengerHuntScreen() {
     setCameraReady(false);
   }, [handleRequestCameraPermission]);
 
+  const checkProximity = useCallback((): boolean => {
+    if (!selectedTreasure || !playerLocation) {
+      console.log('[TreasureHunt] No player location or treasure selected for proximity check');
+      return false;
+    }
+    const R = 6371000;
+    const dLat = (selectedTreasure.latitude - playerLocation.latitude) * Math.PI / 180;
+    const dLon = (selectedTreasure.longitude - playerLocation.longitude) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(playerLocation.latitude * Math.PI / 180) * Math.cos(selectedTreasure.latitude * Math.PI / 180) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const distance = R * c;
+    console.log(`[TreasureHunt] Distance to treasure: ${distance.toFixed(0)}m (limit: ${CLAIM_PROXIMITY_METERS}m)`);
+    return distance <= CLAIM_PROXIMITY_METERS;
+  }, [selectedTreasure, playerLocation, CLAIM_PROXIMITY_METERS]);
+
   const handleStartARScan = useCallback(async () => {
     if (!selectedTreasure) return;
 
@@ -220,12 +241,15 @@ export default function ScavengerHuntScreen() {
 
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     setShowARCamera(true);
-    setIsScanning(true);
+    setIsScanning(false);
     setArScanProgress(0);
     setHoldProgress(0);
-    setHoldStarted(false);
     setIsClaiming(false);
+    setIsHolding(false);
     setCameraReady(false);
+    setProximityChecked(false);
+    setIsNearTreasure(false);
+    setScanPhase('waiting_camera');
     holdProgressAnim.setValue(0);
 
     Animated.loop(
@@ -235,36 +259,68 @@ export default function ScavengerHuntScreen() {
         useNativeDriver: true,
       })
     ).start();
-
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += Math.random() * 15 + 5;
-      if (progress >= 100) {
-        progress = 100;
-        clearInterval(interval);
-        setArScanProgress(100);
-        setHoldStarted(true);
-      } else {
-        setArScanProgress(Math.min(progress, 99));
-      }
-    }, 400);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTreasure, dailyClaimsRemaining, handleRequestCameraPermission]);
 
   useEffect(() => {
-    if (!holdStarted || isClaiming) return;
+    if (showARCamera && cameraReady && scanPhase === 'waiting_camera') {
+      console.log('[TreasureHunt] Camera is ready, checking proximity...');
+      setScanPhase('scanning');
+      setIsScanning(true);
 
-    console.log('[TreasureHunt] Hold-to-claim started, hold camera steady...');
+      const near = checkProximity();
+      setProximityChecked(true);
+      setIsNearTreasure(near);
+
+      if (near) {
+        console.log('[TreasureHunt] Player is near treasure, starting scan...');
+        let progress = 0;
+        const interval = setInterval(() => {
+          progress += Math.random() * 10 + 3;
+          if (progress >= 100) {
+            progress = 100;
+            clearInterval(interval);
+            setArScanProgress(100);
+            setScanPhase('ready');
+            void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          } else {
+            setArScanProgress(Math.min(progress, 99));
+          }
+        }, 500);
+      } else {
+        console.log('[TreasureHunt] Player is NOT near treasure');
+        setArScanProgress(0);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showARCamera, cameraReady, scanPhase]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web' && showARCamera && scanPhase === 'waiting_camera') {
+      const timer = setTimeout(() => {
+        console.log('[TreasureHunt] Web fallback: treating camera as ready');
+        setCameraReady(true);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [showARCamera, scanPhase]);
+
+  const handleHoldStart = useCallback(() => {
+    if (scanPhase !== 'ready' || isClaiming || !isNearTreasure) return;
+    console.log('[TreasureHunt] Hold started for claim...');
+    setIsHolding(true);
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     let hp = 0;
     holdTimerRef.current = setInterval(() => {
-      hp += 4;
+      hp += 3;
       if (hp >= 100) {
         hp = 100;
         if (holdTimerRef.current) clearInterval(holdTimerRef.current);
         setHoldProgress(100);
         holdProgressAnim.setValue(1);
         setIsClaiming(true);
+        setScanPhase('claimed');
+        setIsHolding(false);
         console.log('[TreasureHunt] Hold complete, claiming treasure!');
         setTimeout(() => {
           handleClaimTreasure();
@@ -273,16 +329,21 @@ export default function ScavengerHuntScreen() {
         setHoldProgress(hp);
         holdProgressAnim.setValue(hp / 100);
       }
-    }, 100);
-
-    return () => {
-      if (holdTimerRef.current) {
-        clearInterval(holdTimerRef.current);
-        holdTimerRef.current = null;
-      }
-    };
+    }, 80);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [holdStarted, isClaiming]);
+  }, [scanPhase, isClaiming, isNearTreasure, holdProgressAnim]);
+
+  const handleHoldEnd = useCallback(() => {
+    if (holdTimerRef.current) {
+      clearInterval(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+    if (!isClaiming) {
+      setIsHolding(false);
+      setHoldProgress(0);
+      holdProgressAnim.setValue(0);
+    }
+  }, [isClaiming, holdProgressAnim]);
 
   const handleClaimTreasure = useCallback(() => {
     if (!selectedTreasure) return;
@@ -319,8 +380,11 @@ export default function ScavengerHuntScreen() {
     selectTreasure(null);
     claimScaleAnim.setValue(0);
     setHoldProgress(0);
-    setHoldStarted(false);
     setIsClaiming(false);
+    setIsHolding(false);
+    setProximityChecked(false);
+    setIsNearTreasure(false);
+    setScanPhase('waiting_camera');
     holdProgressAnim.setValue(0);
     if (holdTimerRef.current) {
       clearInterval(holdTimerRef.current);
@@ -1358,6 +1422,17 @@ export default function ScavengerHuntScreen() {
                   onPress={() => {
                     setShowARCamera(false);
                     setIsScanning(false);
+                    setScanPhase('waiting_camera');
+                    setCameraReady(false);
+                    setProximityChecked(false);
+                    setIsNearTreasure(false);
+                    setHoldProgress(0);
+                    setIsClaiming(false);
+                    setIsHolding(false);
+                    if (holdTimerRef.current) {
+                      clearInterval(holdTimerRef.current);
+                      holdTimerRef.current = null;
+                    }
                   }}
                 >
                   <X size={24} color="#FFF" />
@@ -1375,7 +1450,19 @@ export default function ScavengerHuntScreen() {
               </View>
 
               <View style={styles.arBottomSection}>
-                {arScanProgress < 100 ? (
+                {scanPhase === 'waiting_camera' && (
+                  <View style={styles.arProgressContainer}>
+                    <ActivityIndicator size="large" color="#FFF" style={{ marginBottom: 12 }} />
+                    <Text style={[styles.arProgressText, { fontSize: 15 }]}>
+                      Initializing Camera...
+                    </Text>
+                    <Text style={[styles.arProgressText, { fontSize: 12, marginTop: 4, opacity: 0.7 }]}>
+                      Point your camera at the treasure location
+                    </Text>
+                  </View>
+                )}
+
+                {scanPhase === 'scanning' && isNearTreasure && (
                   <View style={styles.arProgressContainer}>
                     <View style={styles.arProgressBg}>
                       <View
@@ -1392,10 +1479,33 @@ export default function ScavengerHuntScreen() {
                       Scanning... {Math.round(arScanProgress)}%
                     </Text>
                   </View>
-                ) : (
+                )}
+
+                {scanPhase === 'scanning' && proximityChecked && !isNearTreasure && (
+                  <View style={styles.arProgressContainer}>
+                    <View style={[styles.arProximityWarning, { backgroundColor: 'rgba(239,68,68,0.2)', borderColor: '#EF4444' }]}>
+                      <AlertCircle size={24} color="#EF4444" />
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.arProgressText, { fontSize: 15, textAlign: 'left', marginTop: 0, fontWeight: '700' as const }]}>
+                          Too Far Away!
+                        </Text>
+                        <Text style={[styles.arProgressText, { fontSize: 12, textAlign: 'left', marginTop: 4, opacity: 0.85 }]}>
+                          You need to be within {CLAIM_PROXIMITY_METERS}m of the treasure location to scan and claim it. Move closer and try again.
+                        </Text>
+                      </View>
+                    </View>
+                    {treasureDistances.find(d => d.treasure.id === selectedTreasure.id) && (
+                      <Text style={[styles.arProgressText, { marginTop: 8 }]}>
+                        📍 Distance: {ScavengerHuntService.formatDistance(treasureDistances.find(d => d.treasure.id === selectedTreasure.id)!.distanceMeters)}
+                      </Text>
+                    )}
+                  </View>
+                )}
+
+                {scanPhase === 'ready' && !isClaiming && (
                   <View style={styles.arProgressContainer}>
                     <Text style={[styles.arProgressText, { fontSize: 15, marginBottom: 8 }]}>
-                      {isClaiming ? '🎉 Treasure Claimed!' : '✅ Treasure Found — Hold Camera Steady!'}
+                      ✅ Treasure Found!
                     </Text>
                     <View style={styles.holdProgressBarBg}>
                       <View
@@ -1408,22 +1518,59 @@ export default function ScavengerHuntScreen() {
                         ]}
                       />
                     </View>
-                    <Text style={[styles.arProgressText, { marginTop: 6 }]}>
-                      {isClaiming
-                        ? `+${selectedTreasure.tokenReward} MUSO Tokens Added!`
-                        : `Claiming... ${Math.round(holdProgress)}%`}
+                    {isHolding && (
+                      <Text style={[styles.arProgressText, { marginTop: 6 }]}>
+                        Claiming... {Math.round(holdProgress)}%
+                      </Text>
+                    )}
+                    <TouchableOpacity
+                      style={[
+                        styles.arClaimButton,
+                        {
+                          backgroundColor: isHolding ? '#F59E0B' : rarity.color,
+                        },
+                      ]}
+                      onPressIn={handleHoldStart}
+                      onPressOut={handleHoldEnd}
+                      activeOpacity={0.8}
+                    >
+                      <Target size={22} color="#FFF" />
+                      <Text style={styles.arClaimButtonText}>
+                        {isHolding ? 'Keep Holding...' : 'Hold to Claim Treasure'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                {(scanPhase === 'claimed' || isClaiming) && (
+                  <View style={styles.arProgressContainer}>
+                    <Text style={[styles.arProgressText, { fontSize: 18, marginBottom: 8 }]}>
+                      🎉 Treasure Claimed!
+                    </Text>
+                    <Text style={[styles.arProgressText, { fontSize: 15 }]}>
+                      +{selectedTreasure.tokenReward} MUSO Tokens Added!
                     </Text>
                   </View>
                 )}
 
                 <View style={styles.arInstructions}>
-                  {arScanProgress >= 100 ? <Target size={20} color="#10B981" /> : <Camera size={20} color="#FFF" />}
+                  {scanPhase === 'claimed' || isClaiming ? (
+                    <Target size={20} color="#10B981" />
+                  ) : scanPhase === 'ready' ? (
+                    <Target size={20} color="#F59E0B" />
+                  ) : (
+                    <Camera size={20} color="#FFF" />
+                  )}
                   <Text style={styles.arInstructionText}>
-                    {isClaiming
+                    {scanPhase === 'claimed' || isClaiming
                       ? 'Treasure claimed! MUSO tokens have been added to your account.'
-                      : arScanProgress >= 100
-                        ? 'Keep your camera aimed at the treasure — hold steady to claim it!'
-                        : 'Point your camera to scan for the hidden treasure'}
+                      : scanPhase === 'ready'
+                        ? 'Press and hold the button below to claim your treasure!'
+                        : proximityChecked && !isNearTreasure
+                          ? 'You must be physically near the treasure location to claim it.'
+                          : scanPhase === 'waiting_camera'
+                            ? 'Waiting for camera to initialize...'
+                            : 'Scanning the area for hidden treasure...'}
                   </Text>
                 </View>
 
@@ -2421,6 +2568,28 @@ const styles = StyleSheet.create({
   holdProgressBarFill: {
     height: '100%',
     borderRadius: 6,
+  },
+  arClaimButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 18,
+    borderRadius: 16,
+    gap: 10,
+    marginTop: 14,
+  },
+  arClaimButtonText: {
+    fontSize: 17,
+    fontWeight: '800' as const,
+    color: '#FFF',
+  },
+  arProximityWarning: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    padding: 16,
+    borderRadius: 14,
+    borderWidth: 1,
   },
   arPreviewInfoCard: {
     backgroundColor: 'rgba(0,0,0,0.6)',
