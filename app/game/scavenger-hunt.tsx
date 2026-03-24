@@ -57,7 +57,7 @@ import AnimatedCrystalVault from '@/components/AnimatedCrystalVault';
 import AnimatedCoinPile from '@/components/AnimatedCoinPile';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { CameraView, useCameraPermissions, Camera } from 'expo-camera';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -98,6 +98,7 @@ export default function ScavengerHuntScreen() {
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [cameraReady, setCameraReady] = useState(false);
   const [permissionGranted, setPermissionGranted] = useState(false);
+  const [cameraKey, setCameraKey] = useState(0);
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const floatAnim = useRef(new Animated.Value(0)).current;
@@ -193,25 +194,44 @@ export default function ScavengerHuntScreen() {
     }
     try {
       if (cameraPermission?.granted) {
-        console.log('[TreasureHunt] Camera permission already granted');
+        console.log('[TreasureHunt] Camera permission already granted via hook');
         setPermissionGranted(true);
         return true;
       }
-      console.log('[TreasureHunt] Requesting camera permission from OS...');
-      const result = await requestCameraPermission();
-      console.log('[TreasureHunt] Camera permission result:', JSON.stringify(result));
-      if (result?.granted) {
+
+      console.log('[TreasureHunt] Trying hook requestCameraPermission...');
+      const hookResult = await requestCameraPermission();
+      console.log('[TreasureHunt] Hook permission result:', JSON.stringify(hookResult));
+      if (hookResult?.granted) {
         setPermissionGranted(true);
         return true;
       }
-      if (result?.canAskAgain === false) {
+
+      console.log('[TreasureHunt] Hook failed, trying Camera.requestCameraPermissionsAsync...');
+      const directResult = await Camera.requestCameraPermissionsAsync();
+      console.log('[TreasureHunt] Direct permission result:', JSON.stringify(directResult));
+      if (directResult?.granted) {
+        setPermissionGranted(true);
+        return true;
+      }
+
+      if (hookResult?.canAskAgain === false && directResult?.canAskAgain === false) {
         console.log('[TreasureHunt] Camera permission permanently denied');
       }
       return false;
     } catch (error) {
       console.log('[TreasureHunt] Camera permission error:', error);
-      setPermissionGranted(true);
-      return true;
+      try {
+        const fallbackResult = await Camera.getCameraPermissionsAsync();
+        console.log('[TreasureHunt] Fallback check result:', JSON.stringify(fallbackResult));
+        if (fallbackResult?.granted) {
+          setPermissionGranted(true);
+          return true;
+        }
+      } catch (e2) {
+        console.log('[TreasureHunt] Fallback check also failed:', e2);
+      }
+      return false;
     }
   }, [cameraPermission, requestCameraPermission]);
 
@@ -227,6 +247,7 @@ export default function ScavengerHuntScreen() {
       );
       return;
     }
+    setCameraKey(prev => prev + 1);
     setLegendPreviewType(typeConfig);
     setShowLegendPreview(true);
     setCameraReady(false);
@@ -271,6 +292,7 @@ export default function ScavengerHuntScreen() {
 
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     console.log('[TreasureHunt] Opening AR camera modal...');
+    setCameraKey(prev => prev + 1);
     setShowARCamera(true);
     setIsScanning(false);
     setArScanProgress(0);
@@ -337,14 +359,26 @@ export default function ScavengerHuntScreen() {
       } else {
         const nativeFallbackTimer = setTimeout(() => {
           if (!cameraReady) {
-            console.log('[TreasureHunt] Native fallback: onCameraReady did not fire after 4s, forcing ready');
+            console.log('[TreasureHunt] Native fallback: onCameraReady did not fire after 3s, forcing ready');
             setCameraReady(true);
           }
-        }, 4000);
+        }, 3000);
         return () => clearTimeout(nativeFallbackTimer);
       }
     }
   }, [showARCamera, scanPhase, cameraReady]);
+
+  useEffect(() => {
+    if (showLegendPreview && !cameraReady && Platform.OS !== 'web') {
+      const timer = setTimeout(() => {
+        if (!cameraReady) {
+          console.log('[TreasureHunt] Legend preview camera fallback: forcing ready after 3s');
+          setCameraReady(true);
+        }
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [showLegendPreview, cameraReady]);
 
   const handleHoldStart = useCallback(() => {
     if (scanPhase !== 'ready' || isClaiming || !isNearTreasure) return;
@@ -1183,8 +1217,8 @@ export default function ScavengerHuntScreen() {
 
   const renderCameraBackground = () => {
     const hasPermission = permissionGranted || cameraPermission?.granted;
+    console.log('[TreasureHunt] renderCameraBackground - Platform:', Platform.OS, 'permissionGranted:', permissionGranted, 'hookGranted:', cameraPermission?.granted, 'hookStatus:', cameraPermission?.status, 'hasPermission:', hasPermission);
     if (Platform.OS === 'web') {
-      console.log('[TreasureHunt] Web platform: showing gradient fallback');
       return (
         <LinearGradient
           colors={['#0a0a1a', '#1a1a3e', '#0d0d2b']}
@@ -1193,29 +1227,52 @@ export default function ScavengerHuntScreen() {
       );
     }
     if (!hasPermission) {
-      console.log('[TreasureHunt] No camera permission, showing gradient. permissionGranted:', permissionGranted, 'hookGranted:', cameraPermission?.granted);
+      console.log('[TreasureHunt] No camera permission, showing gradient with retry button');
       return (
-        <LinearGradient
-          colors={['#0a0a1a', '#1a1a3e', '#0d0d2b']}
-          style={StyleSheet.absoluteFill}
-        />
+        <View style={StyleSheet.absoluteFill}>
+          <LinearGradient
+            colors={['#0a0a1a', '#1a1a3e', '#0d0d2b']}
+            style={StyleSheet.absoluteFill}
+          />
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+            <Camera size={48} color="#7DD3FC" />
+            <Text style={{ color: '#7DD3FC', fontSize: 16, marginTop: 16, textAlign: 'center', paddingHorizontal: 32 }}>
+              Camera permission is needed to scan for treasures
+            </Text>
+            <TouchableOpacity
+              style={{ marginTop: 16, backgroundColor: '#1B6CA8', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 }}
+              onPress={async () => {
+                console.log('[TreasureHunt] Retry permission from camera background');
+                const granted = await handleRequestCameraPermission();
+                if (granted) {
+                  setCameraKey(prev => prev + 1);
+                }
+              }}
+            >
+              <Text style={{ color: '#FFF', fontSize: 14, fontWeight: '600' as const }}>Grant Camera Access</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       );
     }
-    console.log('[TreasureHunt] Rendering CameraView component');
+    console.log('[TreasureHunt] Rendering CameraView component, key:', cameraKey);
     return (
-      <CameraView
-        style={StyleSheet.absoluteFill}
-        facing="back"
-        onCameraReady={() => {
-          console.log('[TreasureHunt] Camera ready callback fired');
-          setCameraReady(true);
-        }}
-        onMountError={(e) => {
-          console.log('[TreasureHunt] Camera mount error:', e.message);
-          Alert.alert('Camera Error', 'Failed to open camera: ' + e.message);
-          setCameraReady(true);
-        }}
-      />
+      <View style={StyleSheet.absoluteFill}>
+        <CameraView
+          key={`camera-${cameraKey}`}
+          style={{ flex: 1 }}
+          facing="back"
+          onCameraReady={() => {
+            console.log('[TreasureHunt] Camera ready callback fired!');
+            setCameraReady(true);
+          }}
+          onMountError={(e) => {
+            console.log('[TreasureHunt] Camera mount error:', e.message);
+            Alert.alert('Camera Error', 'Failed to open camera: ' + e.message);
+            setCameraReady(true);
+          }}
+        />
+      </View>
     );
   };
 
