@@ -44,7 +44,6 @@ import {
   Star,
   Sparkles,
   ScanLine,
-  ChevronLeft,
 } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useGame } from '@/contexts/GameContext';
