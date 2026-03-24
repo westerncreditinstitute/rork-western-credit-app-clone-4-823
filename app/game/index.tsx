@@ -82,6 +82,7 @@ const QUICK_ACTIONS = [
   { id: 'go-virtual', icon: Globe, label: 'Go Virtual', route: '/game/go-virtual', color: '#FF6B35' },
   { id: 'run-simulator', icon: Bot, label: 'Run Simulator', route: '/game/run-simulator', color: '#2563EB' },
   { id: 'scavenger-hunt', icon: Compass, label: 'Treasure Hunt', route: '/game/scavenger-hunt', color: '#D946EF' },
+  { id: 'city3d', icon: Building2, label: '3D LA City', route: '/game/city3d', color: '#4A90D9' },
   { id: 'live-feed', icon: Radio, label: 'Live Feed', route: '/game/live-feed', color: '#10B981' },
   { id: 'tutorial', icon: BookOpen, label: 'Full Tutorial', route: '/game/tutorial', color: '#14B8A6' },
 ] as const;
