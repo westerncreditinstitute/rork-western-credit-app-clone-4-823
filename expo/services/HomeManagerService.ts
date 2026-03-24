@@ -75,60 +75,70 @@ export class HomeManagerService {
    * Get player's home
    */
   static async getPlayerHome(playerId: string): Promise<PlayerHome | null> {
-    if (!isSupabaseConfigured) {
-      console.log('[HomeManagerService] Supabase not configured, skipping fetch');
-      return null;
-    }
-    if (!playerId || !this.isValidUUID(playerId)) {
-      console.warn('[HomeManagerService] Invalid player ID format:', playerId);
-      return null;
-    }
-
-    const { data, error } = await supabase
-      .from('player_homes')
-      .select('*')
-      .eq('player_id', playerId)
-      .single();
-
-    if (error) {
-      if (error.code === 'PGRST116') {
+    try {
+      if (!isSupabaseConfigured) {
+        console.log('[HomeManagerService] Supabase not configured, skipping fetch');
         return null;
       }
-      console.error('[HomeManagerService] Error fetching player home:', error.message);
+      if (!playerId || !this.isValidUUID(playerId)) {
+        console.warn('[HomeManagerService] Invalid player ID format:', playerId);
+        return null;
+      }
+
+      const { data, error } = await supabase
+        .from('player_homes')
+        .select('*')
+        .eq('player_id', playerId)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return null;
+        }
+        console.error('[HomeManagerService] Error fetching player home:', error.message);
+        return null;
+      }
+
+      return this.mapToPlayerHome(data);
+    } catch (error: any) {
+      console.warn('[HomeManagerService] Network error fetching player home:', error?.message || String(error));
       return null;
     }
-
-    return this.mapToPlayerHome(data);
   }
 
   /**
    * Get home by ID
    */
   static async getHomeById(homeId: string): Promise<PlayerHome | null> {
-    if (!isSupabaseConfigured) {
-      console.log('[HomeManagerService] Supabase not configured, skipping fetch');
-      return null;
-    }
-    if (!homeId || !this.isValidUUID(homeId)) {
-      console.warn('[HomeManagerService] Invalid home ID format:', homeId);
-      return null;
-    }
-
-    const { data, error } = await supabase
-      .from('player_homes')
-      .select('*')
-      .eq('id', homeId)
-      .single();
-
-    if (error) {
-      if (error.code === 'PGRST116') {
+    try {
+      if (!isSupabaseConfigured) {
+        console.log('[HomeManagerService] Supabase not configured, skipping fetch');
         return null;
       }
-      console.error('[HomeManagerService] Error fetching home by ID:', error.message);
+      if (!homeId || !this.isValidUUID(homeId)) {
+        console.warn('[HomeManagerService] Invalid home ID format:', homeId);
+        return null;
+      }
+
+      const { data, error } = await supabase
+        .from('player_homes')
+        .select('*')
+        .eq('id', homeId)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return null;
+        }
+        console.error('[HomeManagerService] Error fetching home by ID:', error.message);
+        return null;
+      }
+
+      return this.mapToPlayerHome(data);
+    } catch (error: any) {
+      console.warn('[HomeManagerService] Network error fetching home by ID:', error?.message || String(error));
       return null;
     }
-
-    return this.mapToPlayerHome(data);
   }
 
   /**
@@ -209,8 +219,8 @@ export class HomeManagerService {
       tierConfig,
       roomCount: rooms?.length || 0,
       itemCount: items?.length || 0,
-      rooms: rooms?.map(this.mapToRoomLayout) || [],
-      items: items?.map(this.mapToPlacedItem) || [],
+      rooms: rooms?.map((r) => this.mapToRoomLayout(r)) || [],
+      items: items?.map((i) => this.mapToPlacedItem(i)) || [],
     };
   }
 
@@ -278,24 +288,43 @@ export class HomeManagerService {
       query = query.eq('home_tier', tierFilter);
     }
 
-    const { data, error } = await query;
+    let data: any[] | null = null;
+    let error: any = null;
 
-    if (error) {
-      throw new Error(`Failed to fetch public homes: ${error.message}`);
+    try {
+      const result = await query;
+      data = result.data;
+      error = result.error;
+    } catch (networkError: any) {
+      console.warn('[HomeManagerService] Network error fetching public homes:', networkError?.message || String(networkError));
+      return [];
     }
 
-    // Get room and item counts for each home
+    if (error) {
+      console.warn('[HomeManagerService] Error fetching public homes:', error.message);
+      return [];
+    }
+
     const homes = data || [];
+    if (homes.length === 0) return [];
+
     const homeIds = homes.map(h => h.id);
     
-    const [roomCounts, itemCounts] = await Promise.all([
-      homeIds.length > 0 
-        ? supabase.from('room_layouts').select('home_id').in('home_id', homeIds)
-        : Promise.resolve({ data: [] }),
-      homeIds.length > 0
-        ? supabase.from('placed_items').select('home_id').in('home_id', homeIds)
-        : Promise.resolve({ data: [] })
-    ]);
+    let roomCounts: any = { data: [] };
+    let itemCounts: any = { data: [] };
+
+    try {
+      [roomCounts, itemCounts] = await Promise.all([
+        homeIds.length > 0 
+          ? supabase.from('room_layouts').select('home_id').in('home_id', homeIds)
+          : Promise.resolve({ data: [] }),
+        homeIds.length > 0
+          ? supabase.from('placed_items').select('home_id').in('home_id', homeIds)
+          : Promise.resolve({ data: [] })
+      ]);
+    } catch (countError: any) {
+      console.warn('[HomeManagerService] Error fetching room/item counts:', countError?.message || String(countError));
+    }
 
     const roomCountMap = new Map<string, number>();
     const itemCountMap = new Map<string, number>();
@@ -322,48 +351,63 @@ export class HomeManagerService {
       console.log('[HomeManagerService] Supabase not configured, returning empty list');
       return [];
     }
-    const { data, error } = await supabase
-      .from('player_homes')
-      .select(`
-        *,
-        users:player_id (
-          email,
-          name
-        )
-      `)
-      .eq('is_public', true)
-      .or(`home_name.ilike.%${searchTerm}%`)
-      .order('created_at', { ascending: false })
-      .limit(limit);
+    try {
+      const { data, error } = await supabase
+        .from('player_homes')
+        .select(`
+          *,
+          users:player_id (
+            email,
+            name
+          )
+        `)
+        .eq('is_public', true)
+        .or(`home_name.ilike.%${searchTerm}%`)
+        .order('created_at', { ascending: false })
+        .limit(limit);
 
-    if (error) {
-      throw new Error(`Failed to search homes: ${error.message}`);
+      if (error) {
+        console.warn('[HomeManagerService] Error searching homes:', error.message);
+        return [];
+      }
+
+      const homes = data || [];
+      if (homes.length === 0) return [];
+
+      const homeIds = homes.map(h => h.id);
+      
+      let roomCounts: any = { data: [] };
+      let itemCounts: any = { data: [] };
+
+      try {
+        [roomCounts, itemCounts] = await Promise.all([
+          homeIds.length > 0 
+            ? supabase.from('room_layouts').select('home_id').in('home_id', homeIds)
+            : Promise.resolve({ data: [] }),
+          homeIds.length > 0
+            ? supabase.from('placed_items').select('home_id').in('home_id', homeIds)
+            : Promise.resolve({ data: [] })
+        ]);
+      } catch (countError: any) {
+        console.warn('[HomeManagerService] Error fetching room/item counts:', countError?.message || String(countError));
+      }
+
+      const roomCountMap = new Map<string, number>();
+      const itemCountMap = new Map<string, number>();
+      
+      (roomCounts.data || []).forEach((r: any) => {
+        roomCountMap.set(r.home_id, (roomCountMap.get(r.home_id) || 0) + 1);
+      });
+      
+      (itemCounts.data || []).forEach((i: any) => {
+        itemCountMap.set(i.home_id, (itemCountMap.get(i.home_id) || 0) + 1);
+      });
+
+      return homes.map(home => this.mapToPublicHomeListItemFromJoin(home, roomCountMap, itemCountMap));
+    } catch (error: any) {
+      console.warn('[HomeManagerService] Network error searching homes:', error?.message || String(error));
+      return [];
     }
-
-    const homes = data || [];
-    const homeIds = homes.map(h => h.id);
-    
-    const [roomCounts, itemCounts] = await Promise.all([
-      homeIds.length > 0 
-        ? supabase.from('room_layouts').select('home_id').in('home_id', homeIds)
-        : Promise.resolve({ data: [] }),
-      homeIds.length > 0
-        ? supabase.from('placed_items').select('home_id').in('home_id', homeIds)
-        : Promise.resolve({ data: [] })
-    ]);
-
-    const roomCountMap = new Map<string, number>();
-    const itemCountMap = new Map<string, number>();
-    
-    (roomCounts.data || []).forEach((r: any) => {
-      roomCountMap.set(r.home_id, (roomCountMap.get(r.home_id) || 0) + 1);
-    });
-    
-    (itemCounts.data || []).forEach((i: any) => {
-      itemCountMap.set(i.home_id, (itemCountMap.get(i.home_id) || 0) + 1);
-    });
-
-    return homes.map(home => this.mapToPublicHomeListItemFromJoin(home, roomCountMap, itemCountMap));
   }
 
   /**
@@ -400,6 +444,7 @@ export class HomeManagerService {
     if (!isSupabaseConfigured) {
       return { totalHomes: 0, publicHomes: 0, totalVisits: 0, averageRating: 0 };
     }
+    try {
     const { data } = await supabase
       .from('player_homes')
       .select('is_public, total_visits, total_rating, rating_count');
@@ -428,6 +473,10 @@ export class HomeManagerService {
       totalVisits,
       averageRating,
     };
+    } catch (error: any) {
+      console.warn('[HomeManagerService] Network error fetching home stats:', error?.message || String(error));
+      return { totalHomes: 0, publicHomes: 0, totalVisits: 0, averageRating: 0 };
+    }
   }
 
   // Helper methods to map database records to TypeScript types
