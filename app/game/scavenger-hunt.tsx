@@ -97,6 +97,7 @@ export default function ScavengerHuntScreen() {
   const [legendPreviewType, setLegendPreviewType] = useState<{ key: string; label: string; icon: string; baseReward: number; imageUrl?: string; isGif?: boolean } | null>(null);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [cameraReady, setCameraReady] = useState(false);
+  const [permissionGranted, setPermissionGranted] = useState(false);
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const floatAnim = useRef(new Animated.Value(0)).current;
@@ -177,17 +178,28 @@ export default function ScavengerHuntScreen() {
     setShowClaimModal(true);
   }, [selectTreasure]);
 
+  useEffect(() => {
+    if (cameraPermission?.granted) {
+      setPermissionGranted(true);
+    }
+  }, [cameraPermission]);
+
   const handleRequestCameraPermission = useCallback(async () => {
     console.log('[TreasureHunt] Requesting camera permission...');
     if (Platform.OS === 'web') {
       console.log('[TreasureHunt] Web platform: skipping native camera permission');
+      setPermissionGranted(true);
       return true;
     }
     if (!cameraPermission?.granted) {
       const result = await requestCameraPermission();
       console.log('[TreasureHunt] Camera permission result:', result?.granted);
+      if (result?.granted) {
+        setPermissionGranted(true);
+      }
       return result?.granted ?? false;
     }
+    setPermissionGranted(true);
     return true;
   }, [cameraPermission, requestCameraPermission]);
 
@@ -1145,7 +1157,8 @@ export default function ScavengerHuntScreen() {
   };
 
   const renderCameraBackground = () => {
-    if (Platform.OS === 'web' || !cameraPermission?.granted) {
+    if (Platform.OS === 'web' || !permissionGranted) {
+      console.log('[TreasureHunt] Showing gradient fallback. Web:', Platform.OS === 'web', 'Permission:', permissionGranted);
       return (
         <LinearGradient
           colors={['#0a0a1a', '#1a1a3e', '#0d0d2b']}
@@ -1153,16 +1166,18 @@ export default function ScavengerHuntScreen() {
         />
       );
     }
+    console.log('[TreasureHunt] Rendering CameraView');
     return (
       <CameraView
         style={StyleSheet.absoluteFill}
         facing="back"
         onCameraReady={() => {
-          console.log('[TreasureHunt] Camera ready');
+          console.log('[TreasureHunt] Camera ready callback fired');
           setCameraReady(true);
         }}
         onMountError={(e) => {
           console.log('[TreasureHunt] Camera mount error:', e.message);
+          setCameraReady(false);
         }}
       />
     );
