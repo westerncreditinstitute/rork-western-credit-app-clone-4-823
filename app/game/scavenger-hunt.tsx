@@ -179,6 +179,10 @@ export default function ScavengerHuntScreen() {
 
   const handleRequestCameraPermission = useCallback(async () => {
     console.log('[TreasureHunt] Requesting camera permission...');
+    if (Platform.OS === 'web') {
+      console.log('[TreasureHunt] Web platform: skipping native camera permission');
+      return true;
+    }
     if (!cameraPermission?.granted) {
       const result = await requestCameraPermission();
       console.log('[TreasureHunt] Camera permission result:', result?.granted);
