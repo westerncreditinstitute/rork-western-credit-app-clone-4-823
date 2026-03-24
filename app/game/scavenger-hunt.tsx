@@ -17,7 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import {
   MapPin,
-  Camera,
+  Camera as CameraIcon,
   Coins,
   Trophy,
   Compass,
@@ -57,7 +57,7 @@ import AnimatedCrystalVault from '@/components/AnimatedCrystalVault';
 import AnimatedCoinPile from '@/components/AnimatedCoinPile';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
-import { CameraView, useCameraPermissions, Camera } from 'expo-camera';
+import { CameraView, useCameraPermissions, Camera as ExpoCamera } from 'expo-camera';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -208,7 +208,7 @@ export default function ScavengerHuntScreen() {
       }
 
       console.log('[TreasureHunt] Hook failed, trying Camera.requestCameraPermissionsAsync...');
-      const directResult = await Camera.requestCameraPermissionsAsync();
+      const directResult = await ExpoCamera.requestCameraPermissionsAsync();
       console.log('[TreasureHunt] Direct permission result:', JSON.stringify(directResult));
       if (directResult?.granted) {
         setPermissionGranted(true);
@@ -222,7 +222,7 @@ export default function ScavengerHuntScreen() {
     } catch (error) {
       console.log('[TreasureHunt] Camera permission error:', error);
       try {
-        const fallbackResult = await Camera.getCameraPermissionsAsync();
+        const fallbackResult = await ExpoCamera.getCameraPermissionsAsync();
         console.log('[TreasureHunt] Fallback check result:', JSON.stringify(fallbackResult));
         if (fallbackResult?.granted) {
           setPermissionGranted(true);
@@ -916,7 +916,7 @@ export default function ScavengerHuntScreen() {
                 <Text style={[styles.legendItemDesc, { color: colors.textSecondary }]}>Tap to preview in AR</Text>
               </View>
               <View style={styles.legendItemValue}>
-                <Camera size={14} color="#0F4C75" />
+                <CameraIcon size={14} color="#0F4C75" />
                 <Coins size={14} color="#F59E0B" />
                 <Text style={styles.legendItemReward}>{config.baseReward}</Text>
               </View>
@@ -1235,7 +1235,7 @@ export default function ScavengerHuntScreen() {
             style={StyleSheet.absoluteFill}
           />
           <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-            <Camera size={48} color="#7DD3FC" />
+            <CameraIcon size={48} color="#7DD3FC" />
             <Text style={{ color: '#7DD3FC', fontSize: 16, marginTop: 16, textAlign: 'center', paddingHorizontal: 32 }}>
               Camera permission is needed to scan for treasures
             </Text>
@@ -1671,7 +1671,7 @@ export default function ScavengerHuntScreen() {
                   ) : scanPhase === 'ready' ? (
                     <Target size={20} color="#F59E0B" />
                   ) : (
-                    <Camera size={20} color="#FFF" />
+                    <CameraIcon size={20} color="#FFF" />
                   )}
                   <Text style={styles.arInstructionText}>
                     {scanPhase === 'claimed' || isClaiming
@@ -1843,7 +1843,7 @@ export default function ScavengerHuntScreen() {
                 onPress={handleStartARScan}
                 activeOpacity={0.8}
               >
-                <Camera size={20} color="#FFF" />
+                <CameraIcon size={20} color="#FFF" />
                 <Text style={styles.scanButtonText}>Open AR Scanner</Text>
               </TouchableOpacity>
             )}
@@ -1915,7 +1915,7 @@ export default function ScavengerHuntScreen() {
             </View>
             <View style={styles.infoStep}>
               <View style={[styles.infoStepIcon, { backgroundColor: '#F59E0B20' }]}>
-                <Camera size={18} color="#F59E0B" />
+                <CameraIcon size={18} color="#F59E0B" />
               </View>
               <Text style={[styles.infoStepText, { color: colors.text }]}>Open AR camera to scan the 3D MUSO Token anchor</Text>
             </View>
