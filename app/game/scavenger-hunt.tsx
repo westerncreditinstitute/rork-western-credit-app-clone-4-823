@@ -11,6 +11,7 @@ import {
   Image,
   Alert,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
@@ -41,6 +42,7 @@ import {
   BookOpen,
   Star,
   Sparkles,
+  ScanLine,
 } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useGame } from '@/contexts/GameContext';
@@ -49,6 +51,7 @@ import { ScavengerHuntService } from '@/services/ScavengerHuntService';
 import { RARITY_CONFIG, TREASURE_TYPE_CONFIG, PLACE_TYPE_CONFIG, MAX_DAILY_TREASURES, STREAK_BONUSES, TreasureLocation } from '@/types/scavengerHunt';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -83,6 +86,10 @@ export default function ScavengerHuntScreen() {
   const [arScanProgress, setArScanProgress] = useState(0);
   const [isScanning, setIsScanning] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
+  const [showLegendPreview, setShowLegendPreview] = useState(false);
+  const [legendPreviewType, setLegendPreviewType] = useState<{ key: string; label: string; icon: string; baseReward: number } | null>(null);
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const [_cameraReady, setCameraReady] = useState(false);
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const floatAnim = useRef(new Animated.Value(0)).current;
@@ -154,7 +161,34 @@ export default function ScavengerHuntScreen() {
     setShowClaimModal(true);
   }, [selectTreasure]);
 
-  const handleStartARScan = useCallback(() => {
+  const handleRequestCameraPermission = useCallback(async () => {
+    console.log('[TreasureHunt] Requesting camera permission...');
+    if (!cameraPermission?.granted) {
+      const result = await requestCameraPermission();
+      console.log('[TreasureHunt] Camera permission result:', result?.granted);
+      return result?.granted ?? false;
+    }
+    return true;
+  }, [cameraPermission, requestCameraPermission]);
+
+  const handleLegendPreview = useCallback(async (typeConfig: { key: string; label: string; icon: string; baseReward: number }) => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    console.log('[TreasureHunt] Opening AR preview for:', typeConfig.label);
+    const granted = await handleRequestCameraPermission();
+    if (!granted) {
+      Alert.alert(
+        'Camera Permission Required',
+        'Please grant camera access to view AR treasure previews. Go to your device settings to enable it.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+    setLegendPreviewType(typeConfig);
+    setShowLegendPreview(true);
+    setCameraReady(false);
+  }, [handleRequestCameraPermission]);
+
+  const handleStartARScan = useCallback(async () => {
     if (!selectedTreasure) return;
 
     if (dailyClaimsRemaining <= 0) {
@@ -162,10 +196,21 @@ export default function ScavengerHuntScreen() {
       return;
     }
 
+    const granted = await handleRequestCameraPermission();
+    if (!granted) {
+      Alert.alert(
+        'Camera Permission Required',
+        'Please grant camera access to scan for treasures. Go to your device settings to enable it.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     setShowARCamera(true);
     setIsScanning(true);
     setArScanProgress(0);
+    setCameraReady(false);
 
     Animated.loop(
       Animated.timing(scanLineAnim, {
@@ -190,7 +235,7 @@ export default function ScavengerHuntScreen() {
       }
     }, 400);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedTreasure, dailyClaimsRemaining]);
+  }, [selectedTreasure, dailyClaimsRemaining, handleRequestCameraPermission]);
 
   const handleClaimTreasure = useCallback(() => {
     if (!selectedTreasure) return;
@@ -625,25 +670,28 @@ export default function ScavengerHuntScreen() {
             </View>
           </View>
           {treasureTypes.map(([key, config], index) => (
-            <View
+            <TouchableOpacity
               key={key}
               style={[
                 styles.legendRow,
                 index < treasureTypes.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border + '40' },
               ]}
+              activeOpacity={0.7}
+              onPress={() => handleLegendPreview({ key, ...config })}
             >
               <View style={[styles.legendItemIcon, { backgroundColor: '#F59E0B10' }]}>
                 <Text style={styles.legendItemEmoji}>{config.icon}</Text>
               </View>
               <View style={styles.legendItemInfo}>
                 <Text style={[styles.legendItemName, { color: colors.text }]}>{config.label}</Text>
-                <Text style={[styles.legendItemDesc, { color: colors.textSecondary }]}>Base reward</Text>
+                <Text style={[styles.legendItemDesc, { color: colors.textSecondary }]}>Tap to preview in AR</Text>
               </View>
               <View style={styles.legendItemValue}>
+                <Camera size={14} color="#0F4C75" />
                 <Coins size={14} color="#F59E0B" />
                 <Text style={styles.legendItemReward}>{config.baseReward}</Text>
               </View>
-            </View>
+            </TouchableOpacity>
           ))}
           <View style={[styles.legendNote, { backgroundColor: isDark ? '#1E3A5F' : '#FEF3C7' }]}>
             <Sparkles size={13} color="#F59E0B" />
@@ -924,6 +972,148 @@ export default function ScavengerHuntScreen() {
     );
   };
 
+  const renderCameraBackground = () => {
+    if (Platform.OS === 'web' || !cameraPermission?.granted) {
+      return (
+        <LinearGradient
+          colors={['#0a0a1a', '#1a1a3e', '#0d0d2b']}
+          style={StyleSheet.absoluteFill}
+        />
+      );
+    }
+    return (
+      <CameraView
+        style={StyleSheet.absoluteFill}
+        facing="back"
+        onCameraReady={() => {
+          console.log('[TreasureHunt] Camera ready');
+          setCameraReady(true);
+        }}
+        onMountError={(e) => {
+          console.log('[TreasureHunt] Camera mount error:', e.message);
+        }}
+      />
+    );
+  };
+
+  const renderLegendPreviewModal = () => {
+    if (!legendPreviewType) return null;
+
+    const treasureTypeColors: Record<string, string> = {
+      coin_pile: '#F59E0B',
+      treasure_chest: '#3B82F6',
+      golden_muso: '#EF4444',
+      crystal_vault: '#8B5CF6',
+      token_fountain: '#10B981',
+    };
+
+    const typeColor = treasureTypeColors[legendPreviewType.key] || '#F59E0B';
+
+    return (
+      <Modal visible={showLegendPreview} animationType="fade" statusBarTranslucent>
+        <View style={styles.arContainer}>
+          {renderCameraBackground()}
+
+          <View style={styles.arOverlay}>
+            <View style={styles.arGrid}>
+              {Array.from({ length: 8 }).map((_, i) => (
+                <View
+                  key={`h${i}`}
+                  style={[styles.arGridLineH, { top: `${(i + 1) * 12}%`, opacity: 0.08 }]}
+                />
+              ))}
+              {Array.from({ length: 6 }).map((_, i) => (
+                <View
+                  key={`v${i}`}
+                  style={[styles.arGridLineV, { left: `${(i + 1) * 16}%`, opacity: 0.08 }]}
+                />
+              ))}
+            </View>
+
+            <View style={styles.arTokenCenter}>
+              <Animated.View
+                style={[
+                  styles.arPreviewOuter,
+                  {
+                    transform: [{ translateY: floatAnim }],
+                  },
+                ]}
+              >
+                <View style={[styles.arPreviewGlow, { borderColor: typeColor + '50', shadowColor: typeColor }]} />
+                <View style={[styles.arPreviewBody, { backgroundColor: typeColor + '20', borderColor: typeColor }]}>
+                  <Text style={styles.arPreviewIcon}>{legendPreviewType.icon}</Text>
+                </View>
+                {[...Array(8)].map((_, i) => (
+                  <Animated.View
+                    key={i}
+                    style={[
+                      styles.arParticle,
+                      {
+                        backgroundColor: typeColor,
+                        left: 55 + Math.cos((i * Math.PI * 2) / 8) * 70,
+                        top: 55 + Math.sin((i * Math.PI * 2) / 8) * 70,
+                        opacity: shimmerAnim.interpolate({
+                          inputRange: [0, 0.5, 1],
+                          outputRange: [0.2, 0.9, 0.2],
+                        }),
+                      },
+                    ]}
+                  />
+                ))}
+              </Animated.View>
+            </View>
+
+            <SafeAreaView style={styles.arHUD}>
+              <View style={styles.arTopBar}>
+                <TouchableOpacity
+                  style={styles.arCloseBtn}
+                  onPress={() => {
+                    setShowLegendPreview(false);
+                    setLegendPreviewType(null);
+                  }}
+                >
+                  <X size={24} color="#FFF" />
+                </TouchableOpacity>
+                <View style={styles.arTreasureInfo}>
+                  <Text style={styles.arTreasureName}>AR Preview</Text>
+                  <View style={[styles.arRarityBadge, { backgroundColor: typeColor + '30' }]}>
+                    <Text style={[styles.arRarityText, { color: typeColor }]}>{legendPreviewType.label}</Text>
+                  </View>
+                </View>
+                <View style={styles.arRewardInfo}>
+                  <Coins size={16} color="#F59E0B" />
+                  <Text style={styles.arRewardText}>{legendPreviewType.baseReward}</Text>
+                </View>
+              </View>
+
+              <View style={styles.arBottomSection}>
+                <View style={styles.arPreviewInfoCard}>
+                  <View style={styles.arPreviewInfoHeader}>
+                    <Text style={styles.arPreviewInfoEmoji}>{legendPreviewType.icon}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.arPreviewInfoTitle}>{legendPreviewType.label}</Text>
+                      <Text style={styles.arPreviewInfoSub}>Base Reward: {legendPreviewType.baseReward} MUSO</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.arPreviewInfoDesc}>
+                    This is what a {legendPreviewType.label} looks like in AR when you discover it during a treasure hunt. Look for the floating icon near real-world locations!
+                  </Text>
+                </View>
+
+                <View style={styles.arInstructions}>
+                  <ScanLine size={20} color="#FFF" />
+                  <Text style={styles.arInstructionText}>
+                    Move your phone around to see the treasure floating in your environment
+                  </Text>
+                </View>
+              </View>
+            </SafeAreaView>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
   const renderARCamera = () => {
     if (!selectedTreasure) return null;
     const rarity = RARITY_CONFIG[selectedTreasure.rarity];
@@ -931,10 +1121,9 @@ export default function ScavengerHuntScreen() {
     return (
       <Modal visible={showARCamera} animationType="fade" statusBarTranslucent>
         <View style={styles.arContainer}>
-          <LinearGradient
-            colors={['#0a0a1a', '#1a1a3e', '#0d0d2b']}
-            style={styles.arBackground}
-          >
+          {renderCameraBackground()}
+
+          <View style={styles.arOverlay}>
             <View style={styles.arGrid}>
               {Array.from({ length: 8 }).map((_, i) => (
                 <View
@@ -1075,7 +1264,7 @@ export default function ScavengerHuntScreen() {
                 </View>
               </View>
             </SafeAreaView>
-          </LinearGradient>
+          </View>
         </View>
       </Modal>
     );
@@ -1303,6 +1492,7 @@ export default function ScavengerHuntScreen() {
 
       {renderClaimModal()}
       {renderARCamera()}
+      {renderLegendPreviewModal()}
     </SafeAreaView>
   );
 }
@@ -1942,4 +2132,70 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   arAnchorText: { color: '#7DD3FC', fontSize: 11, fontWeight: '600' as const },
+  arOverlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  arPreviewOuter: {
+    width: 160,
+    height: 160,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  arPreviewGlow: {
+    position: 'absolute',
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    borderWidth: 3,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  arPreviewBody: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  arPreviewIcon: {
+    fontSize: 52,
+  },
+  arPreviewInfoCard: {
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+  },
+  arPreviewInfoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 10,
+  },
+  arPreviewInfoEmoji: {
+    fontSize: 36,
+  },
+  arPreviewInfoTitle: {
+    fontSize: 18,
+    fontWeight: '800' as const,
+    color: '#FFF',
+  },
+  arPreviewInfoSub: {
+    fontSize: 13,
+    color: '#BAE6FD',
+    marginTop: 2,
+  },
+  arPreviewInfoDesc: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.75)',
+    lineHeight: 19,
+  },
 });
