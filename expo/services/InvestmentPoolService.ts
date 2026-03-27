@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import {
   InvestmentPoolData,
   PoolContributionData,
@@ -17,6 +17,11 @@ export class InvestmentPoolService {
    */
   static async getOpenPools(): Promise<InvestmentPoolData[]> {
     try {
+      if (!isSupabaseConfigured) {
+        console.log('[InvestmentPoolService] Supabase not configured, returning empty pools');
+        return [];
+      }
+
       const { data, error } = await supabase
         .from('investment_pool')
         .select('*')
@@ -40,6 +45,11 @@ export class InvestmentPoolService {
    */
   static async getPoolsByBusiness(businessId: string): Promise<InvestmentPoolData[]> {
     try {
+      if (!isSupabaseConfigured) {
+        console.log('[InvestmentPoolService] Supabase not configured, returning empty pools');
+        return [];
+      }
+
       const { data, error } = await supabase
         .from('investment_pool')
         .select('*')
@@ -63,6 +73,11 @@ export class InvestmentPoolService {
    */
   static async getUserContributions(userId: string): Promise<PoolContributionData[]> {
     try {
+      if (!isSupabaseConfigured) {
+        console.log('[InvestmentPoolService] Supabase not configured, returning empty contributions');
+        return [];
+      }
+
       if (!isValidUUID(userId)) {
         console.log('[InvestmentPoolService] Skipping database query for non-UUID user:', userId);
         return [];
@@ -93,6 +108,10 @@ export class InvestmentPoolService {
     poolData: Partial<InvestmentPoolData>
   ): Promise<BusinessOperationResult<InvestmentPoolData>> {
     try {
+      if (!isSupabaseConfigured) {
+        return { success: false, error: 'Database not configured', errorCode: 'DATABASE_ERROR' };
+      }
+
       const now = new Date().toISOString();
 
       const { data, error } = await supabase
@@ -152,6 +171,10 @@ export class InvestmentPoolService {
     amount: number
   ): Promise<BusinessOperationResult<PoolContributionData>> {
     try {
+      if (!isSupabaseConfigured) {
+        return { success: false, error: 'Database not configured', errorCode: 'DATABASE_ERROR' };
+      }
+
       // Get pool details
       const { data: pool, error: poolError } = await supabase
         .from('investment_pool')
@@ -268,6 +291,11 @@ export class InvestmentPoolService {
    */
   static async getPoolDetails(poolId: string): Promise<InvestmentPoolData | null> {
     try {
+      if (!isSupabaseConfigured) {
+        console.log('[InvestmentPoolService] Supabase not configured, returning null');
+        return null;
+      }
+
       const { data, error } = await supabase
         .from('investment_pool')
         .select(`
@@ -301,6 +329,8 @@ export class InvestmentPoolService {
    */
   static async closePool(poolId: string): Promise<boolean> {
     try {
+      if (!isSupabaseConfigured) return false;
+
       const { error } = await supabase
         .from('investment_pool')
         .update({
@@ -330,6 +360,8 @@ export class InvestmentPoolService {
     totalReturnAmount: number
   ): Promise<boolean> {
     try {
+      if (!isSupabaseConfigured) return false;
+
       // Get all active contributions
       const { data: contributions, error } = await supabase
         .from('pool_contributions')
