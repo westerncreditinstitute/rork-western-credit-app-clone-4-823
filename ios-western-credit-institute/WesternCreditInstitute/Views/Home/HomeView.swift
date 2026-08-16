@@ -10,6 +10,7 @@ struct HomeView: View {
     @Environment(AppStore.self) private var store
 
     @Binding var selectedTab: AppTab
+    @Binding var showGame: Bool
 
     @State private var selectedVideoIndex: Int = 0
     @State private var showNotifications = false
@@ -42,6 +43,7 @@ struct HomeView: View {
         ScrollView {
             VStack(spacing: Spacing.lg) {
                 header
+                gameLauncherCard
                 quickActionGrid
                 featuredSection
                 if !store.enrolledCourses.isEmpty { continueLearningSection }
@@ -254,6 +256,56 @@ struct HomeView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: - Game launcher
+
+    private var gameLauncherCard: some View {
+        Button {
+            Haptics.medium()
+            showGame = true
+        } label: {
+            HStack(spacing: Spacing.md) {
+                Image(systemName: "gamecontroller.fill")
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 52, height: 52)
+                    .background(Color.white.opacity(0.2))
+                    .clipShape(.rect(cornerRadius: Radius.md))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Credit Life Simulator")
+                        .font(.system(size: 17, weight: .heavy))
+                        .foregroundStyle(.white)
+                    Text("Play the game • Build credit • Earn MUSO tokens")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.75))
+                }
+
+                Spacer(minLength: 0)
+
+                Image(systemName: "play.fill")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(Color(hex: "#001F42"))
+                    .frame(width: 36, height: 36)
+                    .background(.white)
+                    .clipShape(.circle)
+            }
+            .padding(Spacing.md)
+            .background(
+                LinearGradient(
+                    colors: [Color(hex: "#002B5C"), Color(hex: "#10B981")],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .clipShape(.rect(cornerRadius: Radius.lg))
+            .shadow(color: Color(hex: "#002B5C").opacity(0.3), radius: 12, y: 5)
+        }
+        .buttonStyle(PressableButtonStyle())
+        .padding(.horizontal, Spacing.md)
+        .opacity(appeared ? 1 : 0)
+        .offset(y: appeared ? 0 : 20)
     }
 
     // MARK: - Quick actions

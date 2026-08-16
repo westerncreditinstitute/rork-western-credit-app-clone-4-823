@@ -15,6 +15,14 @@ struct ProfileView: View {
     @State private var showPlans = false
     @State private var showSignOutConfirmation = false
     @State private var showLegal: LegalDocument?
+    @State private var showCertificates = false
+    @State private var showPersonalInfo = false
+    @State private var showPaymentMethods = false
+    @State private var showDisputeAssistant = false
+    @State private var showCreditCoach = false
+    @State private var showLawsuitAssistant = false
+    @State private var showDisputeTracker = false
+    @State private var showChallenges = false
 
     var body: some View {
         let colors = theme.colors
@@ -26,6 +34,7 @@ struct ProfileView: View {
                 subscriptionCard
                 appearanceSection
                 accountSection
+                aiToolsSection
                 supportSection
                 legalSection
                 signOutButton
@@ -41,6 +50,14 @@ struct ProfileView: View {
         .sheet(item: $showLegal) { document in
             LegalDocumentView(document: document)
         }
+        .sheet(isPresented: $showCertificates) { NavigationStack { CertificatesView() } }
+        .sheet(isPresented: $showPersonalInfo) { NavigationStack { PersonalInfoView() } }
+        .sheet(isPresented: $showPaymentMethods) { NavigationStack { PaymentMethodsView() } }
+        .sheet(isPresented: $showDisputeAssistant) { NavigationStack { AIDisputeAssistantView() } }
+        .sheet(isPresented: $showCreditCoach) { AICreditCoachView() }
+        .sheet(isPresented: $showLawsuitAssistant) { NavigationStack { LawsuitAssistantView() } }
+        .sheet(isPresented: $showDisputeTracker) { NavigationStack { DisputeTrackerView() } }
+        .sheet(isPresented: $showChallenges) { NavigationStack { ChallengesView() } }
         .confirmationDialog("Sign out of your account?", isPresented: $showSignOutConfirmation, titleVisibility: .visible) {
             Button("Sign Out", role: .destructive) {
                 Haptics.warning()
@@ -226,20 +243,56 @@ struct ProfileView: View {
 
             CardView(padding: 0) {
                 VStack(spacing: 0) {
-                    menuRow(symbol: "person.fill", tint: theme.colors.primary, title: "My Courses", subtitle: "\(store.enrolledCourses.count) enrolled") {
-                        selectedTab = .courses
+                    menuRow(symbol: "person.fill", tint: theme.colors.primary, title: "Personal Info", subtitle: "Edit your details") {
+                        showPersonalInfo = true
                     }
                     rowDivider
                     menuRow(symbol: "rosette", tint: Color(hex: "#F59E0B"), title: "Certificates", subtitle: "\(store.certificateCount) earned") {
+                        showCertificates = true
+                    }
+                    rowDivider
+                    menuRow(symbol: "creditcard.fill", tint: theme.colors.secondary, title: "Payment Methods", subtitle: "Manage cards & banks") {
+                        showPaymentMethods = true
+                    }
+                    rowDivider
+                    menuRow(symbol: "doc.text.fill", tint: theme.colors.info, title: "Dispute Tracker", subtitle: "Track credit disputes") {
+                        showDisputeTracker = true
+                    }
+                    rowDivider
+                    menuRow(symbol: "trophy.fill", tint: Color(hex: "#8B5CF6"), title: "Challenges", subtitle: "Earn rewards") {
+                        showChallenges = true
+                    }
+                    rowDivider
+                    menuRow(symbol: "book.fill", tint: theme.colors.primary, title: "My Courses", subtitle: "\(store.enrolledCourses.count) enrolled") {
                         selectedTab = .courses
                     }
                     rowDivider
                     menuRow(symbol: "wallet.pass.fill", tint: theme.colors.secondary, title: "Wallet", subtitle: Format.currency(store.wallet.availableBalance)) {
                         selectedTab = .wallet
                     }
+                }
+            }
+        }
+    }
+
+    // MARK: - AI Tools
+
+    private var aiToolsSection: some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            SectionHeader(title: "AI Tools", symbol: "sparkles", symbolTint: theme.colors.accent)
+
+            CardView(padding: 0) {
+                VStack(spacing: 0) {
+                    menuRow(symbol: "doc.text.magnifyingglass.fill", tint: theme.colors.info, title: "AI Dispute Assistant", subtitle: "Generate dispute letters") {
+                        showDisputeAssistant = true
+                    }
                     rowDivider
-                    menuRow(symbol: "person.2.fill", tint: theme.colors.info, title: "Referrals", subtitle: "\(store.user.referrals) active") {
-                        selectedTab = .earnings
+                    menuRow(symbol: "person.wave.2.fill", tint: theme.colors.accent, title: "AI Credit Coach", subtitle: "Interactive avatar coach") {
+                        showCreditCoach = true
+                    }
+                    rowDivider
+                    menuRow(symbol: "scale.3d.fill", tint: theme.colors.error, title: "Lawsuit Assistant", subtitle: "Check violation grounds") {
+                        showLawsuitAssistant = true
                     }
                 }
             }

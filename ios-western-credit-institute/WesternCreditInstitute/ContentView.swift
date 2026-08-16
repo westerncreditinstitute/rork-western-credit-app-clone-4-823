@@ -10,11 +10,13 @@ struct ContentView: View {
 
     @State private var theme = ThemeManager()
     @State private var store = AppStore()
+    @State private var gameStore = GameStore()
 
     var body: some View {
         RootTabView()
             .environment(theme)
             .environment(store)
+            .environment(gameStore)
             .preferredColorScheme(theme.preferredColorScheme)
             .onAppear { theme.systemIsDark = colorScheme == .dark }
             .onChange(of: colorScheme) { _, newValue in

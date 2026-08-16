@@ -12,6 +12,7 @@ struct RootTabView: View {
     @Environment(AppStore.self) private var store
 
     @State private var selection: AppTab = .home
+    @State private var showGame = false
 
     var body: some View {
         let colors = theme.colors
@@ -22,7 +23,7 @@ struct RootTabView: View {
             Group {
                 switch selection {
                 case .home:
-                    navigationStack { HomeView(selectedTab: $selection) }
+                    navigationStack { HomeView(selectedTab: $selection, showGame: $showGame) }
                 case .courses:
                     navigationStack { CoursesView() }
                 case .wallet:
@@ -38,6 +39,29 @@ struct RootTabView: View {
                 }
             }
             .transition(.opacity)
+
+            // Full-screen cover for the Credit Life Simulator game module.
+            Color.clear
+                .fullScreenCover(isPresented: $showGame) {
+                    NavigationStack {
+                        GameHomeView()
+                            .navigationBarTitleDisplayMode(.inline)
+                            .toolbar {
+                                ToolbarItem(placement: .topBarLeading) {
+                                    Button { showGame = false } label: {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "chevron.left")
+                                            Text("Back")
+                                        }
+                                        .font(.system(size: 16, weight: .semibold))
+                                        .foregroundStyle(theme.colors.primary)
+                                    }
+                                }
+                            }
+
+                    }
+                    .tint(theme.colors.primary)
+                }
 
             AppTabBar(
                 selection: $selection,
@@ -60,6 +84,9 @@ struct RootTabView: View {
                 }
                 .navigationDestination(for: CSOProvider.self) { provider in
                     ProviderDetailView(provider: provider)
+                }
+                .navigationDestination(for: GameRoute.self) { route in
+                    GameRouteView(route: route)
                 }
                 .toolbar {
                     ToolbarItem(placement: .principal) {
