@@ -4,6 +4,12 @@
       "name": "Expo",
       "path": "expo",
       "framework": "react-native"
+    },
+    {
+      "name": "Western Credit Institute",
+      "path": "ios-western-credit-institute",
+      "framework": "swift"
     }
-  ]
+  ],
+  "$schema": "https://rork.com/schema/rork.json"
 }
