@@ -11,7 +11,7 @@ import {
 import { X, Video, Cloud, Check, Download, ChevronRight, AlertCircle } from "lucide-react-native";
 import Colors from "@/constants/colors";
 import { BunnyVideo, CloudflareVideo, VideoProvider, ConnectionStatus } from "@/types/admin";
-import { trpc, checkApiReachable } from "@/lib/trpc";
+import { trpc, warmUpApi } from "@/lib/trpc";
 
 /** How many times a single video import is retried before giving up. */
 const MAX_IMPORT_ATTEMPTS = 3;
@@ -223,13 +223,10 @@ export default function BulkImportModal({
     setImportProgress(null);
 
     try {
-      // Fail fast with a clear message rather than a cryptic "Failed to fetch"
-      // once we are already halfway through the batch.
-      const health = await checkApiReachable();
-      if (!health.ok) {
-        Alert.alert("Server Unavailable", health.message ?? "Cannot reach the server.");
-        return;
-      }
+      // Wake a sleeping backend before the batch so the first video doesn't
+      // burn its retries on a cold start. Advisory only - the import always
+      // proceeds, and each video retries individually if the server is slow.
+      await warmUpApi(3);
 
       const selected: (BunnyVideo | CloudflareVideo)[] = isBunny
         ? (bunnyVideosQuery.data?.videos ?? []).filter((v: BunnyVideo) =>

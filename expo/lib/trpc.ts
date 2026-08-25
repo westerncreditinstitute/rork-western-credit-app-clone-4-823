@@ -63,10 +63,10 @@ const fetchWithRetry = async (
 ): Promise<Response> => {
   const isMutation = (init?.method ?? "GET").toUpperCase() === "POST";
 
-  // Mutations get fewer attempts than reads: a retried write that actually
-  // landed server-side could duplicate data, so callers de-duplicate instead.
-  const maxAttempts = isMutation ? 3 : 4;
-  const baseDelay = 600;
+  // The dev backend sleeps and answers with an instant edge-level 503 until the
+  // instance wakes, so give every request enough attempts to outlast a cold start.
+  const maxAttempts = isMutation ? 5 : 5;
+  const baseDelay = 700;
   // Writes (video imports, saves) need a longer ceiling than quick reads.
   const timeout = isMutation ? 45000 : 20000;
 
@@ -173,23 +173,45 @@ export async function checkApiReachable(): Promise<{ ok: boolean; message?: stri
     return { ok: false, message: "API base URL is not configured." };
   }
 
+  // Note: the health route is "/api" with NO trailing slash - "/api/" is a 404.
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort("Timeout"), 12000);
 
   try {
-    const response = await fetch(`${baseUrl}/api/`, { signal: controller.signal });
+    const response = await fetch(`${baseUrl}/api`, { signal: controller.signal });
     clearTimeout(timeoutId);
 
-    if (response.ok) return { ok: true };
+    // Any HTTP answer at all proves the server is reachable. Only the edge-level
+    // 5xx family means the app instance is asleep or genuinely down - a 404 or
+    // other 4xx still means something answered, so never report that as offline.
     if (RETRYABLE_STATUSES.has(response.status)) {
       return { ok: false, message: SERVER_WAKING_MESSAGE };
     }
-    return { ok: false, message: `Server responded with status ${response.status}.` };
+    return { ok: true };
   } catch (error) {
     clearTimeout(timeoutId);
     console.log("[tRPC] Health check failed:", error);
     return { ok: false, message: OFFLINE_MESSAGE };
   }
+}
+
+/**
+ * Pings the API until the sleeping dev instance wakes up. Used before a batch
+ * of writes so the first real request doesn't burn its retries on a cold start.
+ * Never throws and never blocks the caller from proceeding.
+ */
+export async function warmUpApi(maxAttempts: number = 4): Promise<boolean> {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const result = await checkApiReachable();
+    if (result.ok) return true;
+
+    if (attempt < maxAttempts) {
+      const delay = Math.min(1000 * attempt, 4000);
+      console.log(`[tRPC] Warming up API, retry ${attempt}/${maxAttempts} in ${delay}ms`);
+      await sleep(delay);
+    }
+  }
+  return false;
 }
 
 export const trpcClient = trpc.createClient({

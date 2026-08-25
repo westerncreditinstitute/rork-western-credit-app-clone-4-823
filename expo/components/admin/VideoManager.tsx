@@ -11,7 +11,7 @@ import {
 import { Plus, Save, X, Download } from "lucide-react-native";
 import Colors from "@/constants/colors";
 import { VideoForm, initialVideoForm } from "@/types/admin";
-import { trpc, checkApiReachable } from "@/lib/trpc";
+import { trpc, warmUpApi } from "@/lib/trpc";
 import VideoCard from "@/components/admin/VideoCard";
 
 /** Bunny Stream video GUIDs look like a1b2c3d4-e5f6-7890-abcd-ef1234567890. */
@@ -139,12 +139,10 @@ export default function VideoManager({
       return;
     }
 
-    // Surface an unreachable server up front instead of a raw fetch failure.
-    const health = await checkApiReachable();
-    if (!health.ok) {
-      Alert.alert("Server Unavailable", health.message ?? "Cannot reach the server.");
-      return;
-    }
+    // Wake a sleeping backend so the save doesn't burn its retries on a cold
+    // start. Advisory only - the save is always attempted regardless of the
+    // result, because the mutation itself is the real source of truth.
+    await warmUpApi(2);
 
     const payload = {
       title,
