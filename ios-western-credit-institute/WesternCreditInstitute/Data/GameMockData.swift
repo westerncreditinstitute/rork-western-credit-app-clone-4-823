@@ -183,20 +183,20 @@ nonisolated enum GameMockData {
     // MARK: - Community Members
 
     static let communityMembers: [CommunityMember] = [
-        CommunityMember(id: "cm_01", name: "Sarah Johnson", avatarURL: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&h=200&fit=crop&crop=face", level: 25, creditScore: 812, netWorth: 450000, joinedDate: "Jan 2024", achievements: 8),
-        CommunityMember(id: "cm_02", name: "Mike Chen", avatarURL: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop&crop=face", level: 18, creditScore: 745, netWorth: 180000, joinedDate: "Mar 2024", achievements: 5),
-        CommunityMember(id: "cm_03", name: "Emily Davis", avatarURL: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=200&h=200&fit=crop&crop=face", level: 32, creditScore: 840, netWorth: 750000, joinedDate: "Nov 2023", achievements: 10),
-        CommunityMember(id: "cm_04", name: "James Wilson", avatarURL: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop&crop=face", level: 12, creditScore: 680, netWorth: 85000, joinedDate: "Jun 2024", achievements: 3),
-        CommunityMember(id: "cm_05", name: "Lisa Garcia", avatarURL: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop&crop=face", level: 28, creditScore: 790, netWorth: 320000, joinedDate: "Feb 2024", achievements: 7),
+        CommunityMember(id: "cm_01", name: "Sarah Johnson", avatarURL: "https://images.unsplash.com/photo-1544723795-3fb6469f5b39?w=200&h=200&fit=crop&crop=face", level: 25, creditScore: 812, netWorth: 450000, joinedDate: "Jan 2024", achievements: 8),
+        CommunityMember(id: "cm_02", name: "Mike Chen", avatarURL: "https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?w=200&h=200&fit=crop&crop=face", level: 18, creditScore: 745, netWorth: 180000, joinedDate: "Mar 2024", achievements: 5),
+        CommunityMember(id: "cm_03", name: "Emily Davis", avatarURL: "https://images.unsplash.com/photo-1521119989659-a83eee488004?w=200&h=200&fit=crop&crop=face", level: 32, creditScore: 840, netWorth: 750000, joinedDate: "Nov 2023", achievements: 10),
+        CommunityMember(id: "cm_04", name: "Jamal Wright", avatarURL: "https://images.unsplash.com/photo-1508243529287-e21914733111?w=200&h=200&fit=crop&crop=face", level: 12, creditScore: 680, netWorth: 85000, joinedDate: "Jun 2024", achievements: 3),
+        CommunityMember(id: "cm_05", name: "Lisa Garcia", avatarURL: "https://images.unsplash.com/photo-1556157382-97eda2d62296?w=200&h=200&fit=crop&crop=face", level: 28, creditScore: 790, netWorth: 320000, joinedDate: "Feb 2024", achievements: 7),
     ]
 
     // MARK: - Social Feed
 
     static let socialPosts: [SocialPost] = [
-        SocialPost(id: "sp_01", authorName: "Sarah Johnson", authorAvatarURL: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&h=200&fit=crop&crop=face", content: "Just hit 812 credit score! The Credit Life Simulator really helped me understand how payment history impacts everything. 🎉", timestamp: Date().addingTimeInterval(-3600), likes: 42, comments: 8, tag: "Achievement"),
-        SocialPost(id: "sp_02", authorName: "Mike Chen", authorAvatarURL: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop&crop=face", content: "Bought my first property in the simulator! Now I understand how credit score affects mortgage rates. Learning so much!", timestamp: Date().addingTimeInterval(-7200), likes: 28, comments: 5, tag: "Real Estate"),
-        SocialPost(id: "sp_03", authorName: "Emily Davis", authorAvatarURL: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=200&h=200&fit=crop&crop=face", content: "Started my own business in the game and it's actually profitable! The budget management tips are gold.", timestamp: Date().addingTimeInterval(-14400), likes: 55, comments: 12, tag: "Business"),
-        SocialPost(id: "sp_04", authorName: "James Wilson", authorAvatarURL: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop&crop=face", content: "Anyone else struggling with keeping credit utilization below 30%? The simulator makes it so clear how much this matters.", timestamp: Date().addingTimeInterval(-86400), likes: 18, comments: 7, tag: "Credit Tip"),
+        SocialPost(id: "sp_01", authorName: "Sarah Johnson", authorAvatarURL: "https://images.unsplash.com/photo-1544723795-3fb6469f5b39?w=200&h=200&fit=crop&crop=face", content: "Just hit 812 credit score! The Credit Life Simulator really helped me understand how payment history impacts everything. 🎉", timestamp: Date().addingTimeInterval(-3600), likes: 42, comments: 8, tag: "Achievement"),
+        SocialPost(id: "sp_02", authorName: "Mike Chen", authorAvatarURL: "https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?w=200&h=200&fit=crop&crop=face", content: "Bought my first property in the simulator! Now I understand how credit score affects mortgage rates. Learning so much!", timestamp: Date().addingTimeInterval(-7200), likes: 28, comments: 5, tag: "Real Estate"),
+        SocialPost(id: "sp_03", authorName: "Emily Davis", authorAvatarURL: "https://images.unsplash.com/photo-1521119989659-a83eee488004?w=200&h=200&fit=crop&crop=face", content: "Started my own business in the game and it's actually profitable! The budget management tips are gold.", timestamp: Date().addingTimeInterval(-14400), likes: 55, comments: 12, tag: "Business"),
+        SocialPost(id: "sp_04", authorName: "Jamal Wright", authorAvatarURL: "https://images.unsplash.com/photo-1508243529287-e21914733111?w=200&h=200&fit=crop&crop=face", content: "Anyone else struggling with keeping credit utilization below 30%? The simulator makes it so clear how much this matters.", timestamp: Date().addingTimeInterval(-86400), likes: 18, comments: 7, tag: "Credit Tip"),
     ]
 
     // MARK: - Financial Incidents

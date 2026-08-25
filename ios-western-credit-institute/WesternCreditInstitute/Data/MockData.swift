@@ -381,6 +381,402 @@ nonisolated enum MockData {
             yearsExperience: 9, location: "Phoenix, AZ", rating: 4.8, reviewCount: 67,
             consultationFee: 99.99, isAvailable: true, certifiedAt: "2021"
         ),
+        CSOProvider(
+            id: "cso-007", userId: "user-007", name: "James Wilson",
+            email: "james.wilson@seattlecredit.com", phone: "(206) 555-0147",
+            avatarURL: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=200&h=200&fit=crop&crop=face",
+            bio: "Tech industry professional turned credit consultant. I understand the unique financial challenges facing tech workers with stock options, RSUs, and variable income. Let me help you maximize your credit potential.",
+            specialties: ["Credit Building", "Business Credit", "Credit Repair"],
+            yearsExperience: 7, location: "Seattle, WA", rating: 4.7, reviewCount: 54,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2022"
+        ),
+        CSOProvider(
+            id: "cso-008", userId: "user-008", name: "Angela Martinez",
+            email: "angela.martinez@miamicredit.com", phone: "(305) 555-0258",
+            avatarURL: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=200&h=200&fit=crop&crop=face",
+            bio: "Serving South Florida's diverse community with bilingual credit repair services. I specialize in helping first-time homebuyers achieve mortgage-ready credit scores. Your dream home is closer than you think!",
+            specialties: ["Credit Repair", "Credit Building", "Debt Settlement"],
+            yearsExperience: 11, location: "Miami, FL", rating: 4.9, reviewCount: 103,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2020"
+        ),
+        CSOProvider(
+            id: "cso-009", userId: "user-009", name: "William Brown",
+            email: "william.brown@denvercredit.com", phone: "(303) 555-0369",
+            avatarURL: "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=200&h=200&fit=crop&crop=face",
+            bio: "Colorado's leading expert in student loan credit issues. I've helped thousands of graduates navigate the complex world of student debt while building strong credit foundations for their futures.",
+            specialties: ["Student Loans", "Credit Building", "Credit Repair"],
+            yearsExperience: 13, location: "Denver, CO", rating: 4.5, reviewCount: 82,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2019"
+        ),
+        CSOProvider(
+            id: "cso-010", userId: "user-010", name: "Patricia Taylor",
+            email: "patricia.taylor@bostoncredit.com", phone: "(617) 555-0471",
+            avatarURL: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=200&h=200&fit=crop&crop=face",
+            bio: "Harvard-educated financial advisor specializing in comprehensive credit management for high-net-worth individuals. Discreet, professional service focused on protecting and enhancing your financial reputation.",
+            specialties: ["Business Credit", "Credit Building", "Identity Theft"],
+            yearsExperience: 16, location: "Boston, MA", rating: 4.8, reviewCount: 71,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2018"
+        ),
+        CSOProvider(
+            id: "cso-011", userId: "user-011", name: "Christopher Lee",
+            email: "christopher.lee@lasvegascredit.com", phone: "(702) 555-0582",
+            avatarURL: "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=200&h=200&fit=crop&crop=face",
+            bio: "Helping Las Vegas residents recover from financial setbacks. Whether it's gaming debt, job loss, or other challenges, I provide judgment-free credit repair services tailored to your unique situation.",
+            specialties: ["Debt Settlement", "Bankruptcy Recovery", "Credit Repair"],
+            yearsExperience: 6, location: "Las Vegas, NV", rating: 4.6, reviewCount: 48,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2023"
+        ),
+        CSOProvider(
+            id: "cso-012", userId: "user-012", name: "Lisa Anderson",
+            email: "lisa.anderson@nashvillecredit.com", phone: "(615) 555-0693",
+            avatarURL: "https://images.unsplash.com/photo-1580489944761-15a19d654956?w=200&h=200&fit=crop&crop=face",
+            bio: "Nashville's trusted credit repair expert with a heart for helping families achieve their dreams. Specializing in first-time homebuyer preparation and debt management strategies that work.",
+            specialties: ["Credit Repair", "Debt Settlement", "Credit Building"],
+            yearsExperience: 10, location: "Nashville, TN", rating: 4.9, reviewCount: 95,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2021"
+        ),
+        CSOProvider(
+            id: "cso-013", userId: "user-013", name: "Michael Johnson",
+            email: "michael.johnson@detroitcredit.com", phone: "(313) 555-0804",
+            avatarURL: "https://images.unsplash.com/photo-1463453091185-61582044d556?w=200&h=200&fit=crop&crop=face",
+            bio: "Proudly serving Detroit and the greater Michigan area. I believe everyone deserves a second chance at good credit. Affordable rates and flexible payment plans available for all my services.",
+            specialties: ["Credit Repair", "Bankruptcy Recovery", "Debt Settlement"],
+            yearsExperience: 8, location: "Detroit, MI", rating: 4.4, reviewCount: 62,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2022"
+        ),
+        CSOProvider(
+            id: "cso-014", userId: "user-014", name: "Sarah White",
+            email: "sarah.white@portlandcredit.com", phone: "(503) 555-0915",
+            avatarURL: "https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?w=200&h=200&fit=crop&crop=face",
+            bio: "Portland's eco-conscious credit consultant. I help clients build sustainable financial habits alongside their credit scores. Specializing in helping small business owners and freelancers establish credit.",
+            specialties: ["Business Credit", "Credit Building", "Credit Repair"],
+            yearsExperience: 5, location: "Portland, OR", rating: 4.7, reviewCount: 41,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2023"
+        ),
+        CSOProvider(
+            id: "cso-015", userId: "user-015", name: "Daniel Harris",
+            email: "daniel.harris@houstoncredit.com", phone: "(713) 555-1026",
+            avatarURL: "https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=200&h=200&fit=crop&crop=face",
+            bio: "Houston's oil and gas industry credit specialist. I understand the unique boom-and-bust nature of energy sector employment and help workers maintain stable credit through economic cycles.",
+            specialties: ["Credit Repair", "Debt Settlement", "Credit Building"],
+            yearsExperience: 12, location: "Houston, TX", rating: 4.8, reviewCount: 88,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2020"
+        ),
+        CSOProvider(
+            id: "cso-016", userId: "user-016", name: "Emily Clark",
+            email: "emily.clark@philadelphiacredit.com", phone: "(215) 555-1137",
+            avatarURL: "https://images.unsplash.com/photo-1489424731084-a5d8b219a5bb?w=200&h=200&fit=crop&crop=face",
+            bio: "Dedicated to helping Philadelphia families build generational wealth through strong credit. I offer comprehensive credit education alongside repair services to ensure lasting results.",
+            specialties: ["Credit Building", "Credit Repair", "Student Loans"],
+            yearsExperience: 9, location: "Philadelphia, PA", rating: 4.6, reviewCount: 73,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2021"
+        ),
+        CSOProvider(
+            id: "cso-017", userId: "user-017", name: "Kevin Moore",
+            email: "kevin.moore@sandiegocredit.com", phone: "(619) 555-1248",
+            avatarURL: "https://images.unsplash.com/photo-1507591064344-4c6ce005b128?w=200&h=200&fit=crop&crop=face",
+            bio: "Military veteran helping fellow service members and their families navigate credit challenges. Specializing in deployment-related credit issues and VA loan preparation.",
+            specialties: ["Credit Repair", "Credit Building", "Identity Theft"],
+            yearsExperience: 7, location: "San Diego, CA", rating: 4.9, reviewCount: 59,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2022"
+        ),
+        CSOProvider(
+            id: "cso-018", userId: "user-018", name: "Amanda Lewis",
+            email: "amanda.lewis@minneapoliscredit.com", phone: "(612) 555-1359",
+            avatarURL: "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=200&h=200&fit=crop&crop=face",
+            bio: "Minnesota's cold weather doesn't slow down my dedication to helping clients achieve hot credit scores! Expert in medical debt removal and healthcare-related credit issues.",
+            specialties: ["Debt Settlement", "Credit Repair", "Credit Building"],
+            yearsExperience: 11, location: "Minneapolis, MN", rating: 4.7, reviewCount: 66,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2020"
+        ),
+        CSOProvider(
+            id: "cso-019", userId: "user-019", name: "Brian Scott",
+            email: "brian.scott@charlottecredit.com", phone: "(704) 555-1460",
+            avatarURL: "https://images.unsplash.com/photo-1504257432389-52343af06ae3?w=200&h=200&fit=crop&crop=face",
+            bio: "Charlotte banking hub insider turned consumer advocate. With experience from both sides of the industry, I know exactly what it takes to get creditors to listen and take action.",
+            specialties: ["Credit Repair", "Business Credit", "Debt Settlement"],
+            yearsExperience: 14, location: "Charlotte, NC", rating: 4.8, reviewCount: 91,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2019"
+        ),
+        CSOProvider(
+            id: "cso-020", userId: "user-020", name: "Rachel Green",
+            email: "rachel.green@austincredit.com", phone: "(512) 555-1571",
+            avatarURL: "https://images.unsplash.com/photo-1546961342-ea5f71b193f3?w=200&h=200&fit=crop&crop=face",
+            bio: "Keep Austin weird, but keep your credit score high! I help Austin's creative community—artists, musicians, and entrepreneurs—build the credit they need to pursue their passions.",
+            specialties: ["Business Credit", "Credit Building", "Credit Repair"],
+            yearsExperience: 6, location: "Austin, TX", rating: 4.5, reviewCount: 52,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2023"
+        ),
+        CSOProvider(
+            id: "cso-021", userId: "user-021", name: "Terrence Washington",
+            email: "terrence.washington@baltcredit.com", phone: "(410) 555-2001",
+            avatarURL: "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=200&h=200&fit=crop&crop=face",
+            bio: "Baltimore native dedicated to rebuilding credit in my community. Specializing in helping working families overcome financial obstacles and achieve homeownership dreams.",
+            specialties: ["Credit Repair", "Debt Settlement", "Credit Building"],
+            yearsExperience: 9, location: "Baltimore, MD", rating: 4.7, reviewCount: 68,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2021"
+        ),
+        CSOProvider(
+            id: "cso-022", userId: "user-022", name: "Kristina Novak",
+            email: "kristina.novak@clevelcredit.com", phone: "(216) 555-2002",
+            avatarURL: "https://images.unsplash.com/photo-1598550874175-4d0ef436c909?w=200&h=200&fit=crop&crop=face",
+            bio: "Cleveland's go-to credit expert for medical debt and healthcare-related credit issues. Former hospital billing manager now fighting for patients' credit rights.",
+            specialties: ["Debt Settlement", "Credit Repair", "Identity Theft"],
+            yearsExperience: 11, location: "Cleveland, OH", rating: 4.8, reviewCount: 84,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2020"
+        ),
+        CSOProvider(
+            id: "cso-023", userId: "user-023", name: "Andre Coleman",
+            email: "andre.coleman@memphiscredit.com", phone: "(901) 555-2003",
+            avatarURL: "https://images.unsplash.com/photo-1542909168-82c3e7fdca5c?w=200&h=200&fit=crop&crop=face",
+            bio: "Memphis soul with financial wisdom. I help families across Tennessee build credit legacies that last generations. Specializing in first-time homebuyer preparation.",
+            specialties: ["Credit Building", "Credit Repair", "Student Loans"],
+            yearsExperience: 8, location: "Memphis, TN", rating: 4.6, reviewCount: 57,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2022"
+        ),
+        CSOProvider(
+            id: "cso-024", userId: "user-024", name: "Priya Sharma",
+            email: "priya.sharma@sanjosecredit.com", phone: "(408) 555-2004",
+            avatarURL: "https://images.unsplash.com/photo-1593104547489-5cfb3839a3b5?w=200&h=200&fit=crop&crop=face",
+            bio: "Silicon Valley credit specialist helping tech professionals maximize their financial potential. Expert in stock compensation, startup equity, and business credit building.",
+            specialties: ["Business Credit", "Credit Building", "Credit Repair"],
+            yearsExperience: 7, location: "San Jose, CA", rating: 4.9, reviewCount: 93,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2022"
+        ),
+        CSOProvider(
+            id: "cso-025", userId: "user-025", name: "Antonio Rivera",
+            email: "antonio.rivera@sanantoniocredit.com", phone: "(210) 555-2005",
+            avatarURL: "https://images.unsplash.com/photo-1552058544-f2b08422138a?w=200&h=200&fit=crop&crop=face",
+            bio: "San Antonio's trusted bilingual credit advisor. I serve military families at nearby bases and help them navigate the unique credit challenges of service life.",
+            specialties: ["Credit Repair", "Identity Theft", "Credit Building"],
+            yearsExperience: 10, location: "San Antonio, TX", rating: 4.7, reviewCount: 79,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2021"
+        ),
+        CSOProvider(
+            id: "cso-026", userId: "user-026", name: "Stephanie Brooks",
+            email: "stephanie.brooks@indycredit.com", phone: "(317) 555-2006",
+            avatarURL: "https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?w=200&h=200&fit=crop&crop=face",
+            bio: "Indianapolis credit expert with a passion for helping young professionals build strong financial foundations. Specializing in student loan strategies and first-time credit building.",
+            specialties: ["Student Loans", "Credit Building", "Credit Repair"],
+            yearsExperience: 6, location: "Indianapolis, IN", rating: 4.5, reviewCount: 44,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2023"
+        ),
+        CSOProvider(
+            id: "cso-027", userId: "user-027", name: "Darnell Henderson",
+            email: "darnell.henderson@columbuscredit.com", phone: "(614) 555-2007",
+            avatarURL: "https://images.unsplash.com/photo-1582750433449-648ed127bb54?w=200&h=200&fit=crop&crop=face",
+            bio: "Columbus-based credit repair specialist with deep ties to Ohio's diverse communities. I believe everyone deserves access to quality credit services at fair prices.",
+            specialties: ["Credit Repair", "Debt Settlement", "Bankruptcy Recovery"],
+            yearsExperience: 12, location: "Columbus, OH", rating: 4.8, reviewCount: 91,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2020"
+        ),
+        CSOProvider(
+            id: "cso-028", userId: "user-028", name: "Victoria Huang",
+            email: "victoria.huang@sfcredit.com", phone: "(415) 555-2008",
+            avatarURL: "https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?w=200&h=200&fit=crop&crop=face",
+            bio: "San Francisco financial consultant specializing in helping entrepreneurs and gig economy workers build business credit. Fluent in Mandarin and Cantonese.",
+            specialties: ["Business Credit", "Credit Building", "Credit Repair"],
+            yearsExperience: 9, location: "San Francisco, CA", rating: 4.9, reviewCount: 107,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2021"
+        ),
+        CSOProvider(
+            id: "cso-029", userId: "user-029", name: "Tony Russo",
+            email: "tony.russo@newjerseycredit.com", phone: "(973) 555-2009",
+            avatarURL: "https://images.unsplash.com/photo-1564564321837-a57b7070ac4f?w=200&h=200&fit=crop&crop=face",
+            bio: "Newark's straight-talking credit expert. Former debt collector who now fights for consumers. I know every trick in the book and use them all to help my clients.",
+            specialties: ["Debt Settlement", "Credit Repair", "Identity Theft"],
+            yearsExperience: 15, location: "Newark, NJ", rating: 4.6, reviewCount: 76,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2019"
+        ),
+        CSOProvider(
+            id: "cso-030", userId: "user-030", name: "Latoya Williams",
+            email: "latoya.williams@orlcredit.com", phone: "(407) 555-2010",
+            avatarURL: "https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=200&h=200&fit=crop&crop=face",
+            bio: "Orlando's trusted credit advisor specializing in hospitality and tourism industry workers. I understand seasonal income and help you maintain stable credit year-round.",
+            specialties: ["Credit Repair", "Credit Building", "Debt Settlement"],
+            yearsExperience: 8, location: "Orlando, FL", rating: 4.7, reviewCount: 63,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2022"
+        ),
+        CSOProvider(
+            id: "cso-031", userId: "user-031", name: "Gregory Kim",
+            email: "gregory.kim@hawaiicredit.com", phone: "(808) 555-2011",
+            avatarURL: "https://images.unsplash.com/photo-1566492031773-4f4e44671857?w=200&h=200&fit=crop&crop=face",
+            bio: "Aloha! Hawaii's premier credit specialist helping island residents navigate the unique financial challenges of living in paradise. Expert in military family credit issues.",
+            specialties: ["Credit Repair", "Credit Building", "Identity Theft"],
+            yearsExperience: 11, location: "Honolulu, HI", rating: 4.8, reviewCount: 72,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2020"
+        ),
+        CSOProvider(
+            id: "cso-032", userId: "user-032", name: "Carmen Delgado",
+            email: "carmen.delgado@abqcredit.com", phone: "(505) 555-2012",
+            avatarURL: "https://images.unsplash.com/photo-1551836022-deb4988cc6c0?w=200&h=200&fit=crop&crop=face",
+            bio: "New Mexico's bilingual credit champion. I serve the diverse communities of Albuquerque with culturally sensitive financial guidance and proven credit repair strategies.",
+            specialties: ["Credit Repair", "Debt Settlement", "Credit Building"],
+            yearsExperience: 10, location: "Albuquerque, NM", rating: 4.6, reviewCount: 58,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2021"
+        ),
+        CSOProvider(
+            id: "cso-033", userId: "user-033", name: "Brandon Mitchell",
+            email: "brandon.mitchell@kccredit.com", phone: "(816) 555-2013",
+            avatarURL: "https://images.unsplash.com/photo-1548372290-8d01b6c8e78c?w=200&h=200&fit=crop&crop=face",
+            bio: "Kansas City's hometown credit expert. I help Midwest families build strong credit foundations while staying true to heartland values of honesty and hard work.",
+            specialties: ["Credit Building", "Credit Repair", "Student Loans"],
+            yearsExperience: 7, location: "Kansas City, MO", rating: 4.5, reviewCount: 49,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2022"
+        ),
+        CSOProvider(
+            id: "cso-034", userId: "user-034", name: "Natasha Petrov",
+            email: "natasha.petrov@pittsburghcredit.com", phone: "(412) 555-2014",
+            avatarURL: "https://images.unsplash.com/photo-1589571894960-20bbe2828d0a?w=200&h=200&fit=crop&crop=face",
+            bio: "Steel City strong! Pittsburgh credit specialist helping families transition from traditional industries to new economy opportunities with solid credit foundations.",
+            specialties: ["Credit Repair", "Bankruptcy Recovery", "Debt Settlement"],
+            yearsExperience: 13, location: "Pittsburgh, PA", rating: 4.7, reviewCount: 81,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2020"
+        ),
+        CSOProvider(
+            id: "cso-035", userId: "user-035", name: "Derek Palmer",
+            email: "derek.palmer@raleighcredit.com", phone: "(919) 555-2015",
+            avatarURL: "https://images.unsplash.com/photo-1603415526960-f7e0328c63b1?w=200&h=200&fit=crop&crop=face",
+            bio: "Research Triangle credit expert helping tech workers and academics build business credit. Understanding complex compensation packages is my specialty.",
+            specialties: ["Business Credit", "Credit Building", "Credit Repair"],
+            yearsExperience: 8, location: "Raleigh, NC", rating: 4.8, reviewCount: 67,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2022"
+        ),
+        CSOProvider(
+            id: "cso-036", userId: "user-036", name: "Amara Okonkwo",
+            email: "amara.okonkwo@stlcredit.com", phone: "(314) 555-2016",
+            avatarURL: "https://images.unsplash.com/photo-1607746882042-944635dfe10e?w=200&h=200&fit=crop&crop=face",
+            bio: "St. Louis credit advocate with a mission to close the wealth gap. I provide affordable credit repair services and financial education to underserved communities.",
+            specialties: ["Credit Repair", "Credit Building", "Debt Settlement"],
+            yearsExperience: 9, location: "St. Louis, MO", rating: 4.9, reviewCount: 88,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2021"
+        ),
+        CSOProvider(
+            id: "cso-037", userId: "user-037", name: "Jason Park",
+            email: "jason.park@saltlakecredit.com", phone: "(801) 555-2017",
+            avatarURL: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop&crop=face",
+            bio: "Salt Lake City's trusted credit consultant for growing families. I help young couples prepare for mortgages and build credit for their family's future.",
+            specialties: ["Credit Building", "Credit Repair", "Student Loans"],
+            yearsExperience: 6, location: "Salt Lake City, UT", rating: 4.6, reviewCount: 52,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2023"
+        ),
+        CSOProvider(
+            id: "cso-038", userId: "user-038", name: "Vanessa Torres",
+            email: "vanessa.torres@tampacredit.com", phone: "(813) 555-2018",
+            avatarURL: "https://images.unsplash.com/photo-1558898479-33c0057a5d12?w=200&h=200&fit=crop&crop=face",
+            bio: "Tampa Bay's bilingual credit expert. I specialize in helping small business owners establish business credit and separate personal from business finances.",
+            specialties: ["Business Credit", "Credit Repair", "Credit Building"],
+            yearsExperience: 10, location: "Tampa, FL", rating: 4.7, reviewCount: 74,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2021"
+        ),
+        CSOProvider(
+            id: "cso-039", userId: "user-039", name: "Jerome Brown",
+            email: "jerome.brown@nolacredit.com", phone: "(504) 555-2019",
+            avatarURL: "https://images.unsplash.com/photo-1579038773867-044c48829161?w=200&h=200&fit=crop&crop=face",
+            bio: "New Orleans proud! I help my community rebuild credit after natural disasters and economic hardships. Specializing in insurance claim disputes and recovery.",
+            specialties: ["Credit Repair", "Bankruptcy Recovery", "Debt Settlement"],
+            yearsExperience: 14, location: "New Orleans, LA", rating: 4.8, reviewCount: 96,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2019"
+        ),
+        CSOProvider(
+            id: "cso-040", userId: "user-040", name: "Heather Collins",
+            email: "heather.collins@okccredit.com", phone: "(405) 555-2020",
+            avatarURL: "https://images.unsplash.com/photo-1569913486515-b74bf7751574?w=200&h=200&fit=crop&crop=face",
+            bio: "Oklahoma City credit specialist serving the heartland. I help families affected by energy sector fluctuations maintain stable credit through economic ups and downs.",
+            specialties: ["Credit Repair", "Debt Settlement", "Credit Building"],
+            yearsExperience: 11, location: "Oklahoma City, OK", rating: 4.5, reviewCount: 61,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2020"
+        ),
+        CSOProvider(
+            id: "cso-041", userId: "user-041", name: "Tommy Nguyen",
+            email: "tommy.nguyen@richmondcredit.com", phone: "(804) 555-2021",
+            avatarURL: "https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=200&h=200&fit=crop&crop=face",
+            bio: "Richmond's detail-oriented credit analyst. I take a methodical approach to credit repair, documenting every dispute and following up relentlessly until resolved.",
+            specialties: ["Credit Repair", "Identity Theft", "Credit Building"],
+            yearsExperience: 8, location: "Richmond, VA", rating: 4.7, reviewCount: 59,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2022"
+        ),
+        CSOProvider(
+            id: "cso-042", userId: "user-042", name: "Ashley Morgan",
+            email: "ashley.morgan@louisvillecredit.com", phone: "(502) 555-2022",
+            avatarURL: "https://images.unsplash.com/photo-1567532939604-b6b5b0db2604?w=200&h=200&fit=crop&crop=face",
+            bio: "Louisville's friendly neighborhood credit expert. I make credit repair approachable and understandable for everyone, from college students to retirees.",
+            specialties: ["Credit Building", "Student Loans", "Credit Repair"],
+            yearsExperience: 7, location: "Louisville, KY", rating: 4.6, reviewCount: 53,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2022"
+        ),
+        CSOProvider(
+            id: "cso-043", userId: "user-043", name: "Jonathan Edwards",
+            email: "jonathan.edwards@hartfordcredit.com", phone: "(860) 555-2023",
+            avatarURL: "https://images.unsplash.com/photo-1557862921-37829c790f19?w=200&h=200&fit=crop&crop=face",
+            bio: "Insurance capital expertise! Hartford-based credit specialist with deep knowledge of insurance-related credit issues and claims-based disputes.",
+            specialties: ["Credit Repair", "Identity Theft", "Debt Settlement"],
+            yearsExperience: 12, location: "Hartford, CT", rating: 4.8, reviewCount: 77,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2020"
+        ),
+        CSOProvider(
+            id: "cso-044", userId: "user-044", name: "Nicole Baptiste",
+            email: "nicole.baptiste@providencecredit.com", phone: "(401) 555-2024",
+            avatarURL: "https://images.unsplash.com/photo-1596215143922-eedeaba0d91c?w=200&h=200&fit=crop&crop=face",
+            bio: "Rhode Island's dedicated credit advocate. Small state, big results! I provide personalized attention to every client and fight for maximum credit improvement.",
+            specialties: ["Credit Repair", "Credit Building", "Debt Settlement"],
+            yearsExperience: 9, location: "Providence, RI", rating: 4.9, reviewCount: 69,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2021"
+        ),
+        CSOProvider(
+            id: "cso-045", userId: "user-045", name: "Robert Olsen",
+            email: "robert.olsen@milwaukeecredit.com", phone: "(414) 555-2025",
+            avatarURL: "https://images.unsplash.com/photo-1504593811423-6dd665756598?w=200&h=200&fit=crop&crop=face",
+            bio: "Milwaukee's hardworking credit specialist. I understand blue-collar finances and help working families build credit that opens doors to homeownership.",
+            specialties: ["Credit Repair", "Credit Building", "Bankruptcy Recovery"],
+            yearsExperience: 10, location: "Milwaukee, WI", rating: 4.6, reviewCount: 64,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2021"
+        ),
+        CSOProvider(
+            id: "cso-046", userId: "user-046", name: "Diana Ramirez",
+            email: "diana.ramirez@tuconcredit.com", phone: "(520) 555-2026",
+            avatarURL: "https://images.unsplash.com/photo-1499952127939-9bbf5af6c51c?w=200&h=200&fit=crop&crop=face",
+            bio: "Tucson's bilingual credit expert serving Southern Arizona. I help families navigate cross-border credit challenges and build strong financial foundations.",
+            specialties: ["Credit Repair", "Credit Building", "Debt Settlement"],
+            yearsExperience: 8, location: "Tucson, AZ", rating: 4.7, reviewCount: 56,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2022"
+        ),
+        CSOProvider(
+            id: "cso-047", userId: "user-047", name: "Sean O'Brien",
+            email: "sean.obrien@buffcredit.com", phone: "(716) 555-2027",
+            avatarURL: "https://images.unsplash.com/photo-1618077360395-f3068be8e001?w=200&h=200&fit=crop&crop=face",
+            bio: "Buffalo tough on bad credit! I help Western New York families overcome financial setbacks and build credit that survives economic winters.",
+            specialties: ["Credit Repair", "Bankruptcy Recovery", "Debt Settlement"],
+            yearsExperience: 11, location: "Buffalo, NY", rating: 4.5, reviewCount: 62,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2020"
+        ),
+        CSOProvider(
+            id: "cso-048", userId: "user-048", name: "Jasmine Carter",
+            email: "jasmine.carter@birmcredit.com", phone: "(205) 555-2028",
+            avatarURL: "https://images.unsplash.com/photo-1611432579699-484f7990b127?w=200&h=200&fit=crop&crop=face",
+            bio: "Birmingham's credit champion dedicated to building generational wealth in Alabama communities. I believe financial literacy is the foundation of credit success.",
+            specialties: ["Credit Building", "Credit Repair", "Student Loans"],
+            yearsExperience: 7, location: "Birmingham, AL", rating: 4.8, reviewCount: 71,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2022"
+        ),
+        CSOProvider(
+            id: "cso-049", userId: "user-049", name: "Erik Lindberg",
+            email: "erik.lindberg@boisecredit.com", phone: "(208) 555-2029",
+            avatarURL: "https://images.unsplash.com/photo-1600180758890-6b94519a8ba6?w=200&h=200&fit=crop&crop=face",
+            bio: "Idaho's trusted credit advisor for growing families and businesses. I help newcomers to Boise establish credit in their new home state.",
+            specialties: ["Credit Building", "Business Credit", "Credit Repair"],
+            yearsExperience: 6, location: "Boise, ID", rating: 4.6, reviewCount: 47,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2023"
+        ),
+        CSOProvider(
+            id: "cso-050", userId: "user-050", name: "Sandra Nakamura",
+            email: "sandra.nakamura@anchoragecredit.com", phone: "(907) 555-2030",
+            avatarURL: "https://images.unsplash.com/photo-1614204424926-196a80bf0be8?w=200&h=200&fit=crop&crop=face",
+            bio: "Alaska's premier credit specialist! I help residents navigate the unique financial challenges of frontier living, including seasonal employment and remote work credit issues.",
+            specialties: ["Credit Repair", "Credit Building", "Identity Theft"],
+            yearsExperience: 9, location: "Anchorage, AK", rating: 4.7, reviewCount: 54,
+            consultationFee: 99.99, isAvailable: true, certifiedAt: "2021"
+        ),
     ]
 
     static let reviews: [CSOReview] = [
