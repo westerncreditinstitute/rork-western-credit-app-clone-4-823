@@ -67,6 +67,7 @@ struct RootTabView: View {
                 selection: $selection,
                 badgeCounts: [.home: store.unreadNotificationCount]
             )
+            .padding(.bottom, 4)
         }
         .background(colors.background)
     }
@@ -76,8 +77,8 @@ struct RootTabView: View {
         NavigationStack {
             content()
                 .safeAreaInset(edge: .bottom) {
-                    // Reserve room for the custom tab bar.
-                    Color.clear.frame(height: 58)
+                    // Reserve room for the floating tab bar so content clears it.
+                    Color.clear.frame(height: AppTabBar.pillHeight + 14)
                 }
                 .navigationDestination(for: Course.self) { course in
                     CourseDetailView(course: course)
