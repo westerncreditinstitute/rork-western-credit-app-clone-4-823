@@ -11,8 +11,18 @@ import {
 import { Plus, Save, X, Download } from "lucide-react-native";
 import Colors from "@/constants/colors";
 import { VideoForm, initialVideoForm } from "@/types/admin";
-import { trpc } from "@/lib/trpc";
+import { trpc, checkApiReachable } from "@/lib/trpc";
 import VideoCard from "@/components/admin/VideoCard";
+
+/** Bunny Stream video GUIDs look like a1b2c3d4-e5f6-7890-abcd-ef1234567890. */
+const GUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Pulls a Bunny library + video id out of a pasted embed/iframe URL. */
+function parseBunnyEmbed(value: string): { libraryId: string; videoId: string } | null {
+  const match = value.match(/mediadelivery\.net\/(?:embed|play)\/(\d+)\/([0-9a-f-]{36})/i);
+  if (!match) return null;
+  return { libraryId: match[1], videoId: match[2] };
+}
 
 interface VideoManagerProps {
   selectedCourseId: string;
@@ -50,7 +60,7 @@ export default function VideoManager({
       Alert.alert("Success", "Video added successfully");
     },
     onError: (error) => {
-      Alert.alert("Error", error.message);
+      Alert.alert("Could Not Save Video", error.message);
     },
   });
 
@@ -62,7 +72,7 @@ export default function VideoManager({
       Alert.alert("Success", "Video updated successfully");
     },
     onError: (error) => {
-      Alert.alert("Error", error.message);
+      Alert.alert("Could Not Update Video", error.message);
     },
   });
 
@@ -76,49 +86,86 @@ export default function VideoManager({
     },
   });
 
-  const handleSave = () => {
-    if (!form.title) {
-      Alert.alert("Error", "Title is required");
+  const handleSave = async () => {
+    // Trim everything so a stray copy-paste space can't break playback later.
+    const title = form.title.trim();
+    const url = form.url.trim();
+    const embedCode = form.embedCode.trim();
+    let bunnyVideoId = form.bunnyVideoId.trim();
+    let bunnyLibraryId = form.bunnyLibraryId.trim();
+    const cloudflareVideoId = form.cloudflareVideoId.trim();
+    const cloudflareAccountId = form.cloudflareAccountId.trim();
+
+    // Admins often paste the whole Bunny embed URL - accept it and split it out.
+    const pasted = parseBunnyEmbed(bunnyVideoId) ?? parseBunnyEmbed(url);
+    if (pasted) {
+      bunnyVideoId = pasted.videoId;
+      bunnyLibraryId = bunnyLibraryId || pasted.libraryId;
+    }
+
+    if (!title) {
+      Alert.alert("Missing Title", "Please enter a title for this video.");
       return;
     }
 
-    if (!form.url && !form.embedCode && !form.bunnyVideoId) {
-      Alert.alert("Error", "Either Video URL, Embed Code, or Bunny Video ID is required");
+    if (!url && !embedCode && !bunnyVideoId && !cloudflareVideoId) {
+      Alert.alert(
+        "Missing Video Source",
+        "Add a Video URL, an Embed Code, or a Bunny Library ID + Video ID.",
+      );
       return;
     }
 
-    if (form.bunnyVideoId && !form.bunnyLibraryId) {
-      Alert.alert("Error", "Bunny Library ID is required when using Bunny Video ID");
+    if (bunnyVideoId && !bunnyLibraryId) {
+      Alert.alert("Missing Library ID", "A Bunny Library ID is required with a Bunny Video ID.");
       return;
     }
+
+    if (bunnyLibraryId && !/^\d+$/.test(bunnyLibraryId)) {
+      Alert.alert("Invalid Library ID", "The Bunny Library ID should be numbers only, e.g. 123456.");
+      return;
+    }
+
+    if (bunnyVideoId && !GUID_PATTERN.test(bunnyVideoId)) {
+      Alert.alert(
+        "Invalid Video ID",
+        "The Bunny Video ID should be a GUID like a1b2c3d4-e5f6-7890-abcd-ef1234567890.",
+      );
+      return;
+    }
+
+    if (url && !/^https?:\/\//i.test(url)) {
+      Alert.alert("Invalid URL", "The Video URL must start with http:// or https://");
+      return;
+    }
+
+    // Surface an unreachable server up front instead of a raw fetch failure.
+    const health = await checkApiReachable();
+    if (!health.ok) {
+      Alert.alert("Server Unavailable", health.message ?? "Cannot reach the server.");
+      return;
+    }
+
+    const payload = {
+      title,
+      url,
+      embedCode,
+      bunnyVideoId,
+      bunnyLibraryId,
+      cloudflareVideoId,
+      cloudflareAccountId,
+      duration: form.duration.trim(),
+      description: form.description.trim(),
+    };
 
     if (editingId) {
-      updateMutation.mutate({
-        id: editingId,
-        title: form.title,
-        url: form.url,
-        embedCode: form.embedCode,
-        bunnyVideoId: form.bunnyVideoId,
-        bunnyLibraryId: form.bunnyLibraryId,
-        cloudflareVideoId: form.cloudflareVideoId,
-        cloudflareAccountId: form.cloudflareAccountId,
-        duration: form.duration,
-        description: form.description,
-      });
+      updateMutation.mutate({ id: editingId, ...payload });
     } else {
       const videoCount = videosQuery.data?.length || 0;
       createMutation.mutate({
         courseId: selectedCourseId,
         sectionId: selectedSectionId,
-        title: form.title,
-        url: form.url,
-        embedCode: form.embedCode,
-        bunnyVideoId: form.bunnyVideoId,
-        bunnyLibraryId: form.bunnyLibraryId,
-        cloudflareVideoId: form.cloudflareVideoId,
-        cloudflareAccountId: form.cloudflareAccountId,
-        duration: form.duration,
-        description: form.description,
+        ...payload,
         order: videoCount,
       });
     }

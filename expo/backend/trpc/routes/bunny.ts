@@ -3,6 +3,15 @@ import { createTRPCRouter, publicProcedure } from "../create-context";
 
 const BUNNY_API_BASE = "https://video.bunnycdn.com";
 
+/** SHA-256 hex digest used to sign Bunny TUS upload requests. */
+async function sha256Hex(value: string): Promise<string> {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
 function generateBunnyToken(
   libraryId: string,
   videoId: string,
@@ -22,77 +31,114 @@ function generateBunnyToken(
   return token;
 }
 
+/** Upstream statuses that are worth retrying rather than surfacing. */
+const RETRYABLE_STATUSES = new Set<number>([408, 429, 500, 502, 503, 504]);
+
+const REQUEST_TIMEOUT_MS = 20000;
+const MAX_ATTEMPTS = 3;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function makeBunnyRequest(
   endpoint: string,
   apiKey: string,
   options: RequestInit = {}
 ): Promise<{ ok: boolean; status: number; data: any; error?: string }> {
   const url = `${BUNNY_API_BASE}${endpoint}`;
-  console.log(`[Bunny API] ${options.method || 'GET'} ${url}`);
-  console.log(`[Bunny API] API Key length: ${apiKey?.length}, preview: ${apiKey?.substring(0, 12)}...${apiKey?.substring(apiKey.length - 8)}`);
-  
+  const method = options.method || 'GET';
+  // Never log the API key itself - only whether it is present.
+  console.log(`[Bunny API] ${method} ${url} (key configured: ${Boolean(apiKey)})`);
+
   const headers: Record<string, string> = {
     "AccessKey": apiKey,
     "accept": "application/json",
   };
-  
+
   if (options.body) {
     headers["Content-Type"] = "application/json";
   }
-  
-  console.log(`[Bunny API] Request headers:`, JSON.stringify(headers, null, 2));
-  if (options.body) {
-    console.log(`[Bunny API] Request body:`, options.body);
-  }
-  
-  try {
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        ...headers,
-        ...options.headers,
-      },
-    });
 
-    const responseText = await response.text();
-    console.log(`[Bunny API] Response status: ${response.status}`);
-    console.log(`[Bunny API] Response body: ${responseText.substring(0, 500)}`);
+  let lastError: string | null = null;
 
-    let data;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
     try {
-      data = responseText ? JSON.parse(responseText) : null;
-    } catch {
-      data = { rawResponse: responseText };
-    }
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+        headers: {
+          ...headers,
+          ...options.headers,
+        },
+      });
+      clearTimeout(timeoutId);
 
-    if (!response.ok) {
-      let errorMessage = `Bunny API error (${response.status})`;
-      
-      if (response.status === 401) {
-        errorMessage = "Invalid API key. Make sure you're using the Stream Library API key from your Bunny.net video library settings (not the main account API key).";
-      } else if (response.status === 404) {
-        errorMessage = "Library not found. Please verify your Library ID in the Bunny.net Stream dashboard.";
-      } else if (response.status === 403) {
-        errorMessage = "Access forbidden. The API key may not have permission for this library.";
-      } else if (data?.Message) {
-        errorMessage = data.Message;
-      } else if (data?.message) {
-        errorMessage = data.message;
+      const responseText = await response.text();
+      console.log(`[Bunny API] Response status: ${response.status}`);
+
+      let data;
+      try {
+        data = responseText ? JSON.parse(responseText) : null;
+      } catch {
+        data = { rawResponse: responseText };
       }
 
-      return { ok: false, status: response.status, data, error: errorMessage };
-    }
+      if (!response.ok) {
+        let errorMessage = `Bunny API error (${response.status})`;
 
-    return { ok: true, status: response.status, data };
-  } catch (error) {
-    console.error("[Bunny API] Network error:", error);
-    return { 
-      ok: false, 
-      status: 0, 
-      data: null, 
-      error: `Network error: ${error instanceof Error ? error.message : 'Unknown error'}` 
-    };
+        if (response.status === 401) {
+          errorMessage = "Invalid API key. Make sure you're using the Stream Library API key from your Bunny.net video library settings (not the main account API key).";
+        } else if (response.status === 404) {
+          errorMessage = "Library not found. Please verify your Library ID in the Bunny.net Stream dashboard.";
+        } else if (response.status === 403) {
+          errorMessage = "Access forbidden. The API key may not have permission for this library.";
+        } else if (response.status === 429) {
+          errorMessage = "Bunny.net is rate limiting requests. Please wait a moment and try again.";
+        } else if (data?.Message) {
+          errorMessage = data.Message;
+        } else if (data?.message) {
+          errorMessage = data.message;
+        }
+
+        // Transient upstream failures get another shot before we give up.
+        if (RETRYABLE_STATUSES.has(response.status) && attempt < MAX_ATTEMPTS) {
+          lastError = errorMessage;
+          const delay = 700 * attempt;
+          console.log(`[Bunny API] Retrying after ${response.status} in ${delay}ms (attempt ${attempt}/${MAX_ATTEMPTS})`);
+          await sleep(delay);
+          continue;
+        }
+
+        return { ok: false, status: response.status, data, error: errorMessage };
+      }
+
+      return { ok: true, status: response.status, data };
+    } catch (error) {
+      clearTimeout(timeoutId);
+
+      const timedOut = error instanceof Error && error.name === 'AbortError';
+      lastError = timedOut
+        ? `Bunny.net did not respond within ${REQUEST_TIMEOUT_MS / 1000}s.`
+        : `Network error: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      console.error(`[Bunny API] Attempt ${attempt}/${MAX_ATTEMPTS} failed:`, lastError);
+
+      if (attempt < MAX_ATTEMPTS) {
+        await sleep(700 * attempt);
+        continue;
+      }
+    }
   }
+
+  return {
+    ok: false,
+    status: 0,
+    data: null,
+    error: lastError ?? 'Failed to reach Bunny.net after multiple attempts.',
+  };
 }
 
 export const bunnyRouter = createTRPCRouter({
@@ -107,8 +153,6 @@ export const bunnyRouter = createTRPCRouter({
       console.log("[Bunny Test] Testing connection...");
       console.log("[Bunny Test] Library ID provided:", libraryId);
       console.log("[Bunny Test] API Key configured:", !!apiKey);
-      console.log("[Bunny Test] API Key length:", apiKey?.length || 0);
-      console.log("[Bunny Test] API Key preview:", apiKey ? `${apiKey.substring(0, 8)}...${apiKey.substring(apiKey.length - 4)}` : "N/A");
 
       if (!libraryId) {
         return {
@@ -275,7 +319,6 @@ export const bunnyRouter = createTRPCRouter({
       console.log("[Bunny Create] Creating video:", input.title);
       console.log("[Bunny Create] Library ID:", libraryId);
       console.log("[Bunny Create] API Key exists:", !!apiKey);
-      console.log("[Bunny Create] API Key length:", apiKey?.length || 0);
       
       if (!libraryId) {
         throw new Error("Library ID is required. Please enter your Bunny Stream Library ID.");
@@ -285,10 +328,6 @@ export const bunnyRouter = createTRPCRouter({
         throw new Error("BUNNY_STREAM_API_KEY environment variable is not configured. Please add it in your project's environment variables.");
       }
       
-      if (apiKey.length < 30) {
-        console.log("[Bunny Create] WARNING: API key seems too short. Expected ~44 characters.");
-      }
-
       const body: { title: string; collectionId?: string } = { title: input.title };
       if (input.collectionId) {
         body.collectionId = input.collectionId;
@@ -343,14 +382,19 @@ export const bunnyRouter = createTRPCRouter({
 
       const expirationTime = Math.floor(Date.now() / 1000) + 3600;
 
+      // A TUS upload is authorized with a SHA-256 signature, so the raw API key
+      // never has to leave the server.
+      const signature = await sha256Hex(
+        `${libraryId}${apiKey}${expirationTime}${input.videoId}`
+      );
+
       return {
         tusEndpoint: "https://video.bunnycdn.com/tusupload",
         libraryId,
         videoId: input.videoId,
-        apiKey,
         expiresAt: expirationTime * 1000,
         headers: {
-          "AuthorizationSignature": apiKey,
+          "AuthorizationSignature": signature,
           "AuthorizationExpire": expirationTime.toString(),
           "VideoId": input.videoId,
           "LibraryId": libraryId,
@@ -422,7 +466,6 @@ export const bunnyRouter = createTRPCRouter({
       
       console.log("[Bunny List] Listing videos for library:", libraryId);
       console.log("[Bunny List] API Key configured:", !!apiKey);
-      console.log("[Bunny List] API Key length:", apiKey?.length || 0);
       console.log("[Bunny List] Page:", input.page, "Items per page:", input.itemsPerPage);
       
       if (!apiKey) {

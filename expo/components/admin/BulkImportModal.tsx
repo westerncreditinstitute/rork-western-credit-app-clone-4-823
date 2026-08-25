@@ -11,7 +11,26 @@ import {
 import { X, Video, Cloud, Check, Download, ChevronRight, AlertCircle } from "lucide-react-native";
 import Colors from "@/constants/colors";
 import { BunnyVideo, CloudflareVideo, VideoProvider, ConnectionStatus } from "@/types/admin";
-import { trpc } from "@/lib/trpc";
+import { trpc, checkApiReachable } from "@/lib/trpc";
+
+/** How many times a single video import is retried before giving up. */
+const MAX_IMPORT_ATTEMPTS = 3;
+
+interface ImportProgress {
+  current: number;
+  total: number;
+  title: string;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Turns any thrown value into a message that is safe to show an admin. */
+function toMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  return "Unknown error";
+}
 
 interface BulkImportModalProps {
   selectedCourseId: string;
@@ -37,6 +56,7 @@ export default function BulkImportModal({
   const [selectedCloudflareVideos, setSelectedCloudflareVideos] = useState<Set<string>>(new Set());
   const [isImporting, setIsImporting] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus | null>(null);
+  const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
 
   const videosQuery = trpc.videos.getAll.useQuery({
     courseId: selectedCourseId,
@@ -144,105 +164,158 @@ export default function BulkImportModal({
     });
   };
 
+  /**
+   * Imports one video, retrying transient network/server failures with backoff
+   * so a single blip doesn't abandon the whole batch.
+   */
+  const importOneVideo = async (
+    video: BunnyVideo | CloudflareVideo,
+    order: number,
+    isBunny: boolean,
+  ): Promise<void> => {
+    let lastError: unknown = null;
+
+    for (let attempt = 1; attempt <= MAX_IMPORT_ATTEMPTS; attempt++) {
+      try {
+        await createMutation.mutateAsync({
+          courseId: selectedCourseId,
+          sectionId: selectedSectionId,
+          title: video.title,
+          url: "",
+          embedCode: "",
+          bunnyVideoId: isBunny ? video.videoId : "",
+          bunnyLibraryId: isBunny ? bunnyLibraryIdInput.trim() : "",
+          cloudflareVideoId: isBunny ? "" : video.videoId,
+          cloudflareAccountId: isBunny ? "" : cloudflareAccountIdInput.trim(),
+          duration: formatSecondsToTime(video.length),
+          description: "",
+          order,
+        });
+        return;
+      } catch (error) {
+        lastError = error;
+        console.error(
+          `[Import] Attempt ${attempt}/${MAX_IMPORT_ATTEMPTS} failed for "${video.title}":`,
+          error,
+        );
+        if (attempt < MAX_IMPORT_ATTEMPTS) {
+          await sleep(800 * attempt);
+        }
+      }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error(toMessage(lastError));
+  };
+
   const handleBulkImport = async () => {
-    if (videoProvider === "bunny") {
-      if (selectedBunnyVideos.size === 0 || !bunnyLibraryIdInput) {
-        Alert.alert("Error", "Please select at least one video to import");
+    const isBunny = videoProvider === "bunny";
+
+    if (isBunny && (selectedBunnyVideos.size === 0 || !bunnyLibraryIdInput)) {
+      Alert.alert("Error", "Please select at least one video to import");
+      return;
+    }
+    if (!isBunny && (selectedCloudflareVideos.size === 0 || !cloudflareAccountIdInput)) {
+      Alert.alert("Error", "Please select at least one video to import");
+      return;
+    }
+
+    setIsImporting(true);
+    setImportProgress(null);
+
+    try {
+      // Fail fast with a clear message rather than a cryptic "Failed to fetch"
+      // once we are already halfway through the batch.
+      const health = await checkApiReachable();
+      if (!health.ok) {
+        Alert.alert("Server Unavailable", health.message ?? "Cannot reach the server.");
         return;
       }
 
-      setIsImporting(true);
-      const bunnyVideos = bunnyVideosQuery.data?.videos || [];
-      const videosToImport = bunnyVideos.filter((v: BunnyVideo) => selectedBunnyVideos.has(v.videoId));
-      const existingCount = videosQuery.data?.length || 0;
+      const selected: (BunnyVideo | CloudflareVideo)[] = isBunny
+        ? (bunnyVideosQuery.data?.videos ?? []).filter((v: BunnyVideo) =>
+            selectedBunnyVideos.has(v.videoId),
+          )
+        : (cloudflareVideosQuery.data?.videos ?? []).filter((v: CloudflareVideo) =>
+            selectedCloudflareVideos.has(v.videoId),
+          );
+
+      // Re-read the section first so retrying a partially-failed batch never
+      // creates duplicate rows for videos that already landed.
+      const refreshed = await videosQuery.refetch();
+      const existing = refreshed.data ?? [];
+      const existingIds = new Set(
+        existing
+          .map((v: { bunnyVideoId?: string; cloudflareVideoId?: string }) =>
+            isBunny ? v.bunnyVideoId : v.cloudflareVideoId,
+          )
+          .filter((id): id is string => Boolean(id)),
+      );
+
+      const videosToImport = selected.filter((v) => !existingIds.has(v.videoId));
+      const skippedCount = selected.length - videosToImport.length;
+
+      if (videosToImport.length === 0) {
+        Alert.alert(
+          "Already Imported",
+          "Every selected video is already in this section, so there is nothing to import.",
+        );
+        onClose();
+        return;
+      }
+
+      let order = existing.length;
       let successCount = 0;
-      let failedVideos: string[] = [];
+      const failed: { title: string; reason: string }[] = [];
 
       console.log("[Import] Starting import of", videosToImport.length, "videos");
 
-      try {
-        for (let i = 0; i < videosToImport.length; i++) {
-          const video = videosToImport[i];
-          console.log(`[Import] Importing video ${i + 1}/${videosToImport.length}:`, video.title);
-          
-          try {
-            await createMutation.mutateAsync({
-              courseId: selectedCourseId,
-              sectionId: selectedSectionId,
-              title: video.title,
-              url: "",
-              embedCode: "",
-              bunnyVideoId: video.videoId,
-              bunnyLibraryId: bunnyLibraryIdInput.trim(),
-              cloudflareVideoId: "",
-              cloudflareAccountId: "",
-              duration: formatSecondsToTime(video.length),
-              description: "",
-              order: existingCount + i,
-            });
-            successCount++;
-          } catch (err) {
-            console.error(`[Import] Failed to import ${video.title}:`, err);
-            failedVideos.push(video.title);
-          }
+      for (let i = 0; i < videosToImport.length; i++) {
+        const video = videosToImport[i];
+        setImportProgress({ current: i + 1, total: videosToImport.length, title: video.title });
+
+        try {
+          await importOneVideo(video, order, isBunny);
+          order += 1;
+          successCount += 1;
+        } catch (error) {
+          failed.push({ title: video.title, reason: toMessage(error) });
         }
-        
-        if (successCount === videosToImport.length) {
-          Alert.alert("Success", `Imported ${successCount} videos successfully`);
-        } else if (successCount > 0) {
-          Alert.alert(
-            "Partial Success", 
-            `Imported ${successCount} of ${videosToImport.length} videos.\n\nFailed: ${failedVideos.join(", ")}`
-          );
-        } else {
-          Alert.alert("Error", `Failed to import all videos. Please check your database connection.`);
-        }
-        
-        onClose();
-        videosQuery.refetch();
-      } catch (error) {
-        console.error("[Import] Bulk import error:", error);
-        Alert.alert("Error", error instanceof Error ? error.message : "Failed to import videos");
-      } finally {
-        setIsImporting(false);
       }
-    } else {
-      if (selectedCloudflareVideos.size === 0 || !cloudflareAccountIdInput) {
-        Alert.alert("Error", "Please select at least one video to import");
+
+      await videosQuery.refetch();
+
+      const skippedNote =
+        skippedCount > 0 ? `\n\nSkipped ${skippedCount} already imported.` : "";
+
+      if (failed.length === 0) {
+        Alert.alert(
+          "Success",
+          `Imported ${successCount} video${successCount === 1 ? "" : "s"} successfully.${skippedNote}`,
+        );
+        onClose();
         return;
       }
 
-      setIsImporting(true);
-      const cloudflareVideos = cloudflareVideosQuery.data?.videos || [];
-      const videosToImport = cloudflareVideos.filter((v: CloudflareVideo) => selectedCloudflareVideos.has(v.videoId));
-      const existingCount = videosQuery.data?.length || 0;
+      // Leave the modal open so the admin can retry just the failures. Videos
+      // that already saved are skipped automatically on the next run.
+      const failureList = failed
+        .slice(0, 5)
+        .map((f) => `\u2022 ${f.title}: ${f.reason}`)
+        .join("\n");
+      const more = failed.length > 5 ? `\n\u2026and ${failed.length - 5} more.` : "";
 
-      try {
-        for (let i = 0; i < videosToImport.length; i++) {
-          const video = videosToImport[i];
-          await createMutation.mutateAsync({
-            courseId: selectedCourseId,
-            sectionId: selectedSectionId,
-            title: video.title,
-            url: "",
-            embedCode: "",
-            bunnyVideoId: "",
-            bunnyLibraryId: "",
-            cloudflareVideoId: video.videoId,
-            cloudflareAccountId: cloudflareAccountIdInput,
-            duration: formatSecondsToTime(video.length),
-            description: "",
-            order: existingCount + i,
-          });
-        }
-        Alert.alert("Success", `Imported ${videosToImport.length} videos successfully`);
-        onClose();
-        videosQuery.refetch();
-      } catch {
-        Alert.alert("Error", "Failed to import some videos");
-      } finally {
-        setIsImporting(false);
-      }
+      Alert.alert(
+        successCount > 0 ? "Partially Imported" : "Import Failed",
+        `${successCount} of ${videosToImport.length} imported.${skippedNote}\n\n` +
+          `Failed:\n${failureList}${more}\n\n` +
+          "Tap Import again to retry only the ones that failed.",
+      );
+    } catch (error) {
+      console.error("[Import] Bulk import error:", error);
+      Alert.alert("Error", toMessage(error));
+    } finally {
+      setIsImporting(false);
+      setImportProgress(null);
     }
   };
 
@@ -516,7 +589,14 @@ export default function BulkImportModal({
           disabled={isImporting}
         >
           {isImporting ? (
-            <ActivityIndicator color={Colors.white} />
+            <>
+              <ActivityIndicator color={Colors.white} />
+              <Text style={styles.saveButtonText}>
+                {importProgress
+                  ? `Importing ${importProgress.current} of ${importProgress.total}\u2026`
+                  : "Preparing\u2026"}
+              </Text>
+            </>
           ) : (
             <>
               <Download color={Colors.white} size={20} />
@@ -535,7 +615,14 @@ export default function BulkImportModal({
           disabled={isImporting}
         >
           {isImporting ? (
-            <ActivityIndicator color={Colors.white} />
+            <>
+              <ActivityIndicator color={Colors.white} />
+              <Text style={styles.saveButtonText}>
+                {importProgress
+                  ? `Importing ${importProgress.current} of ${importProgress.total}\u2026`
+                  : "Preparing\u2026"}
+              </Text>
+            </>
           ) : (
             <>
               <Download color={Colors.white} size={20} />
