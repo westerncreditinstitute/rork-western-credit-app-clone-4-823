@@ -8,6 +8,7 @@ import {
   Image,
   Dimensions,
   Animated,
+  Alert,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
@@ -34,11 +35,13 @@ import {
   Scale,
   Video,
   Gamepad2,
+  Clock,
 } from "lucide-react-native";
 
 import { useTheme } from "@/contexts/ThemeContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useUser } from "@/contexts/UserContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { courses, notifications } from "@/mocks/data";
 import { getTipOfTheWeek, getRecentTips, TipCategory } from "@/mocks/creditTips";
 import { trpc } from "@/lib/trpc";
@@ -60,6 +63,8 @@ export default function HomeScreen() {
   const { colors, isDark } = useTheme();
   const { tier, isFree, isPremium, canAccessAIDispute, syncInitialEnrollments, isEnrolled } = useSubscription();
   const { user } = useUser();
+  const { user: authUser } = useAuth();
+  const isGameAdmin = authUser?.role?.toLowerCase() === "admin";
   const insets = useSafeAreaInsets();
   
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -573,8 +578,17 @@ export default function HomeScreen() {
               activeOpacity={0.9}
               style={styles.toolCardWrapper}
               onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                router.push("/game" as any);
+                if (isGameAdmin) {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  router.push("/game" as any);
+                } else {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  Alert.alert(
+                    "Coming Soon",
+                    "The Credit Life Simulator is currently in early access and available to administrators only. Check back soon!",
+                    [{ text: "OK" }]
+                  );
+                }
               }}
             >
               <LinearGradient
@@ -584,11 +598,12 @@ export default function HomeScreen() {
                 style={styles.toolCardCompact}
               >
                 <View style={[styles.toolIconWrapCompact, { backgroundColor: 'rgba(59, 130, 246, 0.15)' }]}>
-                  <Gamepad2 color="#3B82F6" size={24} />
+                  <Gamepad2 color={isGameAdmin ? "#3B82F6" : "#94A3B8"} size={24} />
                 </View>
-                <Text style={styles.toolTitleCompact} numberOfLines={2}>Credit Life Simulator</Text>
-                <View style={[styles.premiumBadgeSmall, { backgroundColor: '#10B98120' }]}>
-                  <Text style={[styles.premiumBadgeTextSmall, { color: '#10B981' }]}>FREE</Text>
+                <Text style={[styles.toolTitleCompact, !isGameAdmin && styles.toolTitleLocked]} numberOfLines={2}>Credit Life Simulator</Text>
+                <View style={[styles.premiumBadgeSmall, { backgroundColor: '#F59E0B20' }]}>
+                  <Clock color={colors.warning} size={10} />
+                  <Text style={[styles.premiumBadgeTextSmall, { color: colors.warning }]}>SOON</Text>
                 </View>
               </LinearGradient>
             </TouchableOpacity>

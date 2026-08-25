@@ -1,6 +1,9 @@
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import React, { memo } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { Gamepad2, Clock, ChevronLeft } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { BudgetProvider } from '@/contexts/BudgetContext';
 import { EducationProvider } from '@/contexts/EducationContext';
 import { RealEstateProvider } from '@/contexts/RealEstateContext';
@@ -43,6 +46,31 @@ const GameProviders = memo(function GameProviders({ children }: { children: Reac
 
 export default function GameLayout() {
   const { colors } = useTheme();
+  const { user } = useAuth();
+  const router = useRouter();
+  const isAdmin = user?.role?.toLowerCase() === 'admin';
+
+  // Credit Life Simulator is in early access — administrators only for now.
+  if (!isAdmin) {
+    return (
+      <View style={[styles.comingSoonContainer, { backgroundColor: colors.background }]}>
+        <TouchableOpacity style={[styles.backButton, { backgroundColor: colors.surface }]} onPress={() => router.back()}>
+          <ChevronLeft color={colors.primary} size={20} />
+        </TouchableOpacity>
+        <View style={[styles.comingSoonIconWrap, { backgroundColor: colors.surface }]}>
+          <Gamepad2 color={colors.primary} size={40} />
+        </View>
+        <View style={styles.comingSoonBadge}>
+          <Clock color={colors.warning} size={14} />
+          <Text style={[styles.comingSoonBadgeText, { color: colors.warning }]}>COMING SOON</Text>
+        </View>
+        <Text style={[styles.comingSoonTitle, { color: colors.text }]}>Credit Life Simulator</Text>
+        <Text style={[styles.comingSoonMessage, { color: colors.textLight }]}>
+          The Credit Life Simulator is currently in early access and available to administrators only. It will open to everyone in a future update.
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <GameProviders>
@@ -102,5 +130,59 @@ export default function GameLayout() {
     </GameProviders>
   );
 }
+
+const styles = StyleSheet.create({
+  comingSoonContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  backButton: {
+    position: 'absolute',
+    top: 60,
+    left: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  comingSoonIconWrap: {
+    width: 96,
+    height: 96,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  comingSoonBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+    marginBottom: 12,
+  },
+  comingSoonBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  comingSoonTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  comingSoonMessage: {
+    fontSize: 14,
+    lineHeight: 21,
+    textAlign: 'center',
+    maxWidth: 300,
+  },
+});
 
 

@@ -17,6 +17,7 @@ final class AppStore {
         static let readNotifications = "wci.notifications.read"
         static let walletUnlocked = "wci.wallet.unlocked"
         static let paidProviders = "wci.providers.paid"
+        static let adminUnlocked = "wci.admin.unlocked"
     }
 
     // MARK: - Published state
@@ -37,6 +38,12 @@ final class AppStore {
         didSet { UserDefaults.standard.set(isWalletUnlocked, forKey: Keys.walletUnlocked) }
     }
 
+    /// Credit Life Simulator is in early access — only administrators may play.
+    /// Unlocked by entering the admin console passcode.
+    var isAdminUnlocked: Bool {
+        didSet { UserDefaults.standard.set(isAdminUnlocked, forKey: Keys.adminUnlocked) }
+    }
+
     // MARK: - Init
 
     init() {
@@ -47,6 +54,7 @@ final class AppStore {
         readNotificationIds = Set(defaults.stringArray(forKey: Keys.readNotifications) ?? [])
         paidProviderIds = Set(defaults.stringArray(forKey: Keys.paidProviders) ?? [])
         isWalletUnlocked = defaults.bool(forKey: Keys.walletUnlocked)
+        isAdminUnlocked = defaults.bool(forKey: Keys.adminUnlocked)
 
         syncInitialEnrollments()
         applyReadState()

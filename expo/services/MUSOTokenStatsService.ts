@@ -157,7 +157,7 @@ class MUSOTokenStatsServiceClass {
   private cachedStats: MUSOTokenStats | null = null;
   private lastFetchTime: number = 0;
   private listeners: Set<(stats: MUSOTokenStats) => void> = new Set();
-  private refreshTimer: NodeJS.Timeout | null = null;
+  private refreshTimer: ReturnType<typeof setInterval> | null = null;
 
   /**
    * Get current token stats (from cache or fresh fetch)

@@ -18,6 +18,7 @@ struct HomeView: View {
     @State private var appeared = false
     @State private var playingVideo: FeaturedVideo?
     @State private var expandedTip: CreditTip?
+    @State private var showComingSoonAlert = false
 
     private var quickActions: [QuickAction] {
         let colors = theme.colors
@@ -263,7 +264,11 @@ struct HomeView: View {
     private var gameLauncherCard: some View {
         Button {
             Haptics.medium()
-            showGame = true
+            if store.isAdminUnlocked {
+                showGame = true
+            } else {
+                showComingSoonAlert = true
+            }
         } label: {
             HStack(spacing: Spacing.md) {
                 Image(systemName: "gamecontroller.fill")
@@ -277,18 +282,18 @@ struct HomeView: View {
                     Text("Credit Life Simulator")
                         .font(.system(size: 17, weight: .heavy))
                         .foregroundStyle(.white)
-                    Text("Play the game • Build credit • Earn MUSO tokens")
+                    Text("Coming soon • Admin early access")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(.white.opacity(0.75))
                 }
 
                 Spacer(minLength: 0)
 
-                Image(systemName: "play.fill")
+                Image(systemName: store.isAdminUnlocked ? "play.fill" : "clock.fill")
                     .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(Color(hex: "#001F42"))
+                    .foregroundStyle(store.isAdminUnlocked ? Color(hex: "#001F42") : .white)
                     .frame(width: 36, height: 36)
-                    .background(.white)
+                    .background(store.isAdminUnlocked ? .white : Color.white.opacity(0.2))
                     .clipShape(.circle)
             }
             .padding(Spacing.md)
@@ -300,9 +305,25 @@ struct HomeView: View {
                 )
             )
             .clipShape(.rect(cornerRadius: Radius.lg))
+            .overlay(alignment: .topTrailing) {
+                Text("COMING SOON")
+                    .font(.system(size: 9, weight: .heavy))
+                    .kerning(0.5)
+                    .foregroundStyle(Color(hex: "#F59E0B"))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color(hex: "#F59E0B").opacity(0.18))
+                    .clipShape(.capsule(style: .continuous))
+                    .padding(Spacing.sm)
+            }
             .shadow(color: Color(hex: "#002B5C").opacity(0.3), radius: 12, y: 5)
         }
         .buttonStyle(PressableButtonStyle())
+        .alert("Coming Soon", isPresented: $showComingSoonAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("The Credit Life Simulator is currently in early access and available to administrators only. It will open to everyone in a future update.")
+        }
         .padding(.horizontal, Spacing.md)
         .opacity(appeared ? 1 : 0)
         .offset(y: appeared ? 0 : 20)

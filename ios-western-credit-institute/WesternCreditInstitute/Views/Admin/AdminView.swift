@@ -23,6 +23,7 @@ struct AdminView: View {
                 })
             } else {
                 AdminLoginView {
+                    store.isAdminUnlocked = true
                     withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
                         isAuthenticated = true
                     }
