@@ -37,6 +37,7 @@ import WorkflowSteps from "@/components/admin/WorkflowSteps";
 import CourseSelector from "@/components/admin/CourseSelector";
 import SectionSelector from "@/components/admin/SectionSelector";
 import AddContentSection from "@/components/admin/AddContentSection";
+import ServerStatusBanner from "@/components/admin/ServerStatusBanner";
 
 const hashCredential = async (value: string): Promise<string> => {
   const digest = await Crypto.digestStringAsync(
@@ -254,6 +255,8 @@ export default function AdminScreen() {
       />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <ServerStatusBanner />
+
         {mode !== "promo" && (
           <>
             <WorkflowSteps currentStep={currentStep} />
