@@ -9,10 +9,24 @@ const app = new Hono();
 
 app.use("*", cors());
 
+// The app calls `{API_BASE_URL}/api/trpc/*`. Depending on how traffic reaches
+// this server (edge proxy may or may not strip the `/api` prefix) the path can
+// arrive as `/api/trpc/*` or `/trpc/*`, so both mounts are registered.
+// NOTE: `endpoint` must match the mount path exactly — tRPC strips it from the
+// request path to resolve procedure names, and a mismatch silently mangles them.
+app.use(
+  "/api/trpc/*",
+  trpcServer({
+    endpoint: "/api/trpc",
+    router: appRouter,
+    createContext,
+  }),
+);
+
 app.use(
   "/trpc/*",
   trpcServer({
-    endpoint: "/api/trpc",
+    endpoint: "/trpc",
     router: appRouter,
     createContext,
   }),
