@@ -38,6 +38,7 @@ import {
   ShieldAlert,
 } from "lucide-react-native";
 import * as ScreenCapture from "expo-screen-capture";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import Colors from "@/constants/colors";
 import { courses } from "@/mocks/data";
 import { trpc } from "@/lib/trpc";
@@ -48,6 +49,9 @@ interface VideoItem {
   title: string;
   bunnyVideoId?: string;
   bunnyLibraryId?: string;
+  /** Pre-signed embed URL shipped with the videos query - no extra round trip on play. */
+  bunnyEmbedUrl?: string | null;
+  bunnyEmbedExpiresAt?: number | null;
   duration?: string;
   description?: string;
   order: number;
@@ -62,6 +66,14 @@ interface VideoNote {
 }
 
 const MOCK_USER_ID = "user_demo_123";
+
+/** Parses "h:mm:ss" / "mm:ss" / "ss" duration strings into seconds. */
+const parseDurationSeconds = (duration?: string): number => {
+  if (!duration) return 0;
+  const parts = duration.split(":").map((p) => parseInt(p.trim(), 10));
+  if (parts.some((p) => Number.isNaN(p))) return 0;
+  return parts.reduce((acc, p) => acc * 60 + p, 0);
+};
 
 const useDocumentScreenProtection = (isActive: boolean) => {
   useEffect(() => {
@@ -190,8 +202,42 @@ export default function SectionDetailScreen() {
 
   const videosQuery = trpc.videos.getAll.useQuery(
     { courseId, sectionId },
-    { enabled: !!courseId && !!sectionId }
+    {
+      enabled: !!courseId && !!sectionId,
+      // Signed embed URLs are valid for an hour; keep cached rows a bit
+      // shorter than that so URLs are always comfortably fresh.
+      staleTime: 15 * 60 * 1000,
+    }
   );
+
+  // Last-known videos for this section are persisted so re-opening the course
+  // renders the full lesson list instantly while the refresh happens quietly.
+  const [cachedVideos, setCachedVideos] = useState<VideoItem[] | null>(null);
+  const videosCacheKey = `wci_section_videos_${courseId}_${sectionId}`;
+
+  useEffect(() => {
+    let active = true;
+    AsyncStorage.getItem(videosCacheKey)
+      .then((raw) => {
+        if (!active || !raw) return;
+        try {
+          setCachedVideos(JSON.parse(raw) as VideoItem[]);
+        } catch {
+          // Corrupted cache entry - ignore, fresh data will replace it.
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [videosCacheKey]);
+
+  useEffect(() => {
+    const data = videosQuery.data as VideoItem[] | undefined;
+    if (data && data.length > 0) {
+      AsyncStorage.setItem(videosCacheKey, JSON.stringify(data)).catch(() => {});
+    }
+  }, [videosQuery.data, videosCacheKey]);
 
   const documentsQuery = trpc.documents.getAll.useQuery(
     { courseId, sectionId },
@@ -279,7 +325,10 @@ export default function SectionDetailScreen() {
     );
   }
 
-  const videos: VideoItem[] = videosQuery.data || [];
+  const videos: VideoItem[] =
+    (videosQuery.data as VideoItem[] | undefined)?.length
+      ? (videosQuery.data as VideoItem[])
+      : cachedVideos ?? [];
   const documents = documentsQuery.data || [];
 
   const handleVideoSelect = (index: number) => {
@@ -586,6 +635,7 @@ export default function SectionDetailScreen() {
             {videos[activeVideoIndex].bunnyVideoId &&
             videos[activeVideoIndex].bunnyLibraryId ? (
               <BunnyVideoPlayer
+                key={videos[activeVideoIndex].id}
                 videoId={videos[activeVideoIndex].bunnyVideoId!}
                 libraryId={videos[activeVideoIndex].bunnyLibraryId!}
                 title={videos[activeVideoIndex].title}
@@ -596,6 +646,9 @@ export default function SectionDetailScreen() {
                 courseId={courseId}
                 sectionId={sectionId}
                 dbVideoId={videos[activeVideoIndex].id}
+                embedUrl={videos[activeVideoIndex].bunnyEmbedUrl || null}
+                embedExpiresAt={videos[activeVideoIndex].bunnyEmbedExpiresAt ?? null}
+                durationSeconds={parseDurationSeconds(videos[activeVideoIndex].duration)}
                 onProgressUpdate={() => {
                   progressQuery.refetch();
                 }}
@@ -728,7 +781,7 @@ export default function SectionDetailScreen() {
           </View>
         )}
 
-        {videosQuery.isLoading ? (
+        {videos.length === 0 && videosQuery.isLoading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={Colors.primary} />
             <Text style={styles.loadingText}>Loading videos...</Text>

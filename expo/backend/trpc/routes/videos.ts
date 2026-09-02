@@ -1,6 +1,7 @@
 import * as z from "zod";
 import { createTRPCRouter, publicProcedure } from "../create-context";
 import { supabase } from "@/lib/supabase";
+import { signBunnyEmbedUrl } from "../bunny-token";
 
 interface Video {
   id: string;
@@ -11,6 +12,9 @@ interface Video {
   embedCode: string;
   bunnyVideoId: string;
   bunnyLibraryId: string;
+  /** Pre-signed, ready-to-play embed URL so clients never wait on a signing round trip. */
+  bunnyEmbedUrl: string;
+  bunnyEmbedExpiresAt: number | null;
   cloudflareVideoId: string;
   cloudflareAccountId: string;
   duration: string;
@@ -39,6 +43,11 @@ interface DbVideo {
 }
 
 function dbToVideo(db: DbVideo): Video {
+  const hasBunnyVideo = Boolean(db.bunny_video_id && db.bunny_library_id);
+  const signed = hasBunnyVideo
+    ? signBunnyEmbedUrl(db.bunny_library_id, db.bunny_video_id)
+    : { embedUrl: "", expiresAt: null as number | null };
+
   return {
     id: db.id,
     courseId: db.course_id,
@@ -48,6 +57,8 @@ function dbToVideo(db: DbVideo): Video {
     embedCode: db.embed_code || "",
     bunnyVideoId: db.bunny_video_id || "",
     bunnyLibraryId: db.bunny_library_id || "",
+    bunnyEmbedUrl: signed.embedUrl,
+    bunnyEmbedExpiresAt: signed.expiresAt,
     cloudflareVideoId: db.cloudflare_video_id || "",
     cloudflareAccountId: db.cloudflare_account_id || "",
     duration: db.duration || "",

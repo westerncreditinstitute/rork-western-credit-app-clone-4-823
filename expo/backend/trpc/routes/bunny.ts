@@ -1,5 +1,6 @@
 import * as z from "zod";
 import { createTRPCRouter, publicProcedure } from "../create-context";
+import { signBunnyEmbedUrl } from "../bunny-token";
 
 const BUNNY_API_BASE = "https://video.bunnycdn.com";
 
@@ -10,25 +11,6 @@ async function sha256Hex(value: string): Promise<string> {
   return Array.from(new Uint8Array(digest))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
-}
-
-function generateBunnyToken(
-  libraryId: string,
-  videoId: string,
-  expirationTime: number,
-  apiKey: string
-): string {
-  const hashableBase = `${apiKey}${videoId}${expirationTime}`;
-  
-  let hash = 0;
-  for (let i = 0; i < hashableBase.length; i++) {
-    const char = hashableBase.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash;
-  }
-  
-  const token = Math.abs(hash).toString(16) + expirationTime.toString(16);
-  return token;
 }
 
 /** Upstream statuses that are worth retrying rather than surfacing. */
@@ -200,39 +182,11 @@ export const bunnyRouter = createTRPCRouter({
       libraryId: z.string(),
     }))
     .query(async ({ input }) => {
-      const apiKey = process.env.BUNNY_STREAM_API_KEY;
-      const libraryId = input.libraryId;
-      
-      if (!libraryId) {
+      if (!input.libraryId) {
         throw new Error("Library ID is required");
       }
-      
-      if (!apiKey) {
-        console.log("Bunny API key not configured, returning direct URL");
-        return {
-          embedUrl: `https://iframe.mediadelivery.net/embed/${libraryId}/${input.videoId}`,
-          directUrl: `https://iframe.mediadelivery.net/play/${libraryId}/${input.videoId}`,
-          expiresAt: null,
-        };
-      }
 
-      const expirationTime = Math.floor(Date.now() / 1000) + 3600;
-      
-      const token = generateBunnyToken(
-        libraryId,
-        input.videoId,
-        expirationTime,
-        apiKey
-      );
-
-      const embedUrl = `https://iframe.mediadelivery.net/embed/${libraryId}/${input.videoId}?token=${token}&expires=${expirationTime}`;
-      const directUrl = `https://iframe.mediadelivery.net/play/${libraryId}/${input.videoId}?token=${token}&expires=${expirationTime}`;
-
-      return {
-        embedUrl,
-        directUrl,
-        expiresAt: expirationTime * 1000,
-      };
+      return signBunnyEmbedUrl(input.libraryId, input.videoId);
     }),
 
   getVideoInfo: publicProcedure
