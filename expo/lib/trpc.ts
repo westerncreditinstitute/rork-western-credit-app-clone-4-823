@@ -166,20 +166,16 @@ const getAuthHeaders = async (): Promise<Record<string, string>> => {
   return {};
 };
 
-/** Checks whether the API server is currently reachable. */
-export async function checkApiReachable(): Promise<{ ok: boolean; message?: string }> {
-  const baseUrl = getBaseUrl();
-  if (!baseUrl) {
-    return { ok: false, message: "API base URL is not configured." };
-  }
+/** Timeout for a single reachability probe so the banner stays responsive. */
+const PROBE_TIMEOUT_MS = 8000;
 
-  // Note: the health route is "/api" with NO trailing slash - "/api/" is a 404.
+async function probeHealthOnce(baseUrl: string): Promise<{ ok: boolean; message?: string }> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort("Timeout"), 12000);
+  const timeoutId = setTimeout(() => controller.abort("Timeout"), PROBE_TIMEOUT_MS);
 
   try {
+    // Note: the health route is "/api" with NO trailing slash - "/api/" is a 404.
     const response = await fetch(`${baseUrl}/api`, { signal: controller.signal });
-    clearTimeout(timeoutId);
 
     // Any HTTP answer at all proves the server is reachable. Only the edge-level
     // 5xx family means the app instance is asleep or genuinely down - a 404 or
@@ -189,10 +185,47 @@ export async function checkApiReachable(): Promise<{ ok: boolean; message?: stri
     }
     return { ok: true };
   } catch (error) {
-    clearTimeout(timeoutId);
     console.log("[tRPC] Health check failed:", error);
     return { ok: false, message: OFFLINE_MESSAGE };
+  } finally {
+    clearTimeout(timeoutId);
   }
+}
+
+/**
+ * Checks whether the API server is currently reachable. Probes the health
+ * route twice, then falls back to a real tRPC read - a flaky health route
+ * must never flag the server offline while content requests still answer.
+ */
+export async function checkApiReachable(): Promise<{ ok: boolean; message?: string }> {
+  const baseUrl = getBaseUrl();
+  if (!baseUrl) {
+    return { ok: false, message: "API base URL is not configured." };
+  }
+
+  let result = await probeHealthOnce(baseUrl);
+  if (result.ok) return result;
+
+  // A cold-starting edge can 5xx the health route while tRPC answers fine,
+  // so confirm with an actual content request before declaring the server
+  // down. Any HTTP response - even an application error - proves reachability.
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort("Timeout"), PROBE_TIMEOUT_MS);
+  try {
+    const input = encodeURIComponent(JSON.stringify({ json: {} }));
+    const response = await fetch(`${baseUrl}/api/trpc/videos.getAll?input=${input}`, {
+      signal: controller.signal,
+    });
+    return { ok: true };
+  } catch {
+    // Network failure - fall through to the final health retry.
+  } finally {
+    clearTimeout(timeoutId);
+  }
+
+  // Last chance: the cold start may have just finished.
+  await sleep(1200);
+  return probeHealthOnce(baseUrl);
 }
 
 /**

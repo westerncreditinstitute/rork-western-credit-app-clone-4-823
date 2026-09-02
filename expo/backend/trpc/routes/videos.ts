@@ -114,7 +114,11 @@ export const videosRouter = createTRPCRouter({
 
       if (error) {
         console.error("[Videos] Error fetching videos:", error);
-        return [];
+        // Surface the failure instead of pretending the section is empty -
+        // clients keep showing their cached list while this error is shown.
+        throw new Error(
+          `Couldn't load videos from the library. ${error.message}`,
+        );
       }
 
       const videos = (data || []).map(dbToVideo);

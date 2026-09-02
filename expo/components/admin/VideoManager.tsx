@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -8,14 +8,19 @@ import {
   Alert,
   ActivityIndicator,
 } from "react-native";
-import { Plus, Save, X, Download } from "lucide-react-native";
+import { Plus, Save, X, Download, AlertTriangle } from "lucide-react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import Colors from "@/constants/colors";
 import { VideoForm, initialVideoForm } from "@/types/admin";
-import { trpc, warmUpApi } from "@/lib/trpc";
+import { trpc, warmUpApi, OFFLINE_MESSAGE } from "@/lib/trpc";
 import VideoCard from "@/components/admin/VideoCard";
 
 /** Bunny Stream video GUIDs look like a1b2c3d4-e5f6-7890-abcd-ef1234567890. */
 const GUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Last-synced video lists per course+section, so the manager paints instantly. */
+const videosCacheKey = (courseId: string, sectionId: string) =>
+  `wci_admin_videos_${courseId}_${sectionId}`;
 
 /** Pulls a Bunny library + video id out of a pasted embed/iframe URL. */
 function parseBunnyEmbed(value: string): { libraryId: string; videoId: string } | null {
@@ -47,10 +52,50 @@ export default function VideoManager({
   onShowAddFormChange,
   onShowBulkImport,
 }: VideoManagerProps) {
-  const videosQuery = trpc.videos.getAll.useQuery({
-    courseId: selectedCourseId,
-    sectionId: selectedSectionId,
-  });
+  const videosQuery = trpc.videos.getAll.useQuery(
+    {
+      courseId: selectedCourseId,
+      sectionId: selectedSectionId,
+    },
+    {
+      // Keep the list snappy: a short stale window avoids refetching every
+      // time the admin switches between sections, and failures retry quickly.
+      staleTime: 60_000,
+      retry: 2,
+      refetchOnReconnect: true,
+    },
+  );
+
+  const [cachedVideos, setCachedVideos] = useState<any[] | null>(null);
+
+  // Load the last synced list for this section so it paints instantly, even
+  // before (or instead of) the network answer.
+  useEffect(() => {
+    let cancelled = false;
+    AsyncStorage.getItem(videosCacheKey(selectedCourseId, selectedSectionId))
+      .then((stored) => {
+        if (!cancelled) setCachedVideos(stored ? JSON.parse(stored) : null);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCourseId, selectedSectionId]);
+
+  // Persist every successful fetch so the next visit is instant.
+  useEffect(() => {
+    const data = videosQuery.data as any[] | undefined;
+    if (data && data.length > 0) {
+      AsyncStorage.setItem(
+        videosCacheKey(selectedCourseId, selectedSectionId),
+        JSON.stringify(data),
+      ).catch(() => {});
+    }
+  }, [videosQuery.data, selectedCourseId, selectedSectionId]);
+
+  // Server data wins once it arrives; the saved list covers loading and
+  // failures so the admin never stares at an empty section after a hiccup.
+  const videos: any[] = videosQuery.data ?? cachedVideos ?? [];
 
   const createMutation = trpc.videos.create.useMutation({
     onSuccess: () => {
@@ -159,7 +204,7 @@ export default function VideoManager({
     if (editingId) {
       updateMutation.mutate({ id: editingId, ...payload });
     } else {
-      const videoCount = videosQuery.data?.length || 0;
+      const videoCount = videos.length;
       createMutation.mutate({
         courseId: selectedCourseId,
         sectionId: selectedSectionId,
@@ -352,16 +397,38 @@ export default function VideoManager({
       )}
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>
-          Videos ({videosQuery.data?.length || 0})
-        </Text>
+        <Text style={styles.sectionTitle}>Videos ({videos.length})</Text>
 
-        {videosQuery.isLoading ? (
+        {videosQuery.isError && (
+          <View style={styles.errorCard}>
+            <AlertTriangle color={Colors.error} size={18} />
+            <View style={styles.errorTextWrap}>
+              <Text style={styles.errorTitle}>
+                {cachedVideos && cachedVideos.length > 0
+                  ? "Couldn\u2019t refresh \u2014 showing your saved list"
+                  : "Couldn\u2019t load videos"}
+              </Text>
+              <Text style={styles.errorMessage} numberOfLines={2}>
+                {videosQuery.error?.message || OFFLINE_MESSAGE}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.retryButton}
+              onPress={() => videosQuery.refetch()}
+              accessibilityRole="button"
+              accessibilityLabel="Retry loading videos"
+            >
+              <Text style={styles.retryText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {videosQuery.isLoading && !videos.length ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={Colors.primary} />
           </View>
-        ) : videosQuery.data && videosQuery.data.length > 0 ? (
-          videosQuery.data.map((video: any) => (
+        ) : videos.length > 0 ? (
+          videos.map((video: any) => (
             <VideoCard
               key={video.id}
               video={video}
@@ -369,14 +436,14 @@ export default function VideoManager({
               onDelete={handleDelete}
             />
           ))
-        ) : (
+        ) : !videosQuery.isError ? (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>No videos yet</Text>
             <Text style={styles.emptySubtext}>
               Add your first video to get started
             </Text>
           </View>
-        )}
+        ) : null}
       </View>
     </>
   );
@@ -505,6 +572,42 @@ const styles = StyleSheet.create({
   emptyContainer: {
     padding: 40,
     alignItems: "center" as const,
+  },
+  errorCard: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    backgroundColor: Colors.errorLight,
+    borderWidth: 1,
+    borderColor: Colors.error + "55",
+    borderRadius: 12,
+    padding: 12,
+    gap: 10,
+    marginBottom: 12,
+  },
+  errorTextWrap: {
+    flex: 1,
+  },
+  errorTitle: {
+    fontSize: 13,
+    fontWeight: "700" as const,
+    color: Colors.error,
+    marginBottom: 2,
+  },
+  errorMessage: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: Colors.textSecondary,
+  },
+  retryButton: {
+    backgroundColor: Colors.error,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  retryText: {
+    color: Colors.white,
+    fontSize: 13,
+    fontWeight: "600" as const,
   },
   emptyText: {
     fontSize: 16,

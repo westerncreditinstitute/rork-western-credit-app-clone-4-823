@@ -10,10 +10,10 @@ import {
 import { CloudOff, RefreshCw, CheckCircle2 } from "lucide-react-native";
 
 import Colors from "@/constants/colors";
-import { checkApiReachable } from "@/lib/trpc";
+import { checkApiReachable, SERVER_WAKING_MESSAGE } from "@/lib/trpc";
 
 /** How often the banner silently re-checks while the server is down. */
-const RETRY_INTERVAL_MS = 15000;
+const RETRY_INTERVAL_MS = 8000;
 
 type Status = "checking" | "online" | "offline";
 
@@ -30,6 +30,7 @@ interface ServerStatusBannerProps {
 export default function ServerStatusBanner({ style }: ServerStatusBannerProps) {
   const [status, setStatus] = useState<Status>("checking");
   const [message, setMessage] = useState<string>("");
+  const [isWaking, setIsWaking] = useState<boolean>(false);
   const [isManualRetry, setIsManualRetry] = useState<boolean>(false);
   const [showRecovered, setShowRecovered] = useState<boolean>(false);
 
@@ -49,6 +50,7 @@ export default function ServerStatusBanner({ style }: ServerStatusBannerProps) {
       if (result.ok) {
         setStatus("online");
         setMessage("");
+        setIsWaking(false);
         // Only celebrate if we were actually down before.
         if (wasOffline.current) {
           wasOffline.current = false;
@@ -61,12 +63,14 @@ export default function ServerStatusBanner({ style }: ServerStatusBannerProps) {
       } else {
         wasOffline.current = true;
         setStatus("offline");
+        setIsWaking(result.message === SERVER_WAKING_MESSAGE);
         setMessage(result.message ?? "The server is not responding.");
       }
     } catch {
       if (!isMounted.current) return;
       wasOffline.current = true;
       setStatus("offline");
+      setIsWaking(false);
       setMessage("The server is not responding.");
     } finally {
       if (isMounted.current) setIsManualRetry(false);
@@ -160,9 +164,13 @@ export default function ServerStatusBanner({ style }: ServerStatusBannerProps) {
       </View>
 
       <View style={styles.textWrap}>
-        <Text style={styles.title}>Server unreachable</Text>
+        <Text style={styles.title}>
+          {isWaking ? "Server is waking up\u2026" : "Server unreachable"}
+        </Text>
         <Text style={styles.message}>
-          {message} Uploads and saves won&apos;t work until it&apos;s back.
+          {isWaking
+            ? "Almost there \u2014 your saved videos stay visible and this clears automatically."
+            : `${message} Uploads and saves won't work until it's back.`}
         </Text>
       </View>
 
