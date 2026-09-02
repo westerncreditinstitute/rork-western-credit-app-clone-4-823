@@ -83,6 +83,12 @@ struct RootTabView: View {
                 .navigationDestination(for: Course.self) { course in
                     CourseDetailView(course: course)
                 }
+                .navigationDestination(for: SectionRoute.self) { route in
+                    SectionDetailView(
+                        course: Course(id: route.courseId, title: route.courseTitle, shortDescription: "", duration: "", lessons: 0, price: 0, imageURL: "", category: "", level: .beginner),
+                        section: CourseSection(id: route.sectionId, title: route.sectionTitle, steps: 0, symbol: "play.rectangle.fill")
+                    )
+                }
                 .navigationDestination(for: CSOProvider.self) { provider in
                     ProviderDetailView(provider: provider)
                 }

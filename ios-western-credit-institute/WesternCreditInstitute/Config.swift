@@ -10,5 +10,9 @@
 import Foundation
 
 enum Config {
-    static let allValues: [String: String] = [:]
+    static let EXPO_PUBLIC_RORK_API_BASE_URL = ""
+
+    static let allValues: [String: String] = [
+        "EXPO_PUBLIC_RORK_API_BASE_URL": EXPO_PUBLIC_RORK_API_BASE_URL,
+    ]
 }

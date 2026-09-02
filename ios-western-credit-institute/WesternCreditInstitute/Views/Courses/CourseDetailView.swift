@@ -13,7 +13,6 @@ struct CourseDetailView: View {
 
     @State private var showEnrollConfirmation = false
     @State private var showEnrolledAlert = false
-    @State private var expandedSectionId: String?
 
     private var liveCourse: Course {
         store.courses.first { $0.id == course.id } ?? course
@@ -204,12 +203,14 @@ struct CourseDetailView: View {
 
             VStack(spacing: Spacing.sm) {
                 ForEach(Array(current.sections.enumerated()), id: \.element.id) { index, section in
-                    Button {
-                        Haptics.light()
-                        withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
-                            expandedSectionId = expandedSectionId == section.id ? nil : section.id
-                        }
-                    } label: {
+                    // Tapping a module opens its lesson screen, matching the
+                    // Expo course-detail push to section-detail.
+                    NavigationLink(value: SectionRoute(
+                        courseId: current.id,
+                        courseTitle: current.title,
+                        sectionId: section.id,
+                        sectionTitle: section.title
+                    )) {
                         CardView(variant: .outlined, padding: Spacing.md) {
                             VStack(alignment: .leading, spacing: Spacing.sm) {
                                 HStack(spacing: Spacing.md) {
@@ -232,21 +233,18 @@ struct CourseDetailView: View {
 
                                     Spacer(minLength: 0)
 
-                                    Image(systemName: expandedSectionId == section.id ? "chevron.up" : "chevron.down")
+                                    Image(systemName: "chevron.right")
                                         .font(.system(size: 12, weight: .bold))
                                         .foregroundStyle(theme.colors.textLight)
                                 }
 
-                                if expandedSectionId == section.id {
-                                    HStack(spacing: Spacing.md) {
-                                        BadgeView(text: "\(section.steps) steps", variant: .info, symbol: "square.stack.3d.up.fill")
-                                        if current.enrolled {
-                                            BadgeView(text: "\(section.completed)/\(section.steps) done", variant: .success, symbol: "checkmark")
-                                        } else {
-                                            BadgeView(text: "Locked", variant: .neutral, symbol: "lock.fill")
-                                        }
+                                HStack(spacing: Spacing.md) {
+                                    BadgeView(text: "\(section.steps) steps", variant: .info, symbol: "square.stack.3d.up.fill")
+                                    if current.enrolled {
+                                        BadgeView(text: "\(section.completed)/\(section.steps) done", variant: .success, symbol: "checkmark")
+                                    } else {
+                                        BadgeView(text: "Locked", variant: .neutral, symbol: "lock.fill")
                                     }
-                                    .transition(.opacity.combined(with: .move(edge: .top)))
                                 }
                             }
                         }
