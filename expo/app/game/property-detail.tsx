@@ -88,12 +88,12 @@ const StatCard = ({ icon, label, value, color, trend }: StatCardProps) => (
     </View>
     <Text style={[styles.statLabel]}>{label}</Text>
     <Text style={[styles.statValue, { color }]}>{value}</Text>
-    {trend && (
+    {trend ? (
       <View style={styles.statTrend}>
         {trend === 'up' && <ArrowUpRight size={12} color="#10B981" />}
         {trend === 'down' && <ArrowDownRight size={12} color="#EF4444" />}
       </View>
-    )}
+    ) : null}
   </View>
 );
 
@@ -389,7 +389,7 @@ export default function PropertyDetailScreen() {
                 </Text>
                 <Text style={[styles.specLabel, { color: colors.textSecondary }]}>Sq Ft</Text>
               </View>
-              {property.totalUnits && (
+              {property.totalUnits ? (
                 <View style={styles.specItem}>
                   <Building2 size={20} color={colors.primary} />
                   <Text style={[styles.specValue, { color: colors.text }]}>
@@ -397,7 +397,7 @@ export default function PropertyDetailScreen() {
                   </Text>
                   <Text style={[styles.specLabel, { color: colors.textSecondary }]}>Units</Text>
                 </View>
-              )}
+              ) : null}
             </View>
           </View>
 

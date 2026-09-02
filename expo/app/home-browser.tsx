@@ -496,7 +496,7 @@ export default function HomeBrowserScreen() {
                   ]}
                   onPress={() => handleTierSelect(tier.value)}
                 >
-                  {tier.icon && <View style={{ marginRight: 8 }}>{tier.icon}</View>}
+                  {tier.icon ? <View style={{ marginRight: 8 }}>{tier.icon}</View> : null}
                   <Text
                     style={[
                       dynamicStyles.dropdownItemText,

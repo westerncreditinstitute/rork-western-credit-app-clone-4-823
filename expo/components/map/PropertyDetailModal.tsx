@@ -222,11 +222,11 @@ export default function PropertyDetailModal({
               <Text style={styles.priceText}>
                 {formatPropertyPrice(property.financials.currentValue)}
               </Text>
-              {property.financials.isForRent && property.financials.monthlyRentPrice && (
+              {property.financials.isForRent && property.financials.monthlyRentPrice ? (
                 <Text style={styles.rentText}>
                   ${property.financials.monthlyRentPrice.toLocaleString()}/mo
                 </Text>
-              )}
+              ) : null}
             </View>
           </View>
 
@@ -350,13 +350,13 @@ export default function PropertyDetailModal({
                     <Text style={styles.detailValue}>{property.details.squareFootage.toLocaleString()}</Text>
                     <Text style={styles.detailLabel}>Sq Ft</Text>
                   </View>
-                  {property.details.yearBuilt && (
+                  {property.details.yearBuilt ? (
                     <View style={styles.detailItem}>
                       <Calendar color={colors.textSecondary} size={22} />
                       <Text style={styles.detailValue}>{property.details.yearBuilt}</Text>
                       <Text style={styles.detailLabel}>Year Built</Text>
                     </View>
-                  )}
+                  ) : null}
                   {property.details.parkingSpaces !== undefined && (
                     <View style={styles.detailItem}>
                       <Car color={colors.textSecondary} size={22} />
@@ -364,16 +364,16 @@ export default function PropertyDetailModal({
                       <Text style={styles.detailLabel}>Parking</Text>
                     </View>
                   )}
-                  {isCommercial && property.details.capacity && (
+                  {isCommercial && property.details.capacity ? (
                     <View style={styles.detailItem}>
                       <Users color={colors.textSecondary} size={22} />
                       <Text style={styles.detailValue}>{property.details.capacity}</Text>
                       <Text style={styles.detailLabel}>Capacity</Text>
                     </View>
-                  )}
+                  ) : null}
                 </View>
 
-                {isCommercial && property.details.operatingHours && (
+                {isCommercial && property.details.operatingHours ? (
                   <View style={styles.operatingHoursCard}>
                     <Clock color={colors.primary} size={20} />
                     <View style={styles.operatingHoursContent}>
@@ -381,7 +381,7 @@ export default function PropertyDetailModal({
                       <Text style={styles.operatingHoursValue}>{property.details.operatingHours}</Text>
                     </View>
                   </View>
-                )}
+                ) : null}
 
                 <View style={styles.featuresSection}>
                   <Text style={styles.sectionTitle}>Features & Amenities</Text>
@@ -412,7 +412,7 @@ export default function PropertyDetailModal({
                       {formatPropertyPrice(property.financials.currentValue)}
                     </Text>
                   </View>
-                  {property.financials.appreciationRate && (
+                  {property.financials.appreciationRate ? (
                     <View style={styles.financialRow}>
                       <Text style={styles.financialLabel}>Appreciation</Text>
                       <View style={styles.gainRow}>
@@ -420,31 +420,31 @@ export default function PropertyDetailModal({
                         <Text style={styles.gainValue}>+{property.financials.appreciationRate}%</Text>
                       </View>
                     </View>
-                  )}
-                  {property.financials.monthlyRentPrice && (
+                  ) : null}
+                  {property.financials.monthlyRentPrice ? (
                     <View style={styles.financialRow}>
                       <Text style={styles.financialLabel}>Monthly Rent</Text>
                       <Text style={styles.financialValue}>
                         ${property.financials.monthlyRentPrice.toLocaleString()}/mo
                       </Text>
                     </View>
-                  )}
-                  {isCommercial && property.financials.monthlyRevenue && (
+                  ) : null}
+                  {isCommercial && property.financials.monthlyRevenue ? (
                     <View style={styles.financialRow}>
                       <Text style={styles.financialLabel}>Est. Monthly Revenue</Text>
                       <Text style={[styles.financialValue, { color: '#10B981' }]}>
                         ${property.financials.monthlyRevenue.toLocaleString()}/mo
                       </Text>
                     </View>
-                  )}
-                  {property.financials.annualTaxes && (
+                  ) : null}
+                  {property.financials.annualTaxes ? (
                     <View style={styles.financialRow}>
                       <Text style={styles.financialLabel}>Annual Property Taxes</Text>
                       <Text style={styles.financialValue}>
                         ${property.financials.annualTaxes.toLocaleString()}/yr
                       </Text>
                     </View>
-                  )}
+                  ) : null}
                 </View>
               </View>
             )}
@@ -487,7 +487,7 @@ export default function PropertyDetailModal({
                       <ChevronRight color={colors.textLight} size={20} />
                     </TouchableOpacity>
                   )}
-                  {property.financials.isForRent && property.financials.monthlyRentPrice && (
+                  {property.financials.isForRent && property.financials.monthlyRentPrice ? (
                     <TouchableOpacity
                       style={styles.listingActionButton}
                       onPress={handleApplyRent}
@@ -503,7 +503,7 @@ export default function PropertyDetailModal({
                       </View>
                       <ChevronRight color={colors.textLight} size={20} />
                     </TouchableOpacity>
-                  )}
+                  ) : null}
                 </View>
               </View>
             )}

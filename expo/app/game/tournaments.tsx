@@ -234,9 +234,9 @@ export default function TournamentsScreen() {
         )}
         <View style={styles.leaderboardInfo}>
           <Text style={[styles.leaderboardName, { color: colors.text }]}>{entry.playerName}</Text>
-          {entry.guildName && (
+          {entry.guildName ? (
             <Text style={[styles.leaderboardGuild, { color: colors.textSecondary }]}>{entry.guildName}</Text>
-          )}
+          ) : null}
         </View>
         <View style={styles.leaderboardScore}>
           <Text style={[styles.scoreValue, { color: '#10B981' }]}>+{entry.improvement}</Text>

@@ -489,11 +489,11 @@ export default function PersonalInfoScreen() {
                 </View>
               )}
             </View>
-            {licenseError && (
+            {licenseError ? (
               <Text style={[styles.errorText, { color: colors.error }]}>
                 {licenseError}
               </Text>
-            )}
+            ) : null}
           </View>
 
           {showStatePicker && (

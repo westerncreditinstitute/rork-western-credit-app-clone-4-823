@@ -344,7 +344,7 @@ export default function ProfileScreen() {
                     <Text style={styles.aiTextBadgeLabel}>AI</Text>
                   </View>
                 )}
-                {post.badge && <Text style={styles.postBadge}>{post.badge}</Text>}
+                {post.badge ? <Text style={styles.postBadge}>{post.badge}</Text> : null}
               </View>
               <Text style={[styles.postTime, { color: colors.textSecondary }]}>
                 {formatTimeAgo(post.createdAt)}
@@ -554,12 +554,12 @@ export default function ProfileScreen() {
           <View style={styles.friendInfo}>
             <Text style={[styles.friendName, { color: colors.text }]}>{friend.name}</Text>
             <View style={styles.friendMeta}>
-              {friend.city && (
+              {friend.city ? (
                 <View style={styles.friendMetaItem}>
                   <MapPin size={11} color={colors.textSecondary} />
                   <Text style={[styles.friendMetaText, { color: colors.textSecondary }]}>{friend.city}</Text>
                 </View>
-              )}
+              ) : null}
               <View style={styles.friendMetaItem}>
                 <Star size={11} color="#F59E0B" />
                 <Text style={[styles.friendMetaText, { color: colors.textSecondary }]}>Lv.{friend.level}</Text>
@@ -595,12 +595,12 @@ export default function ProfileScreen() {
               <View style={styles.friendInfo}>
                 <Text style={[styles.friendName, { color: colors.text }]}>{suggestion.name}</Text>
                 <View style={styles.friendMeta}>
-                  {suggestion.city && (
+                  {suggestion.city ? (
                     <View style={styles.friendMetaItem}>
                       <MapPin size={11} color={colors.textSecondary} />
                       <Text style={[styles.friendMetaText, { color: colors.textSecondary }]}>{suggestion.city}</Text>
                     </View>
-                  )}
+                  ) : null}
                 </View>
               </View>
               <TouchableOpacity
@@ -1165,9 +1165,9 @@ export default function ProfileScreen() {
                       <Bell size={18} color={alert.enabled ? colors.primary : colors.textSecondary} />
                       <View style={styles.alertTextContainer}>
                         <Text style={[styles.alertName, { color: colors.text }]}>{alert.name}</Text>
-                        {alert.dayOfMonth && (
+                        {alert.dayOfMonth ? (
                           <Text style={[styles.alertDay, { color: colors.textSecondary }]}>Day {alert.dayOfMonth} of each month</Text>
-                        )}
+                        ) : null}
                         {alert.type === 'groceries_low' && (
                           <Text style={[styles.alertDay, { color: colors.textSecondary }]}>Warns before month end</Text>
                         )}

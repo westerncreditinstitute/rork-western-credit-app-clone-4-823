@@ -578,12 +578,12 @@ export default function ScavengerHuntScreen() {
         </Text>
       </View>
 
-      {streakBonusLabel && (
+      {streakBonusLabel ? (
         <View style={styles.streakBonusBanner}>
           <Zap size={14} color="#FDE68A" />
           <Text style={styles.streakBonusText}>{streakBonusLabel}</Text>
         </View>
-      )}
+      ) : null}
     </LinearGradient>
   );
 
@@ -794,11 +794,11 @@ export default function ScavengerHuntScreen() {
               {treasure.name}
             </Text>
             {claimed && <Lock size={12} color={colors.textSecondary} />}
-            {isReal && (
+            {isReal ? (
               <View style={styles.realPlaceBadge}>
                 <Text style={styles.realPlaceBadgeText}>REAL</Text>
               </View>
-            )}
+            ) : null}
           </View>
 
           {isReal && !isPark && (

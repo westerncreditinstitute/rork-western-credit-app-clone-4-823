@@ -372,12 +372,12 @@ export default function InvestmentPoolBrowser({
                 )}
               </View>
 
-              {selectedPool.businessPlan && (
+              {selectedPool.businessPlan ? (
                 <View style={styles.businessPlanSection}>
                   <Text style={styles.businessPlanTitle}>Business Plan</Text>
                   <Text style={styles.businessPlanText}>{selectedPool.businessPlan}</Text>
                 </View>
-              )}
+              ) : null}
 
               <View style={styles.disclaimerBox}>
                 <AlertTriangle size={16} color={colors.warning} />

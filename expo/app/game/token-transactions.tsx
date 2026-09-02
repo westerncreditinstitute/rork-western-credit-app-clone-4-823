@@ -149,7 +149,7 @@ function TransactionItem({ transaction, isLast }: { transaction: GameTokenTransa
           <Text style={styles.txTime}>{new Date(transaction.timestamp).toLocaleTimeString()}</Text>
         </View>
 
-        {transaction.metadata?.category && (
+        {transaction.metadata?.category ? (
           <View style={styles.txCategory}>
             <Text style={styles.txCategoryText}>
               {String(transaction.metadata.category)
@@ -158,7 +158,7 @@ function TransactionItem({ transaction, isLast }: { transaction: GameTokenTransa
                 .join(' ')}
             </Text>
           </View>
-        )}
+        ) : null}
       </View>
 
       <View style={styles.txAmountContainer}>

@@ -232,14 +232,14 @@ export default function JointVentureProposalModal({
             </View>
           )}
 
-          {targetUserId && (
+          {targetUserId ? (
             <View style={styles.partnerPreview}>
               <Users size={20} color={colors.primary} />
               <Text style={styles.partnerPreviewText}>
                 Proposing to: <Text style={styles.partnerName}>{targetUserName}</Text>
               </Text>
             </View>
-          )}
+          ) : null}
 
           {!existingBusinessId && (
             <View style={styles.section}>
@@ -286,14 +286,14 @@ export default function JointVentureProposalModal({
             </View>
           )}
 
-          {existingBusinessId && (
+          {existingBusinessId ? (
             <View style={styles.existingBusiness}>
               <Building2 size={20} color={colors.info} />
               <Text style={styles.existingBusinessText}>
                 Existing Business: <Text style={styles.existingBusinessName}>{existingBusinessName}</Text>
               </Text>
             </View>
-          )}
+          ) : null}
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Financial Terms</Text>

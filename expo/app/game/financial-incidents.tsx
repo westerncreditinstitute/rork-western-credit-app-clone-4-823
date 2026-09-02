@@ -179,12 +179,12 @@ const FinancialIncidentsScreen: React.FC<FinancialIncidentsScreenProps> = ({
         }
       >
         {/* Error State */}
-        {error && (
+        {error ? (
           <View style={styles.errorContainer}>
             <AlertTriangle size={20} color="#ef4444" />
             <Text style={styles.errorText}>{error}</Text>
           </View>
-        )}
+        ) : null}
 
         {/* Statistics Cards */}
         {stats && (

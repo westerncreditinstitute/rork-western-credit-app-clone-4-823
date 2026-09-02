@@ -122,12 +122,12 @@ function ChallengeCard({ challenge, onPress }: ChallengeCardProps) {
           </View>
         </View>
 
-        {challenge.isJoined && challenge.userRank && (
+        {challenge.isJoined && challenge.userRank ? (
           <View style={styles.rankContainer}>
             <Text style={styles.rankLabel}>Your Rank:</Text>
             <Text style={styles.rankValue}>#{challenge.userRank}</Text>
           </View>
-        )}
+        ) : null}
       </View>
 
       <View style={styles.arrow}>

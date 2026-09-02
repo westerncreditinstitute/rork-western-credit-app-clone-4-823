@@ -126,11 +126,11 @@ export default function PaymentMethodsScreen() {
                 <Text style={[styles.methodNumber, { color: colors.textSecondary }]}>
                   •••• •••• •••• {method.last4}
                 </Text>
-                {method.expiryDate && (
+                {method.expiryDate ? (
                   <Text style={[styles.methodExpiry, { color: colors.textLight }]}>
                     Expires {method.expiryDate}
                   </Text>
-                )}
+                ) : null}
               </View>
             </View>
 

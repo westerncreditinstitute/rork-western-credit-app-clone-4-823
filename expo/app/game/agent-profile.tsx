@@ -271,9 +271,9 @@ const ActivityItem = React.memo(({ activity, colors }: {
             {timeAgo(activity.created_at)}
           </Text>
         </View>
-        {activity.badge && (
+        {activity.badge ? (
           <Text style={styles.activityBadge}>{activity.badge}</Text>
-        )}
+        ) : null}
       </View>
       <Text style={[styles.activityContent, { color: colors.textSecondary }]} numberOfLines={3}>
         {activity.content}
@@ -780,7 +780,7 @@ export default function AgentProfileScreen() {
             </Text>
           </View>
 
-          {profile.last_active_at && (
+          {profile.last_active_at ? (
             <View style={styles.aboutRow}>
               <Activity size={16} color={colors.textLight} />
               <Text style={[styles.aboutRowLabel, { color: colors.textSecondary }]}>Last Active</Text>
@@ -788,7 +788,7 @@ export default function AgentProfileScreen() {
                 {timeAgo(profile.last_active_at || new Date().toISOString())}
               </Text>
             </View>
-          )}
+          ) : null}
         </View>
 
         {/* Agent ID */}

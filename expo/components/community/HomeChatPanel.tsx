@@ -230,9 +230,9 @@ export default function HomeChatPanel({
     if (isEmoji) {
       return (
         <View style={[styles.messageRow, isOwnMessage && styles.ownMessageRow]}>
-          {!isOwnMessage && item.senderAvatar && (
+          {!isOwnMessage && item.senderAvatar ? (
             <Image source={{ uri: item.senderAvatar }} style={styles.messageAvatar} />
-          )}
+          ) : null}
           <View style={[styles.emojiBubble, isOwnMessage && styles.ownEmojiBubble]}>
             {!isOwnMessage && (
               <Text style={styles.senderName}>{item.senderName}</Text>
@@ -246,9 +246,9 @@ export default function HomeChatPanel({
 
     return (
       <View style={[styles.messageRow, isOwnMessage && styles.ownMessageRow]}>
-        {!isOwnMessage && item.senderAvatar && (
+        {!isOwnMessage && item.senderAvatar ? (
           <Image source={{ uri: item.senderAvatar }} style={styles.messageAvatar} />
-        )}
+        ) : null}
         <View style={[
           styles.messageBubble,
           isOwnMessage && styles.ownMessageBubble,

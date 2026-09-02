@@ -145,14 +145,14 @@ export default function BusinessBrowserScreen() {
           </View>
         )}
 
-        {item.customer_rating && (
+        {item.customer_rating ? (
           <View style={styles.detailRow}>
             <Star size={16} color="#f59e0b" />
             <Text style={styles.detailText}>
               {item.customer_rating.toFixed(1)} ({item.total_reviews} reviews)
             </Text>
           </View>
-        )}
+        ) : null}
       </View>
 
       <View style={styles.cardFooter}>

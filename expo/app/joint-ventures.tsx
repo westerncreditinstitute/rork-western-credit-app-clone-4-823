@@ -247,11 +247,11 @@ export default function JointVenturesScreen() {
 
         <View style={styles.proposalBody}>
           <Text style={styles.proposalVentureName}>{proposal.proposedName}</Text>
-          {proposal.message && (
+          {proposal.message ? (
             <Text style={styles.proposalMessage} numberOfLines={2}>
               {`"${proposal.message}"`}
             </Text>
-          )}
+          ) : null}
         </View>
 
         <View style={styles.proposalTerms}>

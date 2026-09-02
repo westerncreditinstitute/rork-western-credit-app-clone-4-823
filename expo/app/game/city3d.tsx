@@ -93,11 +93,11 @@ function LandmarkItem({
         <Text style={styles.landmarkType}>
           {landmark.type.replace('_', ' ').toUpperCase()}
         </Text>
-        {isDiscovered && landmark.treasureValue && (
+        {isDiscovered && landmark.treasureValue ? (
           <Text style={styles.landmarkTreasure}>
             💰 {landmark.treasureValue} treasure value
           </Text>
-        )}
+        ) : null}
       </View>
       {isDiscovered && (
         <View style={styles.discoveredBadge}>
@@ -437,7 +437,7 @@ export default function City3DScreen() {
       <LoadingOverlay />
       
       {/* Error display */}
-      {state.error && (
+      {state.error ? (
         <View style={styles.errorOverlay}>
           <Text style={styles.errorText}>⚠️ {state.error}</Text>
           <TouchableOpacity 
@@ -447,7 +447,7 @@ export default function City3DScreen() {
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
         </View>
-      )}
+      ) : null}
     </SafeAreaView>
   );
 }

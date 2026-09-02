@@ -146,11 +146,11 @@ const QuickActionItem = memo(function QuickActionItem({ action, badge, colors, o
         <IconComponent size={24} color={action.color} />
       </View>
       <Text style={[styles.quickActionLabel, { color: colors.text }]}>{action.label}</Text>
-      {badge && (
+      {badge ? (
         <View style={[styles.actionBadge, { backgroundColor: action.color }]}>
           <Text style={styles.actionBadgeText}>{badge}</Text>
         </View>
-      )}
+      ) : null}
       <ChevronRight size={16} color={colors.textLight} />
     </TouchableOpacity>
   );

@@ -205,13 +205,13 @@ export default function CreditDetailsScreen() {
                   {factor.details}
                 </Text>
 
-                {factor.extra && (
+                {factor.extra ? (
                   <View style={[styles.factorExtra, { backgroundColor: colors.surfaceAlt }]}>
                     <Text style={[styles.factorExtraText, { color: colors.text }]}>
                       {factor.extra}
                     </Text>
                   </View>
-                )}
+                ) : null}
               </View>
             );
           })}

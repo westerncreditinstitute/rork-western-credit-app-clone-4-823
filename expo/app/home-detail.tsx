@@ -533,13 +533,13 @@ export default function HomeDetailScreen() {
                 <Text style={styles.detailValue}>{home.details.squareFootage.toLocaleString()}</Text>
                 <Text style={styles.detailLabel}>Sq Ft</Text>
               </View>
-              {home.details.yearBuilt && (
+              {home.details.yearBuilt ? (
                 <View style={styles.detailItem}>
                   <Calendar color={colors.textSecondary} size={22} />
                   <Text style={styles.detailValue}>{home.details.yearBuilt}</Text>
                   <Text style={styles.detailLabel}>Year Built</Text>
                 </View>
-              )}
+              ) : null}
             </View>
           </View>
 

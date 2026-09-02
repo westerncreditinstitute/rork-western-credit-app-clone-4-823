@@ -331,7 +331,7 @@ export default function CareerScreen() {
           <ChevronRight size={20} color={colors.textSecondary} />
         </TouchableOpacity>
 
-        {highestDegree && (
+        {highestDegree ? (
           <View style={[styles.educationBanner, { backgroundColor: '#8B5CF620' }]}>
             <GraduationCap size={20} color="#8B5CF6" />
             <View style={styles.educationBannerText}>
@@ -343,7 +343,7 @@ export default function CareerScreen() {
               </Text>
             </View>
           </View>
-        )}
+        ) : null}
 
         {currentEnrollment && (
           <View style={[styles.enrollmentBanner, { backgroundColor: '#3B82F620' }]}>
@@ -544,11 +544,11 @@ export default function CareerScreen() {
                         </Text>
                       </View>
                     )}
-                    {job.commission && (
+                    {job.commission ? (
                       <Text style={[styles.commissionText, { color: colors.textSecondary }]}>
                         + up to {formatCurrency(job.commission)} commission
                       </Text>
-                    )}
+                    ) : null}
                   </View>
 
                   <View style={styles.benefitsContainer}>
@@ -573,7 +573,7 @@ export default function CareerScreen() {
                     )}
                   </View>
 
-                  {job.requirements.requiredDegree && (
+                  {job.requirements.requiredDegree ? (
                     <View style={styles.requirementRow}>
                       <GraduationCap size={14} color={eduCheck.eligible ? '#10B981' : '#EF4444'} />
                       <Text style={[
@@ -584,9 +584,9 @@ export default function CareerScreen() {
                         {job.requirements.requiredMajor && ` in ${job.requirements.requiredMajor.replace('major_', '').replace(/_/g, ' ')}`}
                       </Text>
                     </View>
-                  )}
+                  ) : null}
 
-                  {job.requirements.minimumGPA && (
+                  {job.requirements.minimumGPA ? (
                     <View style={styles.requirementRow}>
                       <Award size={14} color={getHighestGPA() >= job.requirements.minimumGPA ? '#10B981' : '#EF4444'} />
                       <Text style={[
@@ -596,7 +596,7 @@ export default function CareerScreen() {
                         {job.requirements.minimumGPA.toFixed(1)} minimum GPA required
                       </Text>
                     </View>
-                  )}
+                  ) : null}
 
                   {job.requirements.preferredEducation && job.requirements.preferredEducation.length > 0 && !job.requirements.requiredDegree && (
                     <View style={styles.requirementRow}>
@@ -616,14 +616,14 @@ export default function CareerScreen() {
                     </View>
                   )}
 
-                  {job.requirements.minCreditScore && (
+                  {job.requirements.minCreditScore ? (
                     <View style={styles.requirementRow}>
                       <TrendingUp size={14} color={colors.textLight} />
                       <Text style={[styles.requirementText, { color: colors.textLight }]}>
                         {job.requirements.minCreditScore} credit score required
                       </Text>
                     </View>
-                  )}
+                  ) : null}
 
                   <TouchableOpacity
                     style={[

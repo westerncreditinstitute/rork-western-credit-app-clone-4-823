@@ -100,7 +100,7 @@ const StatRow = ({ icon: Icon, iconColor, label, value, subValue }: {
     <Text style={styles.statRowLabel}>{label}</Text>
     <View style={styles.statRowRight}>
       <Text style={styles.statRowValue}>{value}</Text>
-      {subValue && <Text style={styles.statRowSubValue}>{subValue}</Text>}
+      {subValue ? <Text style={styles.statRowSubValue}>{subValue}</Text> : null}
     </View>
   </View>
 );

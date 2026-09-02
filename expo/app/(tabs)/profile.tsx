@@ -271,7 +271,7 @@ export default function ProfileScreen() {
           >
             {title}
           </Text>
-          {subtitle && <Text style={[styles.menuSubtitle, { color: colors.textSecondary }]}>{subtitle}</Text>}
+          {subtitle ? <Text style={[styles.menuSubtitle, { color: colors.textSecondary }]}>{subtitle}</Text> : null}
         </View>
       </View>
       <View style={styles.menuItemRight}>

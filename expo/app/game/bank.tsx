@@ -486,19 +486,19 @@ export default function BankScreen() {
                           <Text style={[styles.productApr, { color: colors.textSecondary }]}>
                             {product.baseApr}% - {product.maxApr}% APR
                           </Text>
-                          {product.rewards && (
+                          {product.rewards ? (
                             <Text style={[styles.productRewards, { color: color }]} numberOfLines={1}>
                               {product.rewards}
                             </Text>
-                          )}
-                          {product.isSecured && product.securityDeposit && (
+                          ) : null}
+                          {product.isSecured && product.securityDeposit ? (
                             <View style={styles.securedBadgeSmall}>
                               <Shield size={10} color="#059669" />
                               <Text style={styles.securedBadgeText}>
                                 ${product.securityDeposit} deposit
                               </Text>
                             </View>
-                          )}
+                          ) : null}
                         </View>
                         {eligible ? (
                           <ChevronRight size={20} color={colors.textLight} />

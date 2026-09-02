@@ -40,11 +40,11 @@ export function StatCard({
   if (compact) {
     return (
       <View style={[styles.compactContainer, { backgroundColor: colors.surface }, style]}>
-        {icon && (
+        {icon ? (
           <View style={[styles.compactIcon, { backgroundColor: colors.surfaceAlt }]}>
             {icon}
           </View>
-        )}
+        ) : null}
         <View style={styles.compactContent}>
           <Text style={[styles.compactValue, { color: colors.text }]}>{value}</Text>
           <Text style={[styles.compactLabel, { color: colors.textSecondary }]}>{label}</Text>
@@ -56,17 +56,17 @@ export function StatCard({
   return (
     <View style={[styles.container, { backgroundColor: colors.surface }, style]}>
       <View style={styles.header}>
-        {icon && (
+        {icon ? (
           <View style={[styles.iconContainer, { backgroundColor: colors.surfaceAlt }]}>
             {icon}
           </View>
-        )}
-        {change && trend && (
+        ) : null}
+        {change && trend ? (
           <View style={[styles.trendBadge, { backgroundColor: getTrendColor() + '15' }]}>
             <TrendIcon size={12} color={getTrendColor()} />
             <Text style={[styles.trendText, { color: getTrendColor() }]}>{change}</Text>
           </View>
-        )}
+        ) : null}
       </View>
       <Text style={[styles.value, { color: colors.text }]}>{value}</Text>
       <Text style={[styles.label, { color: colors.textSecondary }]}>{label}</Text>

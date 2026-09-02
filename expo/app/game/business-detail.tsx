@@ -81,7 +81,7 @@ const StatCard = ({ icon, label, value, color, trend, trendValue }: StatCardProp
     </View>
     <Text style={[styles.statLabel]}>{label}</Text>
     <Text style={[styles.statValue, { color }]}>{value}</Text>
-    {trend && trendValue && (
+    {trend && trendValue ? (
       <View style={styles.statTrend}>
         {trend === 'up' && <ArrowUpRight size={12} color="#10B981" />}
         {trend === 'down' && <ArrowDownRight size={12} color="#EF4444" />}
@@ -92,7 +92,7 @@ const StatCard = ({ icon, label, value, color, trend, trendValue }: StatCardProp
           {trendValue}
         </Text>
       </View>
-    )}
+    ) : null}
   </View>
 );
 

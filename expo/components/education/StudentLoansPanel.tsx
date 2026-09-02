@@ -363,14 +363,14 @@ export default function StudentLoansPanel({
                   {new Date(loan.originationDate).toLocaleDateString()}
                 </Text>
               </View>
-              {loan.lastPaymentDate && (
+              {loan.lastPaymentDate ? (
                 <View style={styles.detailRow}>
                   <Text style={[styles.detailLabel, { color: colors.textSecondary }]}>Last Payment</Text>
                   <Text style={[styles.detailValue, { color: colors.text }]}>
                     {new Date(loan.lastPaymentDate).toLocaleDateString()} - ${loan.lastPaymentAmount?.toLocaleString()}
                   </Text>
                 </View>
-              )}
+              ) : null}
             </View>
 
             {!isPaidOff && (
@@ -458,11 +458,11 @@ export default function StudentLoansPanel({
             </Text>
           </View>
         </View>
-        {!canApply && option.minimumCreditScore && (
+        {!canApply && option.minimumCreditScore ? (
           <Text style={[styles.loanTypeWarning, { color: colors.error }]}>
             Requires {option.minimumCreditScore}+ credit score
           </Text>
-        )}
+        ) : null}
       </TouchableOpacity>
     );
   };

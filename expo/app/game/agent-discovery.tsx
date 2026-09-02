@@ -247,20 +247,20 @@ export default function AgentDiscoveryScreen() {
           </View>
           <View style={styles.agentInfo}>
             <Text style={styles.agentName}>{agent.name}</Text>
-            {agent.occupation && (
+            {agent.occupation ? (
               <View style={styles.occupationRow}>
                 <Briefcase size={11} color={colors.textLight} />
                 <Text style={styles.occupationText}>{agent.occupation}</Text>
               </View>
-            )}
-            {agent.bio && (
+            ) : null}
+            {agent.bio ? (
               <View style={styles.locationRow}>
                 <MapPin size={11} color={colors.textLight} />
                 <Text style={styles.locationText} numberOfLines={1}>
                   {agent.bio}
                 </Text>
               </View>
-            )}
+            ) : null}
           </View>
 
           {/* Credit Score */}
@@ -347,11 +347,11 @@ export default function AgentDiscoveryScreen() {
           <Text style={styles.featuredName} numberOfLines={1}>
             {agent.name}
           </Text>
-          {agent.occupation && (
+          {agent.occupation ? (
             <Text style={styles.featuredOccupation} numberOfLines={1}>
               {agent.occupation}
             </Text>
-          )}
+          ) : null}
           <View style={styles.featuredStatsRow}>
             <Users size={10} color={colors.textLight} />
             <Text style={styles.featuredStatText}>

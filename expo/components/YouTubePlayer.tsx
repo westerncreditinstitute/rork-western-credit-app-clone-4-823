@@ -41,7 +41,7 @@ export default function YouTubePlayer({
   if (Platform.OS === "web") {
     return (
       <View style={styles.container}>
-        {title && <Text style={styles.title}>{title}</Text>}
+        {title ? <Text style={styles.title}>{title}</Text> : null}
         <View style={styles.playerContainer}>
           <iframe
             width="100%"
@@ -59,7 +59,7 @@ export default function YouTubePlayer({
 
   return (
     <View style={styles.container}>
-      {title && <Text style={styles.title}>{title}</Text>}
+      {title ? <Text style={styles.title}>{title}</Text> : null}
       <View style={styles.playerContainer}>
         {!isPlaying ? (
           <TouchableOpacity

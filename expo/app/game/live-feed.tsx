@@ -209,7 +209,7 @@ const LiveActivityItem = React.memo(function LiveActivityItem({
               </View>
             )}
           </View>
-          {post.authorCity && (
+          {post.authorCity ? (
             <Text style={[styles.authorMeta, { color: colors.textLight }]} numberOfLines={1}>
               {post.authorOccupation ? `${post.authorOccupation} · ` : ''}{post.authorCity}
               {post.authorCreditScore ? ` · ` : ''}
@@ -219,7 +219,7 @@ const LiveActivityItem = React.memo(function LiveActivityItem({
                 </Text>
               )}
             </Text>
-          )}
+          ) : null}
         </View>
       </TouchableOpacity>
 

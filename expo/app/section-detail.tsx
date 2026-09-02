@@ -610,11 +610,11 @@ export default function SectionDetailScreen() {
               <Text style={styles.activeVideoTitle}>
                 {videos[activeVideoIndex].title}
               </Text>
-              {videos[activeVideoIndex].description && (
+              {videos[activeVideoIndex].description ? (
                 <Text style={styles.activeVideoDescription}>
                   {videos[activeVideoIndex].description}
                 </Text>
-              )}
+              ) : null}
               
               <TouchableOpacity
                 style={styles.notesToggle}
@@ -665,7 +665,7 @@ export default function SectionDetailScreen() {
                   </TouchableOpacity>
                 </View>
 
-                {editingNoteId && (
+                {editingNoteId ? (
                   <TouchableOpacity
                     style={styles.cancelEditButton}
                     onPress={() => {
@@ -675,7 +675,7 @@ export default function SectionDetailScreen() {
                   >
                     <Text style={styles.cancelEditText}>Cancel Edit</Text>
                   </TouchableOpacity>
-                )}
+                ) : null}
 
                 {notesQuery.isLoading ? (
                   <ActivityIndicator
@@ -790,9 +790,9 @@ export default function SectionDetailScreen() {
                         )}
                       </View>
                       <View style={styles.videoMeta}>
-                        {video.duration && (
+                        {video.duration ? (
                           <Text style={styles.videoDuration}>{video.duration}</Text>
-                        )}
+                        ) : null}
                         {progressPercent > 0 && !isCompleted && (
                           <Text style={[
                             styles.videoProgress,
@@ -889,11 +889,11 @@ export default function SectionDetailScreen() {
                         </View>
                       )}
                     </View>
-                    {doc.description && (
+                    {doc.description ? (
                       <Text style={styles.documentDescription} numberOfLines={1}>
                         {doc.description}
                       </Text>
-                    )}
+                    ) : null}
                   </View>
                   {!isEnrolled ? (
                     <Lock color={Colors.textLight} size={18} />

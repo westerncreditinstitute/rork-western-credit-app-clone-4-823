@@ -64,7 +64,7 @@ export function Badge({
         style,
       ]}
     >
-      {icon && <View style={styles.iconContainer}>{icon}</View>}
+      {icon ? <View style={styles.iconContainer}>{icon}</View> : null}
       <Text
         style={[
           styles.text,

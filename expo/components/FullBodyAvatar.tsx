@@ -55,7 +55,7 @@ export default function FullBodyAvatar({ avatar, size = 'medium', showOutfit = t
 
   return (
     <View style={[styles.container, { width, height }]}>
-      {showOutfit && hatColor && (
+      {showOutfit && hatColor ? (
         <View style={[styles.hat, { 
           backgroundColor: hatColor,
           width: headSize * 1.1,
@@ -63,7 +63,7 @@ export default function FullBodyAvatar({ avatar, size = 'medium', showOutfit = t
           top: headSize * 0.05,
           borderRadius: headSize * 0.15,
         }]} />
-      )}
+      ) : null}
 
       <View style={[styles.head, { 
         width: headSize, 
@@ -180,14 +180,14 @@ export default function FullBodyAvatar({ avatar, size = 'medium', showOutfit = t
         top: headSize * 0.35 + headSize - 2,
       }]} />
 
-      {showOutfit && jewelryColor && (
+      {showOutfit && jewelryColor ? (
         <View style={[styles.necklace, {
           borderColor: jewelryColor,
           width: headSize * 0.5,
           height: headSize * 0.15,
           top: headSize * 0.35 + headSize + headSize * 0.1,
         }]} />
-      )}
+      ) : null}
 
       <View style={[styles.torso, {
         backgroundColor: showOutfit ? topColor : avatar.skinTone,
@@ -224,13 +224,13 @@ export default function FullBodyAvatar({ avatar, size = 'medium', showOutfit = t
             width: bodyWidth * 0.22,
             height: bodyWidth * 0.22,
           }]} />
-          {showOutfit && watchColor && (
+          {showOutfit && watchColor ? (
             <View style={[styles.watch, {
               backgroundColor: watchColor,
               width: bodyWidth * 0.2,
               height: bodyWidth * 0.12,
             }]} />
-          )}
+          ) : null}
         </View>
         <View style={[styles.arm, styles.rightArm, {
           backgroundColor: showOutfit ? topColor : avatar.skinTone,

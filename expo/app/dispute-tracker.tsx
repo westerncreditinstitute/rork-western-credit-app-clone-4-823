@@ -687,7 +687,7 @@ export default function DisputeTrackerScreen() {
                                 <View style={styles.timelineContent}>
                                   <Text style={styles.timelineDate}>{formatDate(item.date)}</Text>
                                   <Text style={styles.timelineAction}>{item.action}</Text>
-                                  {item.note && <Text style={styles.timelineNote}>{item.note}</Text>}
+                                  {item.note ? <Text style={styles.timelineNote}>{item.note}</Text> : null}
                                 </View>
                               </View>
                             ))}
@@ -708,7 +708,7 @@ export default function DisputeTrackerScreen() {
                             <Text style={styles.actionText}>Add Note</Text>
                           </TouchableOpacity>
 
-                          {dispute.letterContent && (
+                          {dispute.letterContent ? (
                             <>
                               <TouchableOpacity
                                 style={styles.actionButton}
@@ -725,7 +725,7 @@ export default function DisputeTrackerScreen() {
                                 <Text style={styles.actionText}>Print</Text>
                               </TouchableOpacity>
                             </>
-                          )}
+                          ) : null}
 
                           <TouchableOpacity
                             style={styles.actionButton}

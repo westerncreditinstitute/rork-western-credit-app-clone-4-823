@@ -198,7 +198,7 @@ export default function BusinessCompetitionCard({
           </View>
         )}
 
-        {isParticipating && userRank && (
+        {isParticipating && userRank ? (
           <View style={styles.userPosition}>
             <View style={styles.userPositionLeft}>
               {getRankIcon(userRank)}
@@ -206,7 +206,7 @@ export default function BusinessCompetitionCard({
             </View>
             <Text style={styles.userRankText}>#{userRank}</Text>
           </View>
-        )}
+        ) : null}
 
         <View style={styles.footer}>
           {!isParticipating && (isUpcoming || isActive) && (

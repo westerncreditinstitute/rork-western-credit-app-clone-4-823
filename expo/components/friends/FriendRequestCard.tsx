@@ -41,11 +41,11 @@ export const FriendRequestCard = memo(function FriendRequestCard({
           <Clock size={12} color={colors.textSecondary} />
           <Text style={[styles.time, { color: colors.textSecondary }]}>{timeAgo}</Text>
         </View>
-        {request.message && (
+        {request.message ? (
           <Text style={[styles.message, { color: colors.textSecondary }]} numberOfLines={2}>
             &quot;{request.message}&quot;
           </Text>
-        )}
+        ) : null}
       </View>
 
       {isLoading ? (

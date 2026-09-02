@@ -531,13 +531,13 @@ function Item3DBox({ width, height, depth, color, imageUrl }: Item3DBoxProps) {
           },
         ]}
       >
-        {imageUrl && (
+        {imageUrl ? (
           <Image
             source={{ uri: imageUrl }}
             style={styles.boxFrontImage}
             resizeMode="cover"
           />
-        )}
+        ) : null}
       </View>
       <View
         style={[

@@ -547,19 +547,19 @@ export default function LeaderboardScreen() {
                       {selectedProfile.playerName}
                     </Text>
 
-                    {selectedProfile.jobTitle && (
+                    {selectedProfile.jobTitle ? (
                       <View style={[styles.jobBadge, { backgroundColor: colors.background }]}>
                         <Briefcase size={14} color={colors.primary} />
                         <Text style={[styles.jobText, { color: colors.text }]}>
                           {selectedProfile.jobTitle}
                         </Text>
-                        {selectedProfile.company && (
+                        {selectedProfile.company ? (
                           <Text style={[styles.companyText, { color: colors.textSecondary }]}>
                             at {selectedProfile.company}
                           </Text>
-                        )}
+                        ) : null}
                       </View>
-                    )}
+                    ) : null}
 
                     <View style={[styles.profileLifestyleBadge, { backgroundColor: getLifestyleColor(selectedProfile.lifestyle.fashionStyle) + '30' }]}>
                       {(() => {

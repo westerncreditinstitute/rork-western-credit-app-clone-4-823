@@ -173,7 +173,7 @@ export default function UATFeedbackScreen() {
     label?: string
   ) => (
     <View style={styles.starsContainer}>
-      {label && <Text style={styles.starsLabel}>{label}</Text>}
+      {label ? <Text style={styles.starsLabel}>{label}</Text> : null}
       <View style={styles.starsRow}>
         {[1, 2, 3, 4, 5].map((star) => (
           <TouchableOpacity

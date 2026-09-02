@@ -382,14 +382,14 @@ export default function ChallengeDetailScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Requirements</Text>
             <View style={styles.requirementsList}>
-              {challenge.requirements.minLevel && (
+              {challenge.requirements.minLevel ? (
                 <View style={styles.requirementItem}>
                   <Star color={colors.primary} size={18} />
                   <Text style={styles.requirementText}>
                     Minimum Level {challenge.requirements.minLevel}
                   </Text>
                 </View>
-              )}
+              ) : null}
               {challenge.requirements.hasHome && (
                 <View style={styles.requirementItem}>
                   <Award color={colors.primary} size={18} />
@@ -398,14 +398,14 @@ export default function ChallengeDetailScreen() {
                   </Text>
                 </View>
               )}
-              {challenge.requirements.minCreditScore && (
+              {challenge.requirements.minCreditScore ? (
                 <View style={styles.requirementItem}>
                   <TrendingUp color={colors.primary} size={18} />
                   <Text style={styles.requirementText}>
                     Credit Score {challenge.requirements.minCreditScore}+
                   </Text>
                 </View>
-              )}
+              ) : null}
             </View>
           </View>
         )}

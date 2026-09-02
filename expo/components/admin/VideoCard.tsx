@@ -29,9 +29,9 @@ const VideoCard = React.memo(function VideoCard({
     <View style={styles.videoCard}>
       <View style={styles.videoInfo}>
         <Text style={styles.videoTitle}>{video.title}</Text>
-        {video.duration && (
+        {video.duration ? (
           <Text style={styles.videoDuration}>{video.duration}</Text>
-        )}
+        ) : null}
         {video.url ? (
           <Text style={styles.videoUrl} numberOfLines={1}>
             {"URL: "}{String(video.url)}

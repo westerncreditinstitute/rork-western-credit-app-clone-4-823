@@ -434,11 +434,11 @@ export default function PoolDetailScreen() {
           <Text style={[styles.updateDescription, { color: colors.textSecondary }]}>
             {item.description}
           </Text>
-          {item.amount && (
+          {item.amount ? (
             <Text style={[styles.updateAmount, { color: '#22C55E' }]}>
               {formatCurrency(item.amount)}
             </Text>
-          )}
+          ) : null}
           <Text style={[styles.updateTime, { color: colors.textLight }]}>
             {new Date(item.createdAt).toLocaleDateString()}
           </Text>

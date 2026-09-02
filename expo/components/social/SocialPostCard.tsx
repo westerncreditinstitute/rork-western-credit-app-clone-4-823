@@ -127,7 +127,7 @@ function SocialPostCard({
             )}
           </View>
           <View style={styles.metaRow}>
-            {post.authorCreditScore && (
+            {post.authorCreditScore ? (
               <View style={styles.creditBadge}>
                 <MaterialCommunityIcons
                   name="credit-card"
@@ -138,21 +138,21 @@ function SocialPostCard({
                   {post.authorCreditScore}
                 </Text>
               </View>
-            )}
-            {post.authorCity && (
+            ) : null}
+            {post.authorCity ? (
               <Text style={[styles.metaText, { color: colors.textSecondary }]}>
                 📍 {post.authorCity}
               </Text>
-            )}
+            ) : null}
             <Text style={[styles.metaText, { color: colors.textSecondary }]}>
               • {timeAgo(post.createdAt)}
             </Text>
           </View>
         </View>
 
-        {post.badge && (
+        {post.badge ? (
           <Text style={styles.badge}>{post.badge}</Text>
-        )}
+        ) : null}
       </TouchableOpacity>
 
       {/* Content */}

@@ -85,11 +85,11 @@ export class ErrorBoundary extends Component<Props, State> {
               <ScrollView style={styles.errorDetails} showsVerticalScrollIndicator={false}>
                 <Text style={styles.errorTitle}>Error Details (Dev Only)</Text>
                 <Text style={styles.errorText}>{this.state.error.toString()}</Text>
-                {this.state.errorInfo?.componentStack && (
+                {this.state.errorInfo?.componentStack ? (
                   <Text style={styles.stackText}>
                     {this.state.errorInfo.componentStack}
                   </Text>
-                )}
+                ) : null}
               </ScrollView>
             )}
           </View>

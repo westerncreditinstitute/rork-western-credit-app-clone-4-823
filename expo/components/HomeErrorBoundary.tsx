@@ -201,19 +201,19 @@ function HomeErrorFallback({
                 <Text style={styles.detailsLabel}>Message:</Text>
                 <Text style={styles.detailsValue}>{error.message}</Text>
                 
-                {error.stack && (
+                {error.stack ? (
                   <>
                     <Text style={styles.detailsLabel}>Stack Trace:</Text>
                     <Text style={styles.stackTrace}>{error.stack}</Text>
                   </>
-                )}
+                ) : null}
                 
-                {errorInfo?.componentStack && (
+                {errorInfo?.componentStack ? (
                   <>
                     <Text style={styles.detailsLabel}>Component Stack:</Text>
                     <Text style={styles.stackTrace}>{errorInfo.componentStack}</Text>
                   </>
-                )}
+                ) : null}
               </ScrollView>
             )}
           </View>

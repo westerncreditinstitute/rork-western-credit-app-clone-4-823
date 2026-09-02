@@ -282,26 +282,26 @@ export default function HomeCard({
                   : formatHomeValue(home.financials.currentValue)}
               </Text>
             </View>
-            {!home.financials.isRenting && home.financials.netWorthGain && (
+            {!home.financials.isRenting && home.financials.netWorthGain ? (
               <View style={styles.gainContainer}>
                 <TrendingUp color="#10B981" size={14} />
                 <Text style={styles.gainText}>+{formatHomeValue(home.financials.netWorthGain)}</Text>
               </View>
-            )}
+            ) : null}
           </View>
 
-          {home.financials.isForSale && home.financials.askingPrice && (
+          {home.financials.isForSale && home.financials.askingPrice ? (
             <View style={styles.askingPriceRow}>
               <Text style={styles.askingPriceLabel}>Asking Price:</Text>
               <Text style={styles.askingPriceValue}>{formatHomeValue(home.financials.askingPrice)}</Text>
             </View>
-          )}
-          {home.financials.isForRent && home.financials.monthlyRentPrice && (
+          ) : null}
+          {home.financials.isForRent && home.financials.monthlyRentPrice ? (
             <View style={styles.askingPriceRow}>
               <Text style={styles.askingPriceLabel}>Monthly Rent:</Text>
               <Text style={styles.askingPriceValue}>${home.financials.monthlyRentPrice.toLocaleString()}/mo</Text>
             </View>
-          )}
+          ) : null}
 
           <View style={styles.actionsRow}>
             <TouchableOpacity style={styles.actionButton} onPress={handleLike}>

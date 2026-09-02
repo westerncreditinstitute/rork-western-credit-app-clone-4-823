@@ -310,7 +310,7 @@ export default function FinancialAidPanel({
               {new Date(aid.applicationDate).toLocaleDateString()}
             </Text>
           </View>
-          {aid.minimumGPARequired && (
+          {aid.minimumGPARequired ? (
             <View style={styles.appliedDetailRow}>
               <Text style={[styles.appliedDetailLabel, { color: colors.textSecondary }]}>
                 GPA Required
@@ -322,7 +322,7 @@ export default function FinancialAidPanel({
                 {aid.minimumGPARequired.toFixed(1)} (Yours: {currentGPA.toFixed(2)})
               </Text>
             </View>
-          )}
+          ) : null}
         </View>
       </View>
     );

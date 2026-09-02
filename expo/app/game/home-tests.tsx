@@ -151,9 +151,9 @@ export default function HomeTestsScreen() {
         </Text>
       </View>
       <Text style={styles.testResultDuration}>{result.duration}ms</Text>
-      {result.error && (
+      {result.error ? (
         <Text style={styles.testResultError}>{result.error}</Text>
-      )}
+      ) : null}
     </View>
   );
 

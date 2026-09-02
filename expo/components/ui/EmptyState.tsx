@@ -28,11 +28,11 @@ export function EmptyState({
         {icon}
       </View>
       <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
-      {description && (
+      {description ? (
         <Text style={[styles.description, { color: colors.textSecondary }]}>
           {description}
         </Text>
-      )}
+      ) : null}
       {actionLabel && onAction && (
         <Button
           title={actionLabel}

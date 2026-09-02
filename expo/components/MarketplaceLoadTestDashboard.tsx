@@ -258,9 +258,9 @@ export default function MarketplaceLoadTestDashboard() {
               {scenario.description}
             </Text>
             <View style={styles.scenarioStats}>
-              {scenario.config.listingsCount && (
+              {scenario.config.listingsCount ? (
                 <Text style={styles.scenarioStat}>{scenario.config.listingsCount} listings</Text>
-              )}
+              ) : null}
               {scenario.config.purchasesPerMinute && scenario.config.purchasesPerMinute > 0 && (
                 <Text style={styles.scenarioStat}>{scenario.config.purchasesPerMinute}/min purchases</Text>
               )}

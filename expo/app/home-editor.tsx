@@ -242,14 +242,14 @@ export default function HomeEditorScreen() {
           </View>
           <Text style={dynamicStyles.ineligibleTitle}>Home Editor Unavailable</Text>
           <Text style={dynamicStyles.ineligibleMessage}>{eligibility.message}</Text>
-          {eligibility.actionLabel && (
+          {eligibility.actionLabel ? (
             <TouchableOpacity
               style={dynamicStyles.ineligibleActionButton}
               onPress={() => router.push('/home-browser' as any)}
             >
               <Text style={dynamicStyles.ineligibleActionText}>{eligibility.actionLabel}</Text>
             </TouchableOpacity>
-          )}
+          ) : null}
         </View>
       </View>
     );

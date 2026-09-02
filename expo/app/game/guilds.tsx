@@ -122,9 +122,9 @@ export default function GuildsScreen() {
       <Animated.View style={{ opacity: fadeAnim }}>
         <View style={[styles.guildHeader, { backgroundColor: guild.bannerColor }]}>
           <View style={styles.guildBanner}>
-            {guild.logoUrl && (
+            {guild.logoUrl ? (
               <Image source={{ uri: guild.logoUrl }} style={styles.guildLogo} />
-            )}
+            ) : null}
             <View style={styles.guildTitleSection}>
               <View style={styles.guildNameRow}>
                 <Text style={styles.guildName}>{guild.name}</Text>
@@ -239,7 +239,7 @@ export default function GuildsScreen() {
         disabled={isCurrentGuild}
       >
         <View style={[styles.cardBanner, { backgroundColor: g.bannerColor }]}>
-          {g.logoUrl && <Image source={{ uri: g.logoUrl }} style={styles.cardLogo} />}
+          {g.logoUrl ? <Image source={{ uri: g.logoUrl }} style={styles.cardLogo} /> : null}
           <View style={styles.cardRank}>
             <Text style={styles.cardRankText}>#{g.stats.rank}</Text>
           </View>
@@ -276,13 +276,13 @@ export default function GuildsScreen() {
             </View>
           </View>
 
-          {g.requirements.minCreditScore && (
+          {g.requirements.minCreditScore ? (
             <View style={[styles.requirementBadge, { backgroundColor: colors.background }]}>
               <Text style={[styles.requirementText, { color: colors.textSecondary }]}>
                 Min {g.requirements.minCreditScore} credit score
               </Text>
             </View>
-          )}
+          ) : null}
 
           <View style={styles.cardFooter}>
             {isCurrentGuild ? (
@@ -383,9 +383,9 @@ export default function GuildsScreen() {
               {selectedGuild && (
                 <>
                   <View style={[styles.modalBanner, { backgroundColor: selectedGuild.bannerColor }]}>
-                    {selectedGuild.logoUrl && (
+                    {selectedGuild.logoUrl ? (
                       <Image source={{ uri: selectedGuild.logoUrl }} style={styles.modalLogo} />
-                    )}
+                    ) : null}
                   </View>
 
                   <Text style={[styles.modalTitle, { color: colors.text }]}>{selectedGuild.name}</Text>

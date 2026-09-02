@@ -160,7 +160,7 @@ export const FriendProfileModal = memo(function FriendProfileModal({
               <Text style={styles.actionButtonText}>Send Message</Text>
             </TouchableOpacity>
 
-            {friend.currentHomeId && (
+            {friend.currentHomeId ? (
               <TouchableOpacity
                 style={[styles.actionButton, { backgroundColor: '#22C55E' }]}
                 onPress={() => {
@@ -171,7 +171,7 @@ export const FriendProfileModal = memo(function FriendProfileModal({
                 <Home size={20} color="#fff" />
                 <Text style={styles.actionButtonText}>Visit Home</Text>
               </TouchableOpacity>
-            )}
+            ) : null}
 
             <TouchableOpacity
               style={[styles.actionButtonOutline, { borderColor: colors.error }]}

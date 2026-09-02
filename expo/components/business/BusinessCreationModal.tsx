@@ -307,7 +307,7 @@ export default function BusinessCreationModal({
             placeholderTextColor={colors.textLight}
           />
         </View>
-        {errors.businessName && <Text style={styles.errorText}>{errors.businessName}</Text>}
+        {errors.businessName ? <Text style={styles.errorText}>{errors.businessName}</Text> : null}
       </View>
 
       <View style={styles.inputGroup}>
@@ -322,7 +322,7 @@ export default function BusinessCreationModal({
             placeholderTextColor={colors.textLight}
           />
         </View>
-        {errors.location && <Text style={styles.errorText}>{errors.location}</Text>}
+        {errors.location ? <Text style={styles.errorText}>{errors.location}</Text> : null}
       </View>
 
       <View style={styles.inputGroup}>
@@ -385,7 +385,7 @@ export default function BusinessCreationModal({
               keyboardType="number-pad"
             />
           </View>
-          {errors.startupCost && <Text style={styles.errorText}>{errors.startupCost}</Text>}
+          {errors.startupCost ? <Text style={styles.errorText}>{errors.startupCost}</Text> : null}
           {selectedCategory && (
             <Text style={styles.hintText}>
               Range: {formatCurrency(selectedCategory.minStartupCost)} - {formatCurrency(selectedCategory.maxStartupCost)}
@@ -449,7 +449,7 @@ export default function BusinessCreationModal({
                   keyboardType="number-pad"
                 />
               </View>
-              {errors.poolMinInvestment && <Text style={styles.errorText}>{errors.poolMinInvestment}</Text>}
+              {errors.poolMinInvestment ? <Text style={styles.errorText}>{errors.poolMinInvestment}</Text> : null}
             </View>
 
             <View style={styles.inputGroup}>
@@ -465,7 +465,7 @@ export default function BusinessCreationModal({
                   keyboardType="number-pad"
                 />
               </View>
-              {errors.poolMaxInvestors && <Text style={styles.errorText}>{errors.poolMaxInvestors}</Text>}
+              {errors.poolMaxInvestors ? <Text style={styles.errorText}>{errors.poolMaxInvestors}</Text> : null}
             </View>
           </View>
         )}
@@ -547,12 +547,12 @@ export default function BusinessCreationModal({
           </View>
         </Card>
 
-        {formData.businessPlan && (
+        {formData.businessPlan ? (
           <Card variant="outlined" padding="md" style={styles.planCard}>
             <Text style={styles.planTitle}>Business Plan</Text>
             <Text style={styles.planText}>{formData.businessPlan}</Text>
           </Card>
-        )}
+        ) : null}
 
         <View style={{ height: 100 }} />
       </ScrollView>

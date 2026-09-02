@@ -104,11 +104,11 @@ export default function FeedbackForm({
           )}
         </View>
 
-        {scenarioName && (
+        {scenarioName ? (
           <View style={styles.scenarioTag}>
             <Text style={styles.scenarioTagText}>Related to: {scenarioName}</Text>
           </View>
-        )}
+        ) : null}
 
         <View style={styles.section}>
           <Text style={styles.label}>Category</Text>
@@ -180,12 +180,12 @@ export default function FeedbackForm({
             placeholder="Brief summary of the issue"
             placeholderTextColor="#9CA3AF"
           />
-          {errors.title && (
+          {errors.title ? (
             <View style={styles.errorContainer}>
               <AlertCircle size={14} color="#EF4444" />
               <Text style={styles.errorText}>{errors.title}</Text>
             </View>
-          )}
+          ) : null}
         </View>
 
         <View style={styles.section}>
@@ -200,12 +200,12 @@ export default function FeedbackForm({
             numberOfLines={4}
             textAlignVertical="top"
           />
-          {errors.description && (
+          {errors.description ? (
             <View style={styles.errorContainer}>
               <AlertCircle size={14} color="#EF4444" />
               <Text style={styles.errorText}>{errors.description}</Text>
             </View>
-          )}
+          ) : null}
         </View>
 
         {category === 'bug' && (
@@ -222,12 +222,12 @@ export default function FeedbackForm({
                 numberOfLines={4}
                 textAlignVertical="top"
               />
-              {errors.stepsToReproduce && (
+              {errors.stepsToReproduce ? (
                 <View style={styles.errorContainer}>
                   <AlertCircle size={14} color="#EF4444" />
                   <Text style={styles.errorText}>{errors.stepsToReproduce}</Text>
                 </View>
-              )}
+              ) : null}
             </View>
 
             <View style={styles.section}>

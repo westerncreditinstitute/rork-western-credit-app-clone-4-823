@@ -171,12 +171,12 @@ export default function FurnitureDetailModal({
               </TouchableOpacity>
             </View>
 
-            {isFurniture && furnitureItem.brand && (
+            {isFurniture && furnitureItem.brand ? (
               <View style={styles.brandBadge}>
                 <Sparkles color="#F59E0B" size={12} />
                 <Text style={styles.brandText}>{furnitureItem.brand}</Text>
               </View>
-            )}
+            ) : null}
           </View>
 
           <View style={styles.detailsSection}>
@@ -191,7 +191,7 @@ export default function FurnitureDetailModal({
             )}
 
             <View style={styles.specGrid}>
-              {isFurniture && furnitureItem.material && (
+              {isFurniture && furnitureItem.material ? (
                 <View style={styles.specItem}>
                   <View style={styles.specIcon}>
                     <Box color={colors.primary} size={18} />
@@ -204,9 +204,9 @@ export default function FurnitureDetailModal({
                     </Text>
                   </View>
                 </View>
-              )}
+              ) : null}
 
-              {isFurniture && furnitureItem.color && (
+              {isFurniture && furnitureItem.color ? (
                 <View style={styles.specItem}>
                   <View style={styles.specIcon}>
                     <Palette color={colors.primary} size={18} />
@@ -224,9 +224,9 @@ export default function FurnitureDetailModal({
                     </View>
                   </View>
                 </View>
-              )}
+              ) : null}
 
-              {isFurniture && furnitureItem.price && (
+              {isFurniture && furnitureItem.price ? (
                 <View style={styles.specItem}>
                   <View style={styles.specIcon}>
                     <Tag color={colors.primary} size={18} />
@@ -238,7 +238,7 @@ export default function FurnitureDetailModal({
                     </Text>
                   </View>
                 </View>
-              )}
+              ) : null}
 
               <View style={styles.specItem}>
                 <View style={styles.specIcon}>

@@ -86,7 +86,7 @@ export const FriendCard = memo(function FriendCard({
           <MessageCircle size={18} color={colors.primary} />
         </TouchableOpacity>
 
-        {friend.currentHomeId && (
+        {friend.currentHomeId ? (
           <TouchableOpacity
             style={[styles.actionButton, { backgroundColor: '#22C55E15' }]}
             onPress={() => onVisitHome(friend)}
@@ -94,7 +94,7 @@ export const FriendCard = memo(function FriendCard({
           >
             <Home size={18} color="#22C55E" />
           </TouchableOpacity>
-        )}
+        ) : null}
 
         <TouchableOpacity
           style={[styles.actionButton, { backgroundColor: colors.error + '15' }]}

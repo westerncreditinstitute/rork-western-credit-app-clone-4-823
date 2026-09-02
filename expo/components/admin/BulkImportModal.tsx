@@ -423,9 +423,9 @@ export default function BulkImportModal({
           <Text style={styles.connectionStatusTitle}>
             {connectionStatus.success ? "✓ Connected" : "✗ Connection Failed"}
           </Text>
-          {connectionStatus.error && (
+          {connectionStatus.error ? (
             <Text style={styles.connectionStatusText}>{connectionStatus.error}</Text>
-          )}
+          ) : null}
           {connectionStatus.details && (
             <View style={styles.connectionDetails}>
               {videoProvider === "bunny" && (

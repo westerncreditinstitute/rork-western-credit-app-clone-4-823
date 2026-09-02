@@ -64,11 +64,11 @@ export const UserSearchCard = memo(function UserSearchCard({
         <Text style={[styles.username, { color: colors.text }]} numberOfLines={1}>
           {user.username}
         </Text>
-        {user.email && (
+        {user.email ? (
           <Text style={[styles.email, { color: colors.textSecondary }]} numberOfLines={1}>
             {user.email}
           </Text>
-        )}
+        ) : null}
       </View>
 
       {renderAction()}

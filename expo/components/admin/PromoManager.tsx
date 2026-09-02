@@ -150,7 +150,7 @@ export default function PromoManager({
         </TouchableOpacity>
       )}
 
-      {(editingId || showAddForm) && (
+      {(editingId || showAddForm) ? (
         <View style={styles.formCard}>
           <View style={styles.formHeader}>
             <Text style={styles.formTitle}>
@@ -244,7 +244,7 @@ export default function PromoManager({
             )}
           </TouchableOpacity>
         </View>
-      )}
+      ) : null}
 
       <View style={styles.promoHelpSection}>
         <Info color={Colors.primary} size={18} />

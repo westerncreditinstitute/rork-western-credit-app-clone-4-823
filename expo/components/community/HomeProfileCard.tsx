@@ -213,11 +213,11 @@ export const HomeProfileCard: React.FC<HomeProfileCardProps> = ({
                 <Tag size={14} color="#FFFFFF" />
                 <Text style={styles.forSaleText}>FOR SALE</Text>
               </View>
-              {home.financials.askingPrice && (
+              {home.financials.askingPrice ? (
                 <Text style={styles.askingPriceText}>
                   Asking: {formatHomeValue(home.financials.askingPrice)}
                 </Text>
-              )}
+              ) : null}
             </View>
           )}
 

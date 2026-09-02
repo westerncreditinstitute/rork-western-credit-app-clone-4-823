@@ -312,14 +312,14 @@ function CommunityHomesContent() {
         </ScrollView>
       </View>
 
-      {(filter.propertyTypes?.length || filter.cities?.length) && (
+      {(filter.propertyTypes?.length || filter.cities?.length) ? (
         <TouchableOpacity style={styles.clearFilters} onPress={clearFilters}>
           <X size={14} color={colors.primary} />
           <Text style={[styles.clearFiltersText, { color: colors.primary }]}>
             Clear Filters
           </Text>
         </TouchableOpacity>
-      )}
+      ) : null}
 
       <View style={styles.feedHeader}>
         <Text style={[styles.feedTitle, { color: colors.text }]}>

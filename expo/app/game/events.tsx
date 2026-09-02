@@ -128,9 +128,9 @@ export default function EventsScreen() {
         }}
         activeOpacity={0.7}
       >
-        {event.imageUrl && (
+        {event.imageUrl ? (
           <Image source={{ uri: event.imageUrl }} style={styles.eventImage} />
-        )}
+        ) : null}
         <View style={styles.eventContent}>
           <View style={styles.eventHeader}>
             <View style={[styles.eventTypeBadge, { backgroundColor: typeColor + '20' }]}>
@@ -330,9 +330,9 @@ export default function EventsScreen() {
                     <X size={20} color={colors.text} />
                   </TouchableOpacity>
 
-                  {selectedEvent.imageUrl && (
+                  {selectedEvent.imageUrl ? (
                     <Image source={{ uri: selectedEvent.imageUrl }} style={styles.modalImage} />
-                  )}
+                  ) : null}
 
                   <View style={styles.modalBody}>
                     <View style={[styles.eventTypeBadge, { backgroundColor: getEventTypeColor(selectedEvent.type) + '20', alignSelf: 'flex-start' }]}>

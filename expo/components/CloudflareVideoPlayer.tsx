@@ -299,7 +299,7 @@ export default function CloudflareVideoPlayer({
           <View style={[styles.playButton, isCompleted && styles.playButtonCompleted]}>
             <Play color={Colors.surface} size={32} fill={Colors.surface} />
           </View>
-          {title && <Text style={styles.videoTitle}>{title}</Text>}
+          {title ? <Text style={styles.videoTitle}>{title}</Text> : null}
           {videoInfoQuery.data?.length ? (
             <Text style={styles.videoDuration}>
               {formatDuration(videoInfoQuery.data.length)}

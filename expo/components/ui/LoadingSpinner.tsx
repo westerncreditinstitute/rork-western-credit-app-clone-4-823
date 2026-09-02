@@ -85,11 +85,11 @@ export default function LoadingSpinner({
           },
         ]}
       />
-      {message && (
+      {message ? (
         <Text style={[styles.message, { color: colors.textSecondary }]}>
           {message}
         </Text>
-      )}
+      ) : null}
     </View>
   );
 }

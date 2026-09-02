@@ -845,11 +845,11 @@ export default function HomeVisitScreen() {
                 </Text>
               </View>
             </View>
-            {syncError && (
+            {syncError ? (
               <TouchableOpacity style={styles.reconnectButton} onPress={reconnectSync}>
                 <Text style={styles.reconnectButtonText}>Tap to reconnect</Text>
               </TouchableOpacity>
-            )}
+            ) : null}
             <ScrollView style={styles.visitorListScroll} showsVerticalScrollIndicator={false}>
               <View style={styles.visitorItem}>
                 <Image

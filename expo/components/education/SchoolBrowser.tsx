@@ -201,7 +201,7 @@ export default function SchoolBrowser({
                 {SCHOOL_TYPE_LABELS[school.type]}
               </Text>
             </View>
-            {school.minimumCreditScore && (
+            {school.minimumCreditScore ? (
               <View style={[
                 styles.creditBadge,
                 { backgroundColor: eligible ? colors.success + '20' : colors.error + '20' }
@@ -213,7 +213,7 @@ export default function SchoolBrowser({
                   {eligible ? '✓ Eligible' : `Min ${school.minimumCreditScore} Credit`}
                 </Text>
               </View>
-            )}
+            ) : null}
           </View>
         </View>
 
@@ -347,7 +347,7 @@ export default function SchoolBrowser({
             </View>
           </View>
 
-          {hasActiveFilters && (
+          {hasActiveFilters ? (
             <TouchableOpacity
               style={[styles.clearFiltersButton, { borderColor: colors.error }]}
               onPress={clearFilters}
@@ -355,7 +355,7 @@ export default function SchoolBrowser({
               <X size={14} color={colors.error} />
               <Text style={[styles.clearFiltersText, { color: colors.error }]}>Clear All Filters</Text>
             </TouchableOpacity>
-          )}
+          ) : null}
         </View>
       )}
 

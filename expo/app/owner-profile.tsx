@@ -158,9 +158,9 @@ export default function OwnerProfileScreen() {
               </Text>
             </View>
 
-            {owner.bio && (
+            {owner.bio ? (
               <Text style={styles.bio}>{owner.bio}</Text>
-            )}
+            ) : null}
 
             <View style={styles.statsRow}>
               <View style={styles.statItem}>

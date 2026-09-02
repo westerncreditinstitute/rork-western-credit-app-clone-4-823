@@ -288,11 +288,11 @@ export default function SocialFeedScreen() {
                   />
                   <View style={styles.searchResultInfo}>
                     <Text style={styles.searchResultName}>{user.name}</Text>
-                    {user.occupation && (
+                    {user.occupation ? (
                       <Text style={styles.searchResultOccupation}>
                         {user.occupation}
                       </Text>
-                    )}
+                    ) : null}
                   </View>
                   {user.isAIAgent && (
                     <View style={styles.aiBadgeSmall}>
@@ -423,7 +423,7 @@ export default function SocialFeedScreen() {
             <View style={styles.postAuthorInfo}>
               <View style={styles.authorNameRow}>
                 <Text style={styles.postAuthorName}>{post.authorName}</Text>
-                {post.authorCreditScore && (
+                {post.authorCreditScore ? (
                   <View
                     style={[
                       styles.creditBadge,
@@ -439,17 +439,17 @@ export default function SocialFeedScreen() {
                       {post.authorCreditScore}
                     </Text>
                   </View>
-                )}
+                ) : null}
               </View>
               <View style={styles.postMeta}>
-                {post.authorOccupation && (
+                {post.authorOccupation ? (
                   <Text style={styles.postOccupation}>
                     {post.authorOccupation}
                   </Text>
-                )}
-                {post.authorCity && (
+                ) : null}
+                {post.authorCity ? (
                   <Text style={styles.postCity}>📍 {post.authorCity}</Text>
-                )}
+                ) : null}
                 <Text style={styles.postTime}>{post.timestamp}</Text>
               </View>
             </View>
