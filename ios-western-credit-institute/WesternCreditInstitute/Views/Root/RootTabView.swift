@@ -5,8 +5,9 @@
 
 import SwiftUI
 
-/// App shell: seven destinations with a custom blurred tab bar so every
-/// tab stays visible, matching the cross-platform navigation design.
+/// App shell: four bar destinations with a custom blurred tab bar. Wallet,
+/// Earnings, Hire Pro and Admin are reached through "More", matching the
+/// cross-platform navigation design.
 struct RootTabView: View {
     @Environment(ThemeManager.self) private var theme
     @Environment(AppStore.self) private var store
@@ -34,6 +35,8 @@ struct RootTabView: View {
                     navigationStack { HireProView() }
                 case .profile:
                     navigationStack { ProfileView(selectedTab: $selection) }
+                case .more:
+                    navigationStack { MoreView(selectedTab: $selection) }
                 case .admin:
                     navigationStack { AdminView() }
                 }

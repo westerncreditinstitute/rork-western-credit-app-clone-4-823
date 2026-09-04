@@ -18,7 +18,7 @@ struct AppTabBar: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 0) {
-            ForEach(AppTab.allCases) { tab in
+            ForEach(AppTab.barCases) { tab in
                 Button {
                     guard selection != tab else { return }
                     Haptics.selection()
@@ -30,7 +30,7 @@ struct AppTabBar: View {
                 }
                 .buttonStyle(TabPressStyle())
                 .accessibilityLabel(tab.title)
-                .accessibilityAddTraits(selection == tab ? [.isSelected, .isButton] : .isButton)
+                .accessibilityAddTraits(isActive(tab) ? [.isSelected, .isButton] : .isButton)
             }
         }
         .padding(.horizontal, 2)
@@ -70,8 +70,13 @@ struct AppTabBar: View {
             : Color(hex: "#002B5C").opacity(0.10)
     }
 
+    /// "More" stays lit while any of the destinations it hosts is on screen.
+    private func isActive(_ tab: AppTab) -> Bool {
+        selection == tab || (tab == .more && selection.isHostedInMore)
+    }
+
     private func tabItem(for tab: AppTab) -> some View {
-        let isActive = selection == tab
+        let isActive = isActive(tab)
         let tint = isActive ? tab.activeColor : tab.inactiveColor(isDark: theme.isDark)
 
         return VStack(spacing: 2) {
