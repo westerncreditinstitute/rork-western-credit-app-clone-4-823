@@ -243,22 +243,153 @@ Confirm that each agent has a name, specialty, avatar URL (a DiceBear link), a b
 
 ---
 
-## Phase 4 — Configure Row Level Security (Optional Review)
+## Phase 4 — Row Level Security and the Service Role Key
 
-The migration already enables RLS on `user_agent_assignments` and `agent_chat_messages` and creates permissive SELECT policies. The backend uses the Supabase client configured with the anon key (from `lib/supabase.ts`), and user identity is validated in the tRPC context, so RLS is intentionally permissive at the database level — the application layer handles authorization.
+This phase explains how the agent tables are secured, and how to move from the
+emergency fix (migration 024) to the production setup (a service-role key plus
+migration 025).
 
-If you want to tighten RLS for direct client access (not through your backend), you can add more restrictive policies. However, this is **not required** for the feature to work. The default policies from the migration are sufficient.
+### Step 4.1 — Understand what went wrong, so you don't reintroduce it
 
-To review the current RLS policies, run:
+Migrations 020 and 023 enabled Row Level Security on the agent tables but created
+only `SELECT` policies. Their comments justified this by stating that the backend
+used a service-role key, which bypasses RLS. **That was not true.** `lib/supabase.ts`
+built a single client from `EXPO_PUBLIC_SUPABASE_ANON_KEY`, and the backend imported
+that same client — there was no service-role key anywhere in the project.
 
-```sql
-SELECT tablename, policyname, cmd, qual
-FROM pg_policies
-WHERE schemaname = 'public'
-  AND tablename IN ('user_agent_assignments', 'agent_chat_messages');
+The result: RLS was on, no `INSERT` policy existed, and PostgreSQL rejected every
+write. Agent assignment failed, chat messages were never saved, and credit report
+analyses were never stored. Because the failures were silent, the app reported
+"We couldn't find an agent for your account."
+
+Migration 024 fixed this immediately by adding permissive write policies. That
+restored functionality, but it is not where you want to stay: those policies allow
+**anyone holding the anon key** to write to these tables directly, and the anon key
+ships inside the app where any user can extract it.
+
+The rest of this phase closes that gap.
+
+### Step 4.2 — Confirm the backend really is server-side
+
+A service-role key is only safe if the code using it never reaches a user's device.
+Verify this before continuing:
+
+```bash
+# Should print nothing. Any output means client code imports backend runtime code.
+grep -rn "from ['\"]@/backend" app/ components/ contexts/ hooks/ | grep -v "import type"
 ```
 
-You should see two policies: `users_select_own_assignment` and `users_select_own_messages`.
+This project passes. The client (`lib/trpc.ts`) talks to the backend over HTTP at
+`EXPO_PUBLIC_RORK_API_BASE_URL/api/trpc` and imports only `import type { AppRouter }`
+— a type-only import that disappears at compile time. The `backend/` directory runs
+on the server, not in the bundle.
+
+> **If you fork this code and that grep starts returning results, stop.** Importing
+> backend runtime code into `app/` would bundle the service-role key into the app and
+> hand every user full database access.
+
+### Step 4.3 — Get your service role key
+
+1. Supabase dashboard → **Project Settings** (gear icon) → **API**.
+2. Under **Project API keys**, find the key labelled **`service_role`** (Supabase
+   also marks it `secret`). It is *not* the `anon` key you already use.
+3. Click reveal, then copy it.
+
+> **Treat this key like a root password.** It bypasses RLS entirely and grants full
+> read/write access to your whole database. Never paste it into client code, a
+> screenshot, a support ticket, or a Git commit.
+
+### Step 4.4 — Add the key as a server-side secret
+
+In Rork: **More → Secrets → Add Secret**.
+
+| Field | Value |
+|---|---|
+| Name | `SUPABASE_SERVICE_ROLE_KEY` |
+| Value | the `service_role` key you just copied |
+| Visibility | **Server-side only** |
+
+**The visibility setting is the entire security boundary.** Rork exposes any secret
+named with an `EXPO_PUBLIC_` prefix to all users; anything without that prefix stays
+server-side. This is the same rule that already protects `OPENAI_API_KEY`.
+
+- ✅ `SUPABASE_SERVICE_ROLE_KEY` — server-side only
+- ❌ `EXPO_PUBLIC_SUPABASE_SERVICE_ROLE_KEY` — **never do this.** It would publish
+  full database access to every user of your app.
+
+For local development, add the same line to `.env` (which is git-ignored):
+
+```bash
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
+```
+
+`.env.example` documents this variable. Never fill a real key into `.env.example`
+itself — that file *is* committed.
+
+### Step 4.5 — Redeploy so the backend picks it up
+
+Environment variables are read when the server starts, so a hot reload is not enough.
+Redeploy (or restart your local dev server) after saving the secret.
+
+### Step 4.6 — Verify the backend is actually using it
+
+`lib/supabase-admin.ts` deliberately falls back to the anon client when the key is
+missing, so the app keeps working during the transition. That safety net also means
+a typo will fail quietly — so check explicitly.
+
+Look at your server logs on startup. If you see this warning, the key did **not**
+load:
+
+```
+[Supabase Admin] SUPABASE_SERVICE_ROLE_KEY is not set — falling back to the anon client.
+```
+
+Common causes: the secret was saved as client-visible instead of server-side, the
+name is misspelled, or the server wasn't restarted.
+
+When no warning appears, the backend is on the service-role key. Confirm the feature
+still works end to end: open **My Agent**, load an agent, and send a chat message.
+
+### Step 4.7 — Lock the tables down (migration 025)
+
+Only after Step 4.6 passes, run `migrations/025_lock_down_agent_rls.sql`. It drops
+the permissive `INSERT`/`UPDATE`/`DELETE` policies from migration 024. The backend
+doesn't need them anymore — the service-role key bypasses RLS — but clients holding
+the anon key lose direct write access.
+
+**`SELECT` policies are deliberately kept.** Supabase Realtime delivers chat messages
+to the client using the anon key, and that subscription reads through RLS. Dropping
+the `SELECT` policy on `agent_chat_messages` would silently break live chat
+(migration 022).
+
+Verify afterwards — every row should say `SELECT`:
+
+```sql
+SELECT tablename, policyname, cmd
+FROM pg_policies
+WHERE schemaname = 'public'
+  AND tablename IN ('user_agent_assignments', 'agent_chat_messages', 'credit_report_analyses')
+ORDER BY tablename, cmd;
+```
+
+Then reopen the My Agent tab and send one more chat message. If agent assignment or
+chat breaks at this point, the backend is still on the anon key — re-run migration
+024 to restore access and revisit Step 4.6.
+
+> **Rollback:** migration 024 and migration 025 are exact opposites and both are
+> safe to re-run. Run 024 to reopen writes, 025 to close them.
+
+### Step 4.8 — Rotating or revoking the key
+
+If the key is ever exposed (committed, pasted into a ticket, shared in a screenshot):
+
+1. Supabase → **Project Settings → API → Rotate** the `service_role` key.
+2. Update `SUPABASE_SERVICE_ROLE_KEY` in Rork Secrets.
+3. Redeploy and re-check Step 4.6.
+
+Rotation invalidates the old key immediately, so expect a brief window where writes
+fall back to the anon path until the new key is deployed.
+
 
 ---
 
@@ -870,6 +1001,7 @@ The AI agent route depends on the `disputes` table. If you skipped Phase 1, the 
 | `migrations/022_agent_chat_realtime.sql` | Adds `agent_chat_messages` to the Supabase realtime publication so chat messages stream live instead of polling | 1.2 KB / 37 lines | < 1 second |
 | `migrations/023_credit_report_analysis.sql` | Creates `credit_report_analyses` (stores parsed credit reports so the agent can reference them in chat) | 2.3 KB / 60 lines | < 1 second |
 | `migrations/024_fix_agent_rls_policies.sql` | **Required.** Adds the missing INSERT/UPDATE/DELETE RLS policies. Without it agent assignment, chat history, and report analysis all fail silently | 6.3 KB / 124 lines | < 1 second |
+| `migrations/025_lock_down_agent_rls.sql` | **Production hardening.** Drops the permissive write policies from 024. Run ONLY after `SUPABASE_SERVICE_ROLE_KEY` is configured and verified (Phase 4) | 3.6 KB / 96 lines | < 1 second |
 
 ## Quick Reference — Environment Variables
 
@@ -878,6 +1010,7 @@ The AI agent route depends on the `disputes` table. If you skipped Phase 1, the 
 | `EXPO_PUBLIC_SUPABASE_URL` | Yes | — | Supabase project URL |
 | `EXPO_PUBLIC_SUPABASE_ANON_KEY` | Yes | — | Supabase anon public key (must be `anon`, NOT `service_role`) |
 | `EXPO_PUBLIC_RORK_API_BASE_URL` | **Yes** | — | **App throws on startup if missing.** Origin only — no trailing slash, no `/api/trpc` |
+| `SUPABASE_SERVICE_ROLE_KEY` | Recommended | (empty → anon fallback) | **Server-side only.** Bypasses RLS so the backend can write. Required before migration 025. Never prefix with `EXPO_PUBLIC_` |
 | `OPENAI_API_KEY` | No | (empty → demo mode) | OpenAI-compatible API key for AI chat |
 | `OPENAI_MODEL` | No | `gpt-4o-mini` | AI model name |
 | `OPENAI_BASE_URL` | No | `https://api.openai.com/v1` | API base URL (for OpenAI-compatible providers) |

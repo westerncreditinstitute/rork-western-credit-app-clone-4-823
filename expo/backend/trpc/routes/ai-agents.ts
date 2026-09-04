@@ -1,6 +1,13 @@
 import * as z from "zod";
 import { createTRPCRouter, publicProcedure } from "../create-context";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { isSupabaseConfigured } from "@/lib/supabase";
+// Server-only client: bypasses RLS when SUPABASE_SERVICE_ROLE_KEY is set,
+// and transparently falls back to the anon client when it isn't. Aliased to
+// `supabase` so every query below reads naturally.
+import {
+  supabaseAdmin as supabase,
+  isServiceRoleConfigured,
+} from "@/lib/supabase-admin";
 
 // ============================================================
 // Types
@@ -106,8 +113,9 @@ function classifySupabaseError(err: SupabaseErrorLike | null | undefined): {
   ) {
     return {
       code: "RLS_BLOCKED",
-      message:
-        "The database blocked the write because Row Level Security has no INSERT policy for this table. Run migration 024_fix_agent_rls_policies.sql in the Supabase SQL editor to add the missing policies.",
+      message: isServiceRoleConfigured
+        ? "The database blocked the write even though a service-role key is configured. Confirm SUPABASE_SERVICE_ROLE_KEY holds the 'service_role' key (not the 'anon' key) and that the server was restarted after setting it."
+        : "The database blocked the write because Row Level Security has no INSERT policy for this table. Run migration 024_fix_agent_rls_policies.sql in the Supabase SQL editor to add the missing policies.",
     };
   }
 
