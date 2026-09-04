@@ -17,28 +17,36 @@ export const OFFLINE_MESSAGE =
 export const SERVER_WAKING_MESSAGE =
   "The server is starting up and didn't respond in time. Please try again in a few seconds.";
 
-/** Last base URL logged, so the value is announced once instead of per request. */
-let lastLoggedBaseUrl: string | undefined;
+/**
+ * Last base URL logged, so the value is announced once instead of per request.
+ * Starts as a sentinel no env value can equal, so the first call always logs -
+ * including when the variable is missing entirely.
+ */
+let lastLoggedBaseUrl: string | undefined = "\u0000never-logged";
 
 const getBaseUrl = () => {
   const url = process.env.EXPO_PUBLIC_RORK_API_BASE_URL;
 
-  if (!url) {
-    console.warn("EXPO_PUBLIC_RORK_API_BASE_URL is not set, using empty string");
-    return "";
-  }
-
-  // The value is a public address (it ships in the app bundle by design — the
-  // EXPO_PUBLIC_ prefix is what makes it public), so logging it is safe. It
-  // appears in the Rork preview Logs panel, web devtools, and local terminal,
-  // and is the easiest way to answer "what is my API base URL?" Logged once
-  // per distinct value so warm-up retries don't flood the panel.
+  // Announced with console.warn, not console.log: the Logs panel is busy and
+  // this single line is what tells you (a) the value Rork injected, and
+  // (b) whether it was injected at all. Both cases print, once per value.
+  // The value is a public address - it ships in the app bundle by design,
+  // which is exactly what the EXPO_PUBLIC_ prefix means - so logging is safe.
   if (url !== lastLoggedBaseUrl) {
     lastLoggedBaseUrl = url;
-    console.log(`[tRPC] API base URL: ${url}`);
+    if (url) {
+      console.warn(`[WCI-CONFIG] EXPO_PUBLIC_RORK_API_BASE_URL = ${url}`);
+      console.warn(`[WCI-CONFIG] status endpoint: ${url}/api/system-status`);
+    } else {
+      console.warn(
+        "[WCI-CONFIG] EXPO_PUBLIC_RORK_API_BASE_URL is EMPTY. Rork did not " +
+          "inject it, so every tRPC request resolves to a relative path and " +
+          "fails with a network error. Contact Rork support.",
+      );
+    }
   }
 
-  return url;
+  return url ?? "";
 };
 
 /** HTTP statuses worth retrying: gateway/cold-start/rate-limit responses. */
@@ -70,11 +78,28 @@ function backoffDelay(attempt: number, baseDelay: number): number {
   return Math.min(exponential + jitter, 8000);
 }
 
+/**
+ * Best-effort URL of a request, for logging. Retry logs are useless without it:
+ * "failed (network)" and "failed (network) for /api/trpc/..." mean very
+ * different things - the second shows the base URL was empty.
+ */
+function describeTarget(input: RequestInfo | URL): string {
+  try {
+    if (typeof input === "string") return input;
+    if (input instanceof URL) return input.toString();
+    if (typeof Request !== "undefined" && input instanceof Request) return input.url;
+  } catch {
+    // Fall through to the placeholder below.
+  }
+  return "<unknown url>";
+}
+
 const fetchWithRetry = async (
   input: RequestInfo | URL,
   init?: RequestInit,
 ): Promise<Response> => {
   const isMutation = (init?.method ?? "GET").toUpperCase() === "POST";
+  const target = describeTarget(input);
 
   // The dev backend sleeps and answers with an instant edge-level 503 until the
   // instance wakes, so give every request enough attempts to outlast a cold start.
@@ -119,8 +144,8 @@ const fetchWithRetry = async (
       if (RETRYABLE_STATUSES.has(response.status) && attempt < maxAttempts - 1) {
         const delay = backoffDelay(attempt, baseDelay);
         console.log(
-          `[tRPC] Server returned ${response.status}, retrying in ${Math.round(delay)}ms ` +
-            `(attempt ${attempt + 1}/${maxAttempts})`,
+          `[tRPC] Server returned ${response.status} for ${target}, ` +
+            `retrying in ${Math.round(delay)}ms (attempt ${attempt + 1}/${maxAttempts})`,
         );
         lastError = new Error(SERVER_WAKING_MESSAGE);
         await sleep(delay);
@@ -148,7 +173,7 @@ const fetchWithRetry = async (
       console.log(
         `[tRPC] Attempt ${attempt + 1}/${maxAttempts} failed (${
           timedOut ? "timeout" : "network"
-        }), retrying in ${Math.round(delay)}ms`,
+        }) for ${target}, retrying in ${Math.round(delay)}ms`,
       );
       await sleep(delay);
     }
