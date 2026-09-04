@@ -17,12 +17,25 @@ export const OFFLINE_MESSAGE =
 export const SERVER_WAKING_MESSAGE =
   "The server is starting up and didn't respond in time. Please try again in a few seconds.";
 
+/** Last base URL logged, so the value is announced once instead of per request. */
+let lastLoggedBaseUrl: string | undefined;
+
 const getBaseUrl = () => {
   const url = process.env.EXPO_PUBLIC_RORK_API_BASE_URL;
 
   if (!url) {
     console.warn("EXPO_PUBLIC_RORK_API_BASE_URL is not set, using empty string");
     return "";
+  }
+
+  // The value is a public address (it ships in the app bundle by design — the
+  // EXPO_PUBLIC_ prefix is what makes it public), so logging it is safe. It
+  // appears in the Rork preview Logs panel, web devtools, and local terminal,
+  // and is the easiest way to answer "what is my API base URL?" Logged once
+  // per distinct value so warm-up retries don't flood the panel.
+  if (url !== lastLoggedBaseUrl) {
+    lastLoggedBaseUrl = url;
+    console.log(`[tRPC] API base URL: ${url}`);
   }
 
   return url;

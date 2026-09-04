@@ -98,6 +98,13 @@ quietly — so check.
 **Open this URL in a browser** (or curl it), replacing the host with your API base
 URL — the same value as `EXPO_PUBLIC_RORK_API_BASE_URL`:
 
+> **Don't know that value?** You never set it — Rork injects it at build time.
+> To read it: **More → Secrets** (look for a row named
+> `EXPO_PUBLIC_RORK_API_BASE_URL`, possibly marked "Managed by Rork", and press
+> the eye button), or after a rebuild open **More → Code → Logs** (bottom
+> panel) and find `[tRPC] API base URL: https://…` — the app announces it
+> itself. On a local clone it's simply your `.env` value.
+
 ```
 https://YOUR-API-HOST/api/system-status
 ```
@@ -136,9 +143,10 @@ what to do next.
 | `configured_unverified` | Key looks right; couldn't reach Supabase | Retry; check the project isn't paused |
 
 > **Why an endpoint instead of the logs?** `lib/supabase-admin.ts` does log a
-> warning at startup, but the Rork-hosted backend is serverless and doesn't expose
-> a log viewer, so that warning is unreadable in production. The endpoint also
-> catches the one failure logs *cannot*: if you paste the anon key into
+> warning at startup, but the Rork-hosted backend is serverless and doesn't
+> expose **server-side** logs to you. (Rork's **Logs panel** — **More → Code**,
+> bottom panel — shows *app-side* prints only; the `[Supabase Admin]` warning
+> never shows there.) The endpoint also catches the one failure logs *cannot*: if you paste the anon key into
 > `SUPABASE_SERVICE_ROLE_KEY`, the warning disappears — the key is "set" — while
 > RLS still blocks every write. See "Where are my logs?" below.
 
@@ -158,10 +166,19 @@ Useful to know, but **not** required for the check above.
 `bunx rork start`). Server `console.log`/`console.warn` output appears there,
 including the `[Supabase Admin]` warning.
 
-**Rork-hosted backend** — Rork hosts the backend as serverless functions and does
-not currently document a user-facing log viewer, so you cannot read startup output
-in production. That's exactly why `/api/system-status` exists. (Paid plans include
-chat support if you need Rork to inspect something server-side.)
+**Rork-hosted backend** — split this in two:
+
+- **App-side logs you CAN see:** open **More → Code** and expand the **Logs
+  panel** at the bottom. It captures what the *app* printed while running in
+  the preview (`[log]`/`[info]`/`[warn]`/`[error]`/`[debug]` tags, scroll up
+  for older lines). Client `console.log`s appear there — e.g. the
+  `[tRPC] API base URL: …` line — and the web preview's browser devtools show
+  the same.
+- **Server-side logs you cannot:** the backend runs as serverless functions
+  and Rork does not expose its startup `console.log`/`console.warn` output.
+  So the `[Supabase Admin]` warning from `lib/supabase-admin.ts` is unreadable
+  in production — that's exactly why `/api/system-status` exists. (Paid plans
+  include chat support if you need Rork to inspect something server-side.)
 
 **Supabase side** — the database keeps its own logs, which is where you confirm
 *which role* your writes arrive as. Go to **Logs → Log Explorer** in the Supabase

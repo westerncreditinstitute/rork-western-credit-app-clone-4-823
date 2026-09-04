@@ -344,6 +344,12 @@ Open `/api/system-status` on your API host (the same value as
 curl -s https://YOUR-API-HOST/api/system-status | jq .supabase
 ```
 
+> **Don't know your `YOUR-API-HOST`?** You don't set that variable — Rork
+> injects it. See the **"Need to see the injected value?"** note in Step 5.3
+> (Option R) for the three ways to read it (Secrets eye button, the
+> `[tRPC] API base URL:` line in **More → Code → Logs**, or your `.env` on a
+> local clone). Then substitute it above.
+
 The one value you're looking for is `"keyType": "configured"`:
 
 ```json
@@ -395,10 +401,22 @@ Not needed for the verification above, but worth knowing when you're debugging.
 all backend `console.log`/`console.warn` output, including the `[Supabase Admin]`
 warning.
 
-**Rork-hosted backend.** Rork hosts the backend as serverless functions and does
-not currently document a user-facing log viewer, so startup output isn't readable
-in production — which is precisely why Step 4.6 uses an endpoint. Paid plans
-include chat support if you need something inspected server-side.
+**Rork-hosted backend.** Two different kinds of logs here, and the split
+matters:
+
+- **App-side logs — you CAN see these.** Open **More → Code** and expand the
+  **Logs panel** at the bottom of the Code view. It captures what the *app*
+  printed while running in the preview (`[log]` / `[info]` / `[warn]` /
+  `[error]` / `[debug]` tags; scroll up to load older lines). Client-side
+  `console.log`s appear here — for example the `[tRPC] API base URL: …` line,
+  or the tRPC warm-up messages. On the web preview the same lines also show
+  in the browser devtools console.
+- **Server-side logs — you cannot.** The backend itself runs as serverless
+  functions, and Rork doesn't expose its startup `console.log`/`console.warn`
+  output to you — so the `[Supabase Admin]` warning from
+  `lib/supabase-admin.ts` is unreadable in production, which is precisely why
+  Step 4.6 uses an endpoint instead. (Paid plans include chat support if you
+  need something inspected server-side.)
 
 **Supabase (the database side).** This is where you confirm *which role* your
 writes actually arrive as. In the Supabase dashboard go to **Logs → Log Explorer**
@@ -545,6 +563,22 @@ automatically at build time for projects that use its hosted Hono/tRPC backend.
 Setting it yourself can conflict with Rork's tunnel and break the tRPC
 connection. (If you later run the app outside Rork — a local clone — you will
 need it then; see Option A below.)
+
+> **Need to see the injected value?** Because Rork writes it, it may not appear
+> in your Secrets list — that's expected, not a bug. To find it:
+>
+> 1. **More → Secrets** — look for a row named `EXPO_PUBLIC_RORK_API_BASE_URL`
+>    possibly marked **"Managed by Rork"**, and press the eye button to reveal
+>    the value (it will look like `https://…rork.com/…`).
+> 2. **After a rebuild**, the app itself announces it: **More → Code → Logs**
+>    (the panel at the bottom of the Code view) shows a line reading
+>    `[tRPC] API base URL: https://…`. On the web preview, the browser devtools
+>    console shows the same line.
+> 3. On a **local clone** it's simply your `.env` value (`http://localhost:8081`
+>    for web, your LAN IP for a device).
+>
+> Whatever value you find there is also your `YOUR-API-HOST` for Step 4.6:
+> `curl -s https://<that-value>/api/system-status`.
 
 **After saving, rebuild the preview.** Rork reads env vars at build time, so
 press **Restart / Rebuild** (or stop and restart the preview). If a "clear
@@ -981,7 +1015,7 @@ You should get exactly two rows: `disputes` and `users`.
 
 **Cause:** `lib/trpc.ts` throws this on startup when `EXPO_PUBLIC_RORK_API_BASE_URL` is missing. This variable is injected automatically by Rork at build time for projects using Rork's hosted Hono/tRPC backend, so it should not need to be set manually inside Rork.
 
-**If you're building inside Rork (Option R):** You should not set this variable yourself — Rork injects it. If you see this error in Rork, it usually means the preview needs a clean rebuild (press Restart / Rebuild, or clear cache). If it persists, use Rork support, as the message suggests — it indicates Rork's own injection did not run.
+**If you're building inside Rork (Option R):** You should not set this variable yourself — Rork injects it. If you see this error in Rork, it usually means the preview needs a clean rebuild (press Restart / Rebuild, or clear cache). If it persists, use Rork support, as the message suggests — it indicates Rork's own injection did not run. (To *read* the injected value rather than fix a missing one, see the **"Need to see the injected value?"** note in Step 5.3 — Option R: Secrets eye button, or the `[tRPC] API base URL:` line in **More → Code → Logs** after a rebuild.)
 
 **If you're running a local clone (Option A):** Add it to `.env`:
 
