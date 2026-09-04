@@ -9,6 +9,8 @@ import {
   Platform,
   Alert,
   RefreshControl,
+  KeyboardAvoidingView,
+  Image,
 } from "react-native";
 import { useRouter, Stack } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -23,19 +25,31 @@ import {
   TrendingUp,
   Shield,
   Zap,
+  LayoutDashboard,
 } from "lucide-react-native";
 import Colors from "@/constants/colors";
 import { useUser } from "@/contexts/UserContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useDisputes } from "@/contexts/DisputesContext";
 import { trpc } from "@/lib/trpc";
+import { useAgentChat, type TriggeredLetter } from "@/hooks/useAgentChat";
 
 import AgentProfileCard, {
   AgentInfo,
 } from "@/components/MyAgent/AgentProfileCard";
-import AgentChatModal from "@/components/MyAgent/AgentChatModal";
+import AgentChatPanel from "@/components/MyAgent/AgentChatPanel";
 import CreditRepairModal from "@/components/MyAgent/CreditRepairModal";
 import DisputeTrackerModal from "@/components/MyAgent/DisputeTrackerModal";
+
+// ============================================================
+// Constants
+// ============================================================
+
+/** The My Agent identity colour, shared with the tab bar. */
+const AGENT_VIOLET = "#A78BFA";
+
+/** Which surface of the tab is on screen. */
+type AgentView = "chat" | "overview";
 
 // ============================================================
 // Main My Agent Screen
@@ -58,8 +72,8 @@ export default function MyAgentScreen({
 
   const userId = user?.id || "";
 
-  // ── Modal states ──────────────────────────────────────────────
-  const [chatModalVisible, setChatModalVisible] = useState(false);
+  // ── View + modal state ────────────────────────────────────────
+  const [view, setView] = useState<AgentView>("chat");
   const [creditRepairVisible, setCreditRepairVisible] = useState(false);
   const [disputeTrackerVisible, setDisputeTrackerVisible] = useState(false);
   const [creditRepairPrefill, setCreditRepairPrefill] = useState<{
@@ -124,35 +138,42 @@ export default function MyAgentScreen({
     assignAgentMutation,
   ]);
 
+  // ── Derived agent state ───────────────────────────────────────
+  const agent = myAgentQuery.data?.agent as AgentInfo | undefined;
+  const assignment = myAgentQuery.data?.assignment;
+  const isAssigning =
+    assignAgentMutation.isPending ||
+    (myAgentQuery.isLoading && !myAgentQuery.data);
+
   // ── Handlers ──────────────────────────────────────────────────
+  const handleDisputeDataChanged = useCallback(() => {
+    refetchDisputes?.();
+  }, [refetchDisputes]);
+
+  /** The agent used its letter tool mid-conversation — open the editor. */
+  const handleLetterFromAgent = useCallback((letter: TriggeredLetter) => {
+    setCreditRepairPrefill({
+      letterType: letter.letterType,
+      creditorName: letter.creditorName,
+      accountNumber: letter.accountNumber,
+    });
+    setCreditRepairVisible(true);
+  }, []);
+
+  // ── Live chat ─────────────────────────────────────────────────
+  const chat = useAgentChat({
+    userId,
+    agentId: agent?.id,
+    enabled: isACE1 && !!agent,
+    onLetterGenerated: handleLetterFromAgent,
+    onDisputeDataChanged: handleDisputeDataChanged,
+  });
+
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     await Promise.all([myAgentQuery.refetch(), refetchDisputes?.()]);
     setRefreshing(false);
   }, [myAgentQuery, refetchDisputes]);
-
-  const handleTriggerCreditRepair = useCallback(
-    (data?: {
-      letterType?: string;
-      creditorName?: string;
-      accountNumber?: string;
-    }) => {
-      setChatModalVisible(false);
-      setCreditRepairPrefill(data || null);
-      // Small delay so the chat modal closes before credit repair opens
-      setTimeout(() => setCreditRepairVisible(true), 300);
-    },
-    [],
-  );
-
-  const handleTriggerDisputeTracker = useCallback(() => {
-    setChatModalVisible(false);
-    setTimeout(() => setDisputeTrackerVisible(true), 300);
-  }, []);
-
-  const handleDisputeDataChanged = useCallback(() => {
-    refetchDisputes?.();
-  }, [refetchDisputes]);
 
   const handleLetterGenerated = useCallback(
     (_disputeId?: string) => {
@@ -161,13 +182,6 @@ export default function MyAgentScreen({
     },
     [refetchDisputes],
   );
-
-  // ── Derived state ─────────────────────────────────────────────
-  const agent = myAgentQuery.data?.agent as AgentInfo | undefined;
-  const assignment = myAgentQuery.data?.assignment;
-  const isAssigning =
-    assignAgentMutation.isPending ||
-    (myAgentQuery.isLoading && !myAgentQuery.data);
 
   // Open disputes count for the dashboard
   const openDisputes = useMemo(
@@ -284,8 +298,18 @@ export default function MyAgentScreen({
   }
 
   // ============================================================
-  // Render — Main dashboard with agent + modals
+  // Render — Chat + dashboard
   // ============================================================
+
+  const isLive = chat.connection === "live";
+  const statusLabel =
+    chat.connection === "live"
+      ? "Online now"
+      : chat.connection === "connecting"
+        ? "Connecting…"
+        : chat.connection === "polling"
+          ? "Online"
+          : "Reconnecting…";
 
   return (
     <>
@@ -293,11 +317,9 @@ export default function MyAgentScreen({
       <View
         style={[styles.container, { paddingTop: embedded ? 0 : insets.top }]}
       >
-        {/* ── Header ──────────────────────────────────────────── */}
-        <View style={styles.header}>
-          {embedded ? (
-            <View style={{ width: 40 }} />
-          ) : (
+        {/* ── Conversation header ─────────────────────────────── */}
+        <View style={styles.chatHeader}>
+          {embedded ? null : (
             <TouchableOpacity
               style={styles.backButton}
               onPress={() => router.back()}
@@ -307,176 +329,244 @@ export default function MyAgentScreen({
               <ArrowLeft color={Colors.text} size={24} />
             </TouchableOpacity>
           )}
-          <View style={styles.headerCenter}>
-            <Bot size={20} color={Colors.primary} />
-            <Text style={styles.headerTitle}>My Agent</Text>
+
+          <View style={styles.identity}>
+            <View style={styles.identityAvatarWrap}>
+              {agent?.avatar_url ? (
+                <Image
+                  source={{ uri: agent.avatar_url }}
+                  style={styles.identityAvatar}
+                />
+              ) : (
+                <View style={[styles.identityAvatar, styles.identityFallback]}>
+                  <Bot size={18} color={Colors.white} />
+                </View>
+              )}
+              {agent ? (
+                <View
+                  style={[
+                    styles.presenceDot,
+                    {
+                      backgroundColor: isLive
+                        ? Colors.success
+                        : chat.connection === "offline"
+                          ? Colors.warning
+                          : Colors.textLight,
+                    },
+                  ]}
+                />
+              ) : null}
+            </View>
+
+            <View style={styles.identityText}>
+              <Text style={styles.identityName} numberOfLines={1}>
+                {agent?.agent_name ?? "My Agent"}
+              </Text>
+              <Text style={styles.identityStatus} numberOfLines={1}>
+                {agent ? statusLabel : "AI Credit Repair Agent"}
+              </Text>
+            </View>
           </View>
-          <View style={{ width: 40 }} />
+
+          {/* Segmented switch between the conversation and the dashboard */}
+          <View style={styles.segment}>
+            <SegmentButton
+              active={view === "chat"}
+              onPress={() => setView("chat")}
+              label="Chat"
+              accessibilityLabel="Show conversation"
+            >
+              <MessageCircle
+                size={16}
+                color={view === "chat" ? Colors.white : Colors.textSecondary}
+              />
+            </SegmentButton>
+            <SegmentButton
+              active={view === "overview"}
+              onPress={() => setView("overview")}
+              label="Overview"
+              accessibilityLabel="Show agent overview"
+            >
+              <LayoutDashboard
+                size={16}
+                color={
+                  view === "overview" ? Colors.white : Colors.textSecondary
+                }
+              />
+            </SegmentButton>
+          </View>
         </View>
 
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={styles.scrollContent}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              colors={[Colors.primary]}
-              tintColor={Colors.primary}
-            />
-          }
-        >
-          {/* ── Agent profile card ─────────────────────────────── */}
-          {agent ? (
-            <AgentProfileCard
-              agent={agent}
-              assignedAt={assignment?.assigned_at}
-              isACE1={isACE1}
-              onOpenChat={() => setChatModalVisible(true)}
-              onOpenCreditRepair={() => {
-                setCreditRepairPrefill(null);
-                setCreditRepairVisible(true);
-              }}
-              onOpenDisputeTracker={() => setDisputeTrackerVisible(true)}
-            />
-          ) : null}
-
-          {/* ── Quick stats row ─────────────────────────────────── */}
-          <View style={styles.statsRow}>
-            <View style={styles.statBox}>
-              <View
-                style={[
-                  styles.statIcon,
-                  { backgroundColor: Colors.info + "20" },
-                ]}
-              >
-                <ClipboardList size={18} color={Colors.info} />
-              </View>
-              <Text style={styles.statNum}>{openDisputes.length}</Text>
-              <Text style={styles.statLabel}>Open Disputes</Text>
-            </View>
-            <View style={styles.statBox}>
-              <View
-                style={[
-                  styles.statIcon,
-                  { backgroundColor: Colors.success + "20" },
-                ]}
-              >
-                <Shield size={18} color={Colors.success} />
-              </View>
-              <Text style={styles.statNum}>
-                {disputes.filter((d) => d.status === "resolved").length}
-              </Text>
-              <Text style={styles.statLabel}>Resolved</Text>
-            </View>
-            <View style={styles.statBox}>
-              <View
-                style={[
-                  styles.statIcon,
-                  { backgroundColor: Colors.accent + "20" },
-                ]}
-              >
-                <FileText size={18} color={Colors.accent} />
-              </View>
-              <Text style={styles.statNum}>{disputes.length}</Text>
-              <Text style={styles.statLabel}>Total Letters</Text>
-            </View>
-          </View>
-
-          {/* ── How it works section ────────────────────────────── */}
-          <View style={styles.howItWorks}>
-            <Text style={styles.sectionTitle}>How Your Agent Works</Text>
-            <View style={styles.stepItem}>
-              <View
-                style={[styles.stepNum, { backgroundColor: Colors.primary }]}
-              >
-                <Text style={styles.stepNumText}>1</Text>
-              </View>
-              <View style={styles.stepContent}>
-                <Text style={styles.stepTitle}>Chat with Your Agent</Text>
-                <Text style={styles.stepDesc}>
-                  Ask any credit repair question. Your agent understands your
-                  dispute history and can recommend next steps.
-                </Text>
-              </View>
-            </View>
-            <View style={styles.stepItem}>
-              <View
-                style={[styles.stepNum, { backgroundColor: Colors.accent }]}
-              >
-                <Text style={styles.stepNumText}>2</Text>
-              </View>
-              <View style={styles.stepContent}>
-                <Text style={styles.stepTitle}>Generate Dispute Letters</Text>
-                <Text style={styles.stepDesc}>
-                  Ask your agent to write a letter, or use the Credit Repair
-                  Tool directly. Letters are saved to your tracker
-                  automatically.
-                </Text>
-              </View>
-            </View>
-            <View style={styles.stepItem}>
-              <View
-                style={[styles.stepNum, { backgroundColor: Colors.secondary }]}
-              >
-                <Text style={styles.stepNumText}>3</Text>
-              </View>
-              <View style={styles.stepContent}>
-                <Text style={styles.stepTitle}>Track Everything</Text>
-                <Text style={styles.stepDesc}>
-                  Monitor dispute status, response deadlines, and outcomes in
-                  the Dispute Tracker. Your agent references this in
-                  conversations.
-                </Text>
-              </View>
-            </View>
-          </View>
-
-          {/* ── Feature highlights ──────────────────────────────── */}
-          <View style={styles.featuresRow}>
-            <View style={styles.featureCard}>
-              <Zap size={20} color={Colors.primary} />
-              <Text style={styles.featureTitle}>AI-Powered</Text>
-              <Text style={styles.featureDesc}>
-                Context-aware responses based on your credit situation
-              </Text>
-            </View>
-            <View style={styles.featureCard}>
-              <TrendingUp size={20} color={Colors.accent} />
-              <Text style={styles.featureTitle}>FCRA Expert</Text>
-              <Text style={styles.featureDesc}>
-                Knows all dispute letter types and credit score factors
-              </Text>
-            </View>
-          </View>
-        </ScrollView>
-
-        {/* ── Floating chat button ─────────────────────────────── */}
-        {agent ? (
-          <TouchableOpacity
-            style={styles.fab}
-            onPress={() => setChatModalVisible(true)}
-            accessibilityRole="button"
-            accessibilityLabel="Open chat with your AI agent"
+        {/* ── Chat ─────────────────────────────────────────────── */}
+        {view === "chat" ? (
+          <KeyboardAvoidingView
+            style={styles.flex}
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            keyboardVerticalOffset={embedded ? 0 : insets.top}
           >
-            <MessageCircle size={24} color={Colors.white} />
-            <Text style={styles.fabText}>Chat</Text>
-          </TouchableOpacity>
-        ) : null}
+            {agent ? (
+              <AgentChatPanel
+                agentName={agent.agent_name}
+                agentAvatarUrl={agent.avatar_url}
+                messages={chat.messages}
+                connection={chat.connection}
+                isAgentTyping={chat.isAgentTyping}
+                isLoading={chat.isLoading}
+                loadError={chat.loadError}
+                onSend={chat.sendMessage}
+                onRetry={chat.retryMessage}
+              />
+            ) : (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator color={Colors.primary} />
+              </View>
+            )}
+          </KeyboardAvoidingView>
+        ) : (
+          /* ── Overview ───────────────────────────────────────── */
+          <ScrollView
+            style={styles.scroll}
+            contentContainerStyle={styles.scrollContent}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={handleRefresh}
+                colors={[Colors.primary]}
+                tintColor={Colors.primary}
+              />
+            }
+          >
+            {agent ? (
+              <AgentProfileCard
+                agent={agent}
+                assignedAt={assignment?.assigned_at}
+                isACE1={isACE1}
+                onOpenChat={() => setView("chat")}
+                onOpenCreditRepair={() => {
+                  setCreditRepairPrefill(null);
+                  setCreditRepairVisible(true);
+                }}
+                onOpenDisputeTracker={() => setDisputeTrackerVisible(true)}
+              />
+            ) : null}
+
+            {/* ── Quick stats row ─────────────────────────────── */}
+            <View style={styles.statsRow}>
+              <View style={styles.statBox}>
+                <View
+                  style={[
+                    styles.statIcon,
+                    { backgroundColor: Colors.info + "20" },
+                  ]}
+                >
+                  <ClipboardList size={18} color={Colors.info} />
+                </View>
+                <Text style={styles.statNum}>{openDisputes.length}</Text>
+                <Text style={styles.statLabel}>Open Disputes</Text>
+              </View>
+              <View style={styles.statBox}>
+                <View
+                  style={[
+                    styles.statIcon,
+                    { backgroundColor: Colors.success + "20" },
+                  ]}
+                >
+                  <Shield size={18} color={Colors.success} />
+                </View>
+                <Text style={styles.statNum}>
+                  {disputes.filter((d) => d.status === "resolved").length}
+                </Text>
+                <Text style={styles.statLabel}>Resolved</Text>
+              </View>
+              <View style={styles.statBox}>
+                <View
+                  style={[
+                    styles.statIcon,
+                    { backgroundColor: Colors.accent + "20" },
+                  ]}
+                >
+                  <FileText size={18} color={Colors.accent} />
+                </View>
+                <Text style={styles.statNum}>{disputes.length}</Text>
+                <Text style={styles.statLabel}>Total Letters</Text>
+              </View>
+            </View>
+
+            {/* ── How it works section ────────────────────────── */}
+            <View style={styles.howItWorks}>
+              <Text style={styles.sectionTitle}>How Your Agent Works</Text>
+              <View style={styles.stepItem}>
+                <View
+                  style={[styles.stepNum, { backgroundColor: Colors.primary }]}
+                >
+                  <Text style={styles.stepNumText}>1</Text>
+                </View>
+                <View style={styles.stepContent}>
+                  <Text style={styles.stepTitle}>Message Your Agent</Text>
+                  <Text style={styles.stepDesc}>
+                    Ask any credit repair question in the Chat tab. Replies
+                    arrive live, and your agent knows your dispute history.
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.stepItem}>
+                <View
+                  style={[styles.stepNum, { backgroundColor: Colors.accent }]}
+                >
+                  <Text style={styles.stepNumText}>2</Text>
+                </View>
+                <View style={styles.stepContent}>
+                  <Text style={styles.stepTitle}>Generate Dispute Letters</Text>
+                  <Text style={styles.stepDesc}>
+                    Ask your agent to write a letter, or use the Credit Repair
+                    Tool directly. Letters are saved to your tracker
+                    automatically.
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.stepItem}>
+                <View
+                  style={[
+                    styles.stepNum,
+                    { backgroundColor: Colors.secondary },
+                  ]}
+                >
+                  <Text style={styles.stepNumText}>3</Text>
+                </View>
+                <View style={styles.stepContent}>
+                  <Text style={styles.stepTitle}>Track Everything</Text>
+                  <Text style={styles.stepDesc}>
+                    Monitor dispute status, response deadlines, and outcomes in
+                    the Dispute Tracker. Your agent references this in
+                    conversations.
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            {/* ── Feature highlights ──────────────────────────── */}
+            <View style={styles.featuresRow}>
+              <View style={styles.featureCard}>
+                <Zap size={20} color={Colors.primary} />
+                <Text style={styles.featureTitle}>AI-Powered</Text>
+                <Text style={styles.featureDesc}>
+                  Context-aware responses based on your credit situation
+                </Text>
+              </View>
+              <View style={styles.featureCard}>
+                <TrendingUp size={20} color={Colors.accent} />
+                <Text style={styles.featureTitle}>FCRA Expert</Text>
+                <Text style={styles.featureDesc}>
+                  Knows all dispute letter types and credit score factors
+                </Text>
+              </View>
+            </View>
+          </ScrollView>
+        )}
 
         {/* ── Modals ───────────────────────────────────────────── */}
         {agent ? (
           <>
-            <AgentChatModal
-              visible={chatModalVisible}
-              onClose={() => setChatModalVisible(false)}
-              agentId={agent.id}
-              agentName={agent.agent_name}
-              agentAvatar={agent.avatar_url || undefined}
-              onTriggerCreditRepair={handleTriggerCreditRepair}
-              onTriggerDisputeTracker={handleTriggerDisputeTracker}
-              onDisputeDataChanged={handleDisputeDataChanged}
-            />
             <CreditRepairModal
               visible={creditRepairVisible}
               onClose={() => {
@@ -495,6 +585,42 @@ export default function MyAgentScreen({
         ) : null}
       </View>
     </>
+  );
+}
+
+// ============================================================
+// Segmented control button
+// ============================================================
+
+function SegmentButton({
+  active,
+  onPress,
+  label,
+  accessibilityLabel,
+  children,
+}: {
+  active: boolean;
+  onPress: () => void;
+  label: string;
+  accessibilityLabel: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <TouchableOpacity
+      style={[styles.segmentButton, active && styles.segmentButtonActive]}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      accessibilityLabel={accessibilityLabel}
+    >
+      {children}
+      <Text
+        style={[styles.segmentText, active && styles.segmentTextActive]}
+        numberOfLines={1}
+      >
+        {label}
+      </Text>
+    </TouchableOpacity>
   );
 }
 
@@ -602,6 +728,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
+  flex: {
+    flex: 1,
+  },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -611,6 +740,87 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
+  },
+  // Conversation header
+  chatHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: Colors.surface,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.border,
+  },
+  identity: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  identityAvatarWrap: {
+    width: 38,
+    height: 38,
+  },
+  identityAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+  },
+  identityFallback: {
+    backgroundColor: AGENT_VIOLET,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  presenceDot: {
+    position: "absolute",
+    right: -1,
+    bottom: -1,
+    width: 11,
+    height: 11,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: Colors.surface,
+  },
+  identityText: {
+    flex: 1,
+  },
+  identityName: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: Colors.text,
+  },
+  identityStatus: {
+    fontSize: 11,
+    color: Colors.textSecondary,
+    marginTop: 1,
+  },
+  // Segmented control
+  segment: {
+    flexDirection: "row",
+    backgroundColor: Colors.surfaceAlt,
+    borderRadius: 12,
+    padding: 3,
+    gap: 2,
+  },
+  segmentButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 9,
+  },
+  segmentButtonActive: {
+    backgroundColor: AGENT_VIOLET,
+  },
+  segmentText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Colors.textSecondary,
+  },
+  segmentTextActive: {
+    color: Colors.white,
   },
   backButton: {
     width: 40,
@@ -633,7 +843,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 20,
-    paddingBottom: 100,
+    paddingBottom: 40,
   },
   // Loading
   loadingContainer: {
@@ -792,34 +1002,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.textSecondary,
     lineHeight: 18,
-  },
-  // FAB
-  fab: {
-    position: "absolute",
-    bottom: 24,
-    right: 24,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: Colors.primary,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderRadius: 30,
-    ...Platform.select({
-      ios: {
-        shadowColor: Colors.primary,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-      },
-      android: { elevation: 8 },
-      web: { boxShadow: "0 4px 16px rgba(0,43,92,0.3)" },
-    }),
-  },
-  fabText: {
-    color: Colors.white,
-    fontSize: 16,
-    fontWeight: "700",
   },
   // Locked view
   lockedContainer: {

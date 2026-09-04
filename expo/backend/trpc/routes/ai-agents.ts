@@ -931,20 +931,39 @@ export const aiAgentsRouter = createTRPCRouter({
 
   // ----------------------------------------------------------
   // getChatHistory: Retrieve conversation history
+  //
+  // `since` turns this into a cheap delta poll: pass the timestamp of the
+  // newest message the client already holds and only newer rows come back.
+  // That is what keeps the chat live when the realtime socket is unavailable.
   // ----------------------------------------------------------
   getChatHistory: publicProcedure
-    .input(z.object({ userId: z.string(), limit: z.number().optional().default(50) }))
+    .input(
+      z.object({
+        userId: z.string(),
+        limit: z.number().optional().default(50),
+        /** ISO timestamp — return only messages created strictly after this. */
+        since: z.string().optional(),
+      })
+    )
     .query(async ({ input }) => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("agent_chat_messages")
         .select("*")
-        .eq("user_id", input.userId)
+        .eq("user_id", input.userId);
+
+      if (input.since) {
+        query = query.gt("created_at", input.since);
+      }
+
+      const { data, error } = await query
         .order("created_at", { ascending: true })
         .limit(input.limit);
 
+      // Surface the failure instead of masking it as an empty conversation —
+      // the client keeps showing its cached messages and flags the problem.
       if (error) {
         console.error("[AI Agents] getChatHistory error:", error);
-        return [];
+        throw new Error(`Could not load your conversation: ${error.message}`);
       }
 
       return (data || []) as ChatMessage[];
@@ -974,13 +993,19 @@ export const aiAgentsRouter = createTRPCRouter({
     .mutation(async ({ input }) => {
       console.log("[AI Agents] Chat from user:", input.userId, "agent:", input.agentId);
 
-      // 1. Save the user's message
-      await supabase.from("agent_chat_messages").insert({
-        user_id: input.userId,
-        agent_id: input.agentId,
-        role: "user",
-        content: input.message,
-      });
+      // 1. Save the user's message. The persisted row is returned to the
+      //    client so it can swap its optimistic bubble for the real record
+      //    (and de-duplicate the echo that arrives over the realtime socket).
+      const { data: savedUserMessage } = await supabase
+        .from("agent_chat_messages")
+        .insert({
+          user_id: input.userId,
+          agent_id: input.agentId,
+          role: "user",
+          content: input.message,
+        })
+        .select("*")
+        .single();
 
       // 2. Fetch agent info for the system prompt
       const { data: agent } = await supabase
@@ -1009,19 +1034,29 @@ export const aiAgentsRouter = createTRPCRouter({
       let finalResponse = response;
       const executedTools: any[] = [];
 
+      const savedToolMessages: ChatMessage[] = [];
+
       if (toolCalls.length > 0) {
         for (const tc of toolCalls) {
           const toolResult = await executeTool(tc, input.userId);
 
           // Save the tool message
-          await supabase.from("agent_chat_messages").insert({
-            user_id: input.userId,
-            agent_id: input.agentId,
-            role: "tool",
-            content: toolResult.displayContent,
-            tool_name: toolResult.toolName,
-            tool_result: toolResult.result,
-          });
+          const { data: savedToolMessage } = await supabase
+            .from("agent_chat_messages")
+            .insert({
+              user_id: input.userId,
+              agent_id: input.agentId,
+              role: "tool",
+              content: toolResult.displayContent,
+              tool_name: toolResult.toolName,
+              tool_result: toolResult.result,
+            })
+            .select("*")
+            .single();
+
+          if (savedToolMessage) {
+            savedToolMessages.push(savedToolMessage as ChatMessage);
+          }
 
           executedTools.push({
             name: toolResult.toolName,
@@ -1047,16 +1082,26 @@ export const aiAgentsRouter = createTRPCRouter({
       }
 
       // 6. Save the assistant's response
-      await supabase.from("agent_chat_messages").insert({
-        user_id: input.userId,
-        agent_id: input.agentId,
-        role: "assistant",
-        content: finalResponse,
-      });
+      const { data: savedAssistantMessage } = await supabase
+        .from("agent_chat_messages")
+        .insert({
+          user_id: input.userId,
+          agent_id: input.agentId,
+          role: "assistant",
+          content: finalResponse,
+        })
+        .select("*")
+        .single();
 
       return {
         response: finalResponse,
         toolCalls: executedTools,
+        /** The persisted rows, in conversation order, for client reconciliation. */
+        messages: [
+          savedUserMessage,
+          ...savedToolMessages,
+          savedAssistantMessage,
+        ].filter(Boolean) as ChatMessage[],
       };
     }),
 

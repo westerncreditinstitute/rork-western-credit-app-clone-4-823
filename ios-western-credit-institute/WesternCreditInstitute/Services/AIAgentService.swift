@@ -38,15 +38,22 @@ nonisolated final class AIAgentService: Sendable {
     // MARK: - Chat
 
     /// Stored conversation with the agent, oldest first.
-    func fetchChatHistory(userId: String, limit: Int = 50) async -> [AgentChatMessage] {
-        guard isConfigured else { return [] }
-        let input = ["json": ["userId": userId, "limit": limit] as [String: Any]]
-        do {
-            return try await client.query("aiAgents.getChatHistory", input: input)
-        } catch {
-            // An empty transcript still lets the user start a new conversation.
-            return []
+    ///
+    /// Passing `since` turns this into a cheap delta poll — only rows created
+    /// strictly after that ISO-8601 timestamp come back, which is what keeps
+    /// the transcript live without re-downloading it every few seconds.
+    func fetchChatHistory(
+        userId: String,
+        limit: Int = 50,
+        since: String? = nil
+    ) async throws -> [AgentChatMessage] {
+        guard isConfigured else { throw TRPCClientError.notConfigured }
+
+        var payload: [String: Any] = ["userId": userId, "limit": limit]
+        if let since {
+            payload["since"] = since
         }
+        return try await client.query("aiAgents.getChatHistory", input: ["json": payload])
     }
 
     /// Sends a message and returns the agent's reply. Recent turns are passed
@@ -74,6 +81,27 @@ nonisolated final class AIAgentService: Sendable {
             ] as [String: Any]
         ]
         return try await client.mutate("aiAgents.chat", input: input)
+    }
+
+    // MARK: - Transcript cache
+
+    private static func transcriptCacheKey(userId: String) -> String {
+        "wci.myagent.chat.\(userId)"
+    }
+
+    /// Last-known transcript, so the conversation paints instantly on reopen.
+    func cachedTranscript(userId: String) -> [AgentChatMessage] {
+        guard let data = UserDefaults.standard.data(
+            forKey: Self.transcriptCacheKey(userId: userId)
+        ) else { return [] }
+        return (try? JSONDecoder().decode([AgentChatMessage].self, from: data)) ?? []
+    }
+
+    /// Caches only confirmed messages — an unsent draft must never look delivered.
+    func cacheTranscript(_ messages: [AgentChatMessage], userId: String) {
+        let confirmed = messages.filter { $0.status == .sent }.suffix(50)
+        guard let data = try? JSONEncoder().encode(Array(confirmed)) else { return }
+        UserDefaults.standard.set(data, forKey: Self.transcriptCacheKey(userId: userId))
     }
 
     // MARK: - Disputes (dashboard counters)

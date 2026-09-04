@@ -139,7 +139,12 @@ nonisolated struct AssignAgentResponse: Codable, Sendable {
     let assignment: AgentAssignment?
 }
 
-/// One stored turn of the conversation with the agent (`agent_chat_messages`).
+/// One turn of the conversation with the agent (`agent_chat_messages`).
+///
+/// A message starts life locally as an optimistic `.sending` bubble with no
+/// `serverId`, then gets swapped for the persisted row once the backend
+/// confirms it — `clientId` stays stable across that swap so SwiftUI keeps the
+/// same view identity and the bubble never flickers.
 nonisolated struct AgentChatMessage: Identifiable, Codable, Hashable, Sendable {
     /// Roles the backend persists. `tool` rows carry formatted tool output.
     nonisolated enum Role: String, Codable, Hashable, Sendable {
@@ -148,42 +153,153 @@ nonisolated struct AgentChatMessage: Identifiable, Codable, Hashable, Sendable {
         case tool
     }
 
-    let id: String
+    /// Delivery state of an outgoing message.
+    nonisolated enum DeliveryStatus: String, Codable, Hashable, Sendable {
+        case sending
+        case sent
+        case failed
+    }
+
+    /// Stable local identity — survives the optimistic-to-persisted swap.
+    let clientId: String
+    /// Row id in Postgres. `nil` while the message is still optimistic.
+    let serverId: Int?
     let role: Role
     let content: String
     let toolName: String?
+    /// Raw ISO-8601 timestamp; also used as the delta-poll cursor.
+    let createdAtISO: String
+    var status: DeliveryStatus
+
+    var id: String { clientId }
 
     private enum CodingKeys: String, CodingKey {
         case id, role, content
         case toolName = "tool_name"
+        case createdAt = "created_at"
     }
 
-    nonisolated init(id: String, role: Role, content: String, toolName: String? = nil) {
-        self.id = id
+    /// Builds a local, not-yet-persisted message.
+    nonisolated init(
+        clientId: String = UUID().uuidString,
+        role: Role,
+        content: String,
+        toolName: String? = nil,
+        createdAtISO: String = Self.isoFormatter.string(from: Date()),
+        status: DeliveryStatus = .sending
+    ) {
+        self.clientId = clientId
+        self.serverId = nil
         self.role = role
         self.content = content
         self.toolName = toolName
+        self.createdAtISO = createdAtISO
+        self.status = status
     }
 
     nonisolated init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        // `id` is a bigint in Postgres but a UUID for optimistic local rows.
+        // `id` is a bigint in Postgres but may arrive as a string.
         if let numericId = try? container.decode(Int.self, forKey: .id) {
-            id = String(numericId)
+            serverId = numericId
+            clientId = "server-\(numericId)"
+        } else if let stringId = try? container.decode(String.self, forKey: .id) {
+            serverId = Int(stringId)
+            clientId = "server-\(stringId)"
         } else {
-            id = (try? container.decode(String.self, forKey: .id)) ?? UUID().uuidString
+            serverId = nil
+            clientId = UUID().uuidString
         }
         role = (try? container.decode(Role.self, forKey: .role)) ?? .assistant
         content = try container.decodeIfPresent(String.self, forKey: .content) ?? ""
         toolName = try container.decodeIfPresent(String.self, forKey: .toolName)
+        createdAtISO = try container.decodeIfPresent(String.self, forKey: .createdAt)
+            ?? Self.isoFormatter.string(from: Date())
+        status = .sent
+    }
+
+    nonisolated func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(serverId, forKey: .id)
+        try container.encode(role, forKey: .role)
+        try container.encode(content, forKey: .content)
+        try container.encodeIfPresent(toolName, forKey: .toolName)
+        try container.encode(createdAtISO, forKey: .createdAt)
     }
 
     var isFromUser: Bool { role == .user }
+
+    /// Parsed timestamp, used for ordering and the bubble's time stamp.
+    var createdAt: Date {
+        let withFraction = ISO8601DateFormatter()
+        withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = withFraction.date(from: createdAtISO) { return date }
+        return ISO8601DateFormatter().date(from: createdAtISO) ?? Date()
+    }
+
+    /// Full initialiser, used when reconciling a persisted row against the
+    /// optimistic bubble it replaces.
+    nonisolated init(
+        clientId: String,
+        serverId: Int?,
+        role: Role,
+        content: String,
+        toolName: String?,
+        createdAtISO: String,
+        status: DeliveryStatus
+    ) {
+        self.clientId = clientId
+        self.serverId = serverId
+        self.role = role
+        self.content = content
+        self.toolName = toolName
+        self.createdAtISO = createdAtISO
+        self.status = status
+    }
+
+    /// Same author, same text, still unconfirmed — i.e. the optimistic bubble
+    /// that produced `row`.
+    func matchesOptimistically(_ row: AgentChatMessage) -> Bool {
+        serverId == nil && role == row.role && content == row.content
+    }
+
+    /// This message re-keyed onto an existing local identity, so swapping an
+    /// optimistic bubble for its persisted row doesn't change view identity.
+    func adoptingClientId(_ id: String) -> AgentChatMessage {
+        AgentChatMessage(
+            clientId: id,
+            serverId: serverId,
+            role: role,
+            content: content,
+            toolName: toolName,
+            createdAtISO: createdAtISO,
+            status: status
+        )
+    }
+
+    fileprivate static let isoFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
 }
 
 /// Reply envelope returned by `aiAgents.chat`.
 nonisolated struct AgentChatReply: Codable, Sendable {
     let response: String
+    /// The rows the backend persisted for this exchange, in conversation order.
+    /// Used to reconcile the optimistic bubble and to surface tool output.
+    let messages: [AgentChatMessage]
+
+    private enum CodingKeys: String, CodingKey {
+        case response, messages
+    }
+
+    nonisolated init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        response = try container.decodeIfPresent(String.self, forKey: .response) ?? ""
+        messages = try container.decodeIfPresent([AgentChatMessage].self, forKey: .messages) ?? []
+    }
 }
 
 /// Slim projection of a dispute record — the agent dashboard only needs status

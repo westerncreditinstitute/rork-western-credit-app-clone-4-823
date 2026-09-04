@@ -15,11 +15,36 @@ struct MyAgentView: View {
     @Environment(ThemeManager.self) private var theme
     @Environment(AppStore.self) private var store
 
+    /// Which surface of the tab is on screen.
+    private enum Surface: String, CaseIterable {
+        case chat
+        case overview
+
+        var label: String {
+            switch self {
+            case .chat: return "Chat"
+            case .overview: return "Overview"
+            }
+        }
+
+        var symbol: String {
+            switch self {
+            case .chat: return "message.fill"
+            case .overview: return "square.grid.2x2.fill"
+            }
+        }
+    }
+
     @State private var viewModel: MyAgentViewModel
-    @State private var showChat = false
+    /// Created once the agent is known; owns the live conversation.
+    @State private var chatViewModel: AgentChatViewModel?
+    @State private var surface: Surface = .chat
     @State private var showCreditRepair = false
     @State private var showDisputeTracker = false
     @State private var showPlans = false
+
+    /// The My Agent identity colour, shared with the tab bar.
+    private let agentViolet = Color(hex: "#A78BFA")
 
     init(userId: String) {
         _viewModel = State(initialValue: MyAgentViewModel(userId: userId))
@@ -46,14 +71,16 @@ struct MyAgentView: View {
         .sheet(isPresented: $showDisputeTracker) {
             NavigationStack { DisputeTrackerView() }
         }
-        .sheet(isPresented: $showChat) {
-            if let agent = viewModel.agent {
-                AgentChatSheet(agent: agent, userId: viewModel.userId)
-            }
-        }
         .task {
             guard hasAgentAccess else { return }
             await viewModel.load()
+        }
+        .onChange(of: viewModel.agent?.id) { _, agentId in
+            // The conversation can only start once an agent is assigned.
+            guard let agentId, let agent = viewModel.agent else { return }
+            if chatViewModel?.agent.id != agentId {
+                chatViewModel = AgentChatViewModel(userId: viewModel.userId, agent: agent)
+            }
         }
     }
 
@@ -67,8 +94,126 @@ struct MyAgentView: View {
         case .failed(let message, let isAtCapacity) where viewModel.agent == nil:
             failureView(message: message, isAtCapacity: isAtCapacity)
         default:
-            dashboard
+            readyView
         }
+    }
+
+    /// Agent header pinned above either the live conversation or the dashboard.
+    private var readyView: some View {
+        VStack(spacing: 0) {
+            if viewModel.agent != nil {
+                agentHeader
+            }
+
+            if surface == .chat, let chatViewModel {
+                AgentChatPanelView(viewModel: chatViewModel)
+            } else {
+                dashboard
+            }
+        }
+    }
+
+    // MARK: - Agent header
+
+    private var agentHeader: some View {
+        HStack(spacing: Spacing.sm + 2) {
+            avatar
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(viewModel.agent?.agentName ?? "My Agent")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(theme.colors.text)
+                    .lineLimit(1)
+
+                Text(chatViewModel?.statusLabel ?? viewModel.agent?.status.label ?? "")
+                    .font(.system(size: 11))
+                    .foregroundStyle(theme.colors.textSecondary)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            segmentedControl
+        }
+        .padding(.horizontal, Spacing.sm + 4)
+        .padding(.vertical, Spacing.sm + 2)
+        .background(theme.colors.surface)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(theme.colors.border)
+                .frame(height: 0.5)
+        }
+    }
+
+    private var avatar: some View {
+        let presence: Color = {
+            switch chatViewModel?.connection {
+            case .live: return theme.colors.success
+            case .offline: return theme.colors.warning
+            default: return theme.colors.textLight
+            }
+        }()
+
+        return Group {
+            if let urlText = viewModel.agent?.avatarURL, let url = URL(string: urlText) {
+                AsyncImage(url: url) { image in
+                    image.resizable().aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    initialsAvatar
+                }
+            } else {
+                initialsAvatar
+            }
+        }
+        .frame(width: 38, height: 38)
+        .clipShape(.circle)
+        .overlay(alignment: .bottomTrailing) {
+            Circle()
+                .fill(presence)
+                .frame(width: 11, height: 11)
+                .overlay(Circle().strokeBorder(theme.colors.surface, lineWidth: 2))
+                .offset(x: 1, y: 1)
+        }
+    }
+
+    private var initialsAvatar: some View {
+        Text(viewModel.agent?.initials ?? "")
+            .font(.system(size: 14, weight: .bold))
+            .foregroundStyle(.white)
+            .frame(width: 38, height: 38)
+            .background(agentViolet)
+    }
+
+    private var segmentedControl: some View {
+        HStack(spacing: 2) {
+            ForEach(Surface.allCases, id: \.self) { option in
+                let isActive = surface == option
+
+                Button {
+                    Haptics.selection()
+                    withAnimation(.snappy(duration: 0.22)) { surface = option }
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: option.symbol)
+                            .font(.system(size: 12, weight: .semibold))
+                        Text(option.label)
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .foregroundStyle(isActive ? .white : theme.colors.textSecondary)
+                    .padding(.horizontal, Spacing.sm + 2)
+                    .padding(.vertical, 7)
+                    .background(
+                        isActive ? agentViolet : .clear,
+                        in: .rect(cornerRadius: 9, style: .continuous)
+                    )
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(option == .chat ? "Show conversation" : "Show agent overview")
+                .accessibilityAddTraits(isActive ? [.isSelected] : [])
+            }
+        }
+        .padding(3)
+        .background(theme.colors.surfaceAlt, in: .rect(cornerRadius: Radius.md, style: .continuous))
     }
 
     private var assigningView: some View {
@@ -141,7 +286,7 @@ struct MyAgentView: View {
                         agent: agent,
                         assignedDateText: viewModel.assignedDateText,
                         showsActions: hasAgentAccess,
-                        onOpenChat: { showChat = true },
+                        onOpenChat: { withAnimation(.snappy(duration: 0.22)) { surface = .chat } },
                         onOpenCreditRepair: { showCreditRepair = true },
                         onOpenDisputeTracker: { showDisputeTracker = true }
                     )
@@ -156,11 +301,6 @@ struct MyAgentView: View {
             .padding(.bottom, Spacing.xl)
         }
         .refreshable { await viewModel.refresh() }
-        .overlay(alignment: .bottomTrailing) {
-            if viewModel.agent != nil {
-                chatButton
-            }
-        }
     }
 
     private var statsRow: some View {
@@ -223,8 +363,8 @@ struct MyAgentView: View {
         [
             HowItWorksStep(
                 id: 1,
-                title: "Chat with Your Agent",
-                detail: "Ask any credit repair question. Your agent understands your dispute history and can recommend next steps.",
+                title: "Message Your Agent",
+                detail: "Ask any credit repair question in the Chat tab. Replies arrive live, and your agent knows your dispute history.",
                 tint: theme.colors.primary
             ),
             HowItWorksStep(
@@ -312,28 +452,6 @@ struct MyAgentView: View {
         .background(theme.colors.surface, in: .rect(cornerRadius: Radius.lg, style: .continuous))
     }
 
-    private var chatButton: some View {
-        Button {
-            Haptics.medium()
-            showChat = true
-        } label: {
-            HStack(spacing: Spacing.sm) {
-                Image(systemName: "message.fill")
-                    .font(.system(size: 17, weight: .semibold))
-                Text("Chat")
-                    .font(.system(size: 16, weight: .bold))
-            }
-            .foregroundStyle(.white)
-            .padding(.horizontal, Spacing.lg)
-            .padding(.vertical, Spacing.md)
-            .background(theme.colors.primary, in: .capsule)
-            .shadow(color: theme.colors.primary.opacity(0.35), radius: 8, y: 4)
-        }
-        .buttonStyle(.plain)
-        .padding(.trailing, Spacing.lg)
-        .padding(.bottom, Spacing.lg)
-        .accessibilityLabel("Open chat with your AI agent")
-    }
 }
 
 // MARK: - Locked state
