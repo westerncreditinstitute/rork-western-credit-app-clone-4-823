@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Platform,
-  Alert,
   RefreshControl,
   KeyboardAvoidingView,
   Image,
@@ -32,6 +31,7 @@ import { useUser } from "@/contexts/UserContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useDisputes } from "@/contexts/DisputesContext";
 import { trpc } from "@/lib/trpc";
+import { isSupabaseConfigured } from "@/lib/supabase";
 import { useAgentChat, type TriggeredLetter } from "@/hooks/useAgentChat";
 
 import AgentProfileCard, {
@@ -99,13 +99,9 @@ export default function MyAgentScreen({
       myAgentQuery.refetch();
     },
     onError: (error) => {
-      console.error("[MyAgent] Assignment error:", error);
-      if (!error.message?.includes("ALL_AGENTS_AT_CAPACITY")) {
-        Alert.alert(
-          "Assignment Issue",
-          error.message || "Could not assign your AI agent. Please try again.",
-        );
-      }
+      // No Alert here: the render branch below shows a specific, actionable
+      // explanation of the failure. A popup on top of it would just be noise.
+      console.error("[MyAgent] Assignment error:", error.message);
     },
   });
 
@@ -127,6 +123,16 @@ export default function MyAgentScreen({
       return;
     }
 
+    // Don't retry automatically once an attempt has already failed —
+    // every setup failure (missing tables, RLS, empty pool) is permanent
+    // until someone runs a migration, so retrying would just spin.
+    // The Try Again button drives any further attempts.
+    if (assignAgentMutation.isError) return;
+
+    // The backend reported a real problem (missing tables, RLS, bad
+    // credentials). Assigning would hit the same wall, so surface it instead.
+    if (myAgentQuery.data?.setupError) return;
+
     // If the query has resolved and there's no agent, assign one.
     if (
       myAgentQuery.isSuccess &&
@@ -142,6 +148,7 @@ export default function MyAgentScreen({
     myAgentQuery.isLoading,
     myAgentQuery.isSuccess,
     myAgentQuery.data?.agent,
+    myAgentQuery.data?.setupError,
     assignAgentMutation,
   ]);
 
@@ -151,6 +158,91 @@ export default function MyAgentScreen({
   const isAssigning =
     assignAgentMutation.isPending ||
     (myAgentQuery.isLoading && !myAgentQuery.data);
+
+  /**
+   * Work out WHY there is no agent, instead of guessing.
+   *
+   * Sources, most-specific first:
+   *   1. The assign mutation's error (it carries a `CODE: message` prefix).
+   *   2. A setupError returned by getMyAgent (missing tables / RLS / creds).
+   *   3. A transport-level query error (backend unreachable).
+   *   4. Supabase env vars never set at build time.
+   */
+  const setupDiagnosis = useMemo((): {
+    code: string;
+    title: string;
+    description: string;
+    hint?: string;
+  } | null => {
+    if (!isSupabaseConfigured) {
+      return {
+        code: "SUPABASE_NOT_CONFIGURED",
+        title: "Database Not Configured",
+        description:
+          "This build has no Supabase credentials, so your agent can't be looked up.",
+        hint: "Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in Rork Secrets, then rebuild — environment variables are baked in at build time, so a reload won't pick them up.",
+      };
+    }
+
+    const raw =
+      assignAgentMutation.error?.message ||
+      myAgentQuery.data?.setupError?.message ||
+      myAgentQuery.error?.message ||
+      "";
+
+    if (!raw) return null;
+
+    // Backend prefixes structured failures with "CODE: ".
+    const match = raw.match(/^([A-Z_]+):\s*([\s\S]+)$/);
+    const code = match?.[1];
+    const detail = match?.[2] ?? raw;
+
+    switch (code) {
+      case "SUPABASE_NOT_CONFIGURED":
+        return {
+          code,
+          title: "Database Not Configured",
+          description: detail,
+        };
+      case "MISSING_TABLES":
+        return {
+          code,
+          title: "Database Setup Incomplete",
+          description: detail,
+          hint: "Supabase → SQL Editor → run 020, then 021.",
+        };
+      case "RLS_BLOCKED":
+        return {
+          code,
+          title: "Database Permissions Blocked",
+          description: detail,
+          hint: "Supabase → SQL Editor → run 024_fix_agent_rls_policies.sql.",
+        };
+      case "POOL_EMPTY":
+        return {
+          code,
+          title: "No Agents Available Yet",
+          description: detail,
+          hint: "Supabase → SQL Editor → run 021_seed_ai_agents.sql.",
+        };
+      case "ALL_AGENTS_AT_CAPACITY":
+        return {
+          code,
+          title: "All Agents Are Busy",
+          description: detail,
+        };
+      default:
+        return {
+          code: code ?? "UNKNOWN",
+          title: "Couldn't Reach Your Agent",
+          description: detail,
+        };
+    }
+  }, [
+    assignAgentMutation.error?.message,
+    myAgentQuery.data?.setupError?.message,
+    myAgentQuery.error?.message,
+  ]);
 
   // ── Handlers ──────────────────────────────────────────────────
   const handleDisputeDataChanged = useCallback(() => {
@@ -276,14 +368,17 @@ export default function MyAgentScreen({
   }
 
   // ============================================================
-  // Render — Error state (all agents at capacity)
+  // Render — No agent available
+  //
+  // One branch for every "we have no agent to show you" case. Rather than
+  // guessing at the reason, `setupDiagnosis` reports what actually went
+  // wrong — missing migrations, RLS blocking writes, unset Supabase
+  // credentials, an empty pool, or genuine capacity — so the fix is obvious.
   // ============================================================
 
-  if (assignAgentMutation.isError && !agent) {
-    const errorMessage = assignAgentMutation.error?.message || "";
-    const isAtCapacity =
-      errorMessage.includes("ALL_AGENTS_AT_CAPACITY") ||
-      errorMessage.includes("capacity");
+  if (!agent) {
+    const diagnosis = setupDiagnosis;
+    const isAtCapacity = diagnosis?.code === "ALL_AGENTS_AT_CAPACITY";
 
     return (
       <>
@@ -307,86 +402,53 @@ export default function MyAgentScreen({
             <Text style={styles.headerTitle}>My Agent</Text>
             <View style={{ width: 40 }} />
           </View>
-          <View style={styles.errorContainer}>
+          <ScrollView
+            contentContainerStyle={styles.errorContainer}
+            showsVerticalScrollIndicator={false}
+          >
             <View style={styles.errorIconWrap}>
               <Bot size={48} color={Colors.warning} />
             </View>
             <Text style={styles.errorTitle}>
-              {isAtCapacity ? "All Agents Are Busy" : "Something Went Wrong"}
+              {diagnosis?.title ?? "Setting Up Your Agent"}
             </Text>
             <Text style={styles.errorDesc}>
-              {isAtCapacity
-                ? "All 10,000 AI agents are currently at maximum capacity (25 clients each). This is extraordinary demand — please try again in a few minutes."
-                : errorMessage ||
-                  "We couldn't assign your agent. Please try again."}
+              {diagnosis?.description ??
+                "We haven't matched you with an agent yet. Tap Try Again to get started."}
             </Text>
-            <TouchableOpacity
-              style={styles.retryButton}
-              onPress={() => assignAgentMutation.mutate({ userId })}
-              accessibilityRole="button"
-              accessibilityLabel="Retry agent assignment"
-            >
-              <Text style={styles.retryButtonText}>Try Again</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </>
-    );
-  }
 
-  // ============================================================
-  // Render — No agent yet (query resolved empty, no error)
-  // Happens when the agent pool is empty (migrations 020/021 not run).
-  // Without this branch the page renders with every agent-gated
-  // section hidden — including the chat — which looks broken.
-  // ============================================================
-
-  if (!agent) {
-    return (
-      <>
-        {!embedded && <Stack.Screen options={{ headerShown: false }} />}
-        <View
-          style={[styles.container, { paddingTop: embedded ? 0 : insets.top }]}
-        >
-          <View style={styles.header}>
-            {embedded ? (
-              <View style={{ width: 40 }} />
-            ) : (
-              <TouchableOpacity
-                style={styles.backButton}
-                onPress={() => router.back()}
-                accessibilityRole="button"
-                accessibilityLabel="Go back"
-              >
-                <ArrowLeft color={Colors.text} size={24} />
-              </TouchableOpacity>
+            {!!diagnosis?.hint && (
+              <View style={styles.errorHintBox}>
+                <Text style={styles.errorHintLabel}>How to fix this</Text>
+                <Text style={styles.errorHintText}>{diagnosis.hint}</Text>
+              </View>
             )}
-            <Text style={styles.headerTitle}>My Agent</Text>
-            <View style={{ width: 40 }} />
-          </View>
-          <View style={styles.errorContainer}>
-            <View style={styles.errorIconWrap}>
-              <Bot size={48} color={Colors.warning} />
-            </View>
-            <Text style={styles.errorTitle}>No Agent Assigned Yet</Text>
-            <Text style={styles.errorDesc}>
-              We couldn&apos;t find an agent for your account. If this is a new
-              install, the agent pool may not be seeded yet — run migrations
-              020 and 021 in Supabase, then tap Try Again.
-            </Text>
+
             <TouchableOpacity
               style={styles.retryButton}
-              onPress={() => assignAgentMutation.mutate({ userId })}
+              onPress={() => {
+                assignAgentMutation.reset();
+                myAgentQuery.refetch();
+                assignAgentMutation.mutate({ userId });
+              }}
+              disabled={assignAgentMutation.isPending}
               accessibilityRole="button"
-              accessibilityLabel="Assign my agent"
+              accessibilityLabel="Try assigning an agent again"
             >
-              <Text style={styles.retryButtonText}>Try Again</Text>
+              {assignAgentMutation.isPending ? (
+                <ActivityIndicator color={Colors.white} />
+              ) : (
+                <Text style={styles.retryButtonText}>
+                  {isAtCapacity ? "Check Again" : "Try Again"}
+                </Text>
+              )}
             </TouchableOpacity>
-          </View>
+          </ScrollView>
         </View>
       </>
     );
   }
+
 
   // ============================================================
   // Render — Chat + dashboard
@@ -966,11 +1028,34 @@ const styles = StyleSheet.create({
   },
   // Error
   errorContainer: {
-    flex: 1,
+    flexGrow: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 40,
+    paddingHorizontal: 32,
+    paddingVertical: 32,
     gap: 16,
+  },
+  errorHintBox: {
+    width: "100%",
+    backgroundColor: Colors.surfaceAlt,
+    borderRadius: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: Colors.warning,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 6,
+  },
+  errorHintLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Colors.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  errorHintText: {
+    fontSize: 14,
+    color: Colors.text,
+    lineHeight: 20,
   },
   errorIconWrap: {
     width: 80,

@@ -203,7 +203,34 @@ ORDER BY count DESC;
 
 You should see 10 specialty rows, each with approximately 1,000 agents.
 
-### Step 3.6 — Preview a Few Agents (Optional but Recommended)
+### Step 3.6 — Run Migration 024 (Required: Fixes "No Agent Assigned")
+
+**This migration is required.** Without it the My Agent tab shows *"We couldn't find an agent for your account"* even when migrations 020 and 021 ran perfectly.
+
+Migrations 020 and 023 enabled Row Level Security on the agent tables but only created `SELECT` policies. Their comments assumed the backend used a service-role key, which bypasses RLS — but this project has no service-role key. `lib/supabase.ts` builds one client from `EXPO_PUBLIC_SUPABASE_ANON_KEY`, and the tRPC backend imports that same client. With RLS on and no `INSERT` policy, every write was silently rejected:
+
+- `user_agent_assignments` → agent assignment failed (the visible bug)
+- `agent_chat_messages` → chat history was never saved
+- `credit_report_analyses` → report analysis was never saved
+
+1. Open `migrations/024_fix_agent_rls_policies.sql`.
+2. Paste the entire file into a new SQL Editor query and click **Run**.
+3. The migration ends with a verification query. Each table should list **4** policies (SELECT, INSERT, UPDATE, DELETE):
+
+```sql
+SELECT tablename, cmd, COUNT(*)
+FROM pg_policies
+WHERE schemaname = 'public'
+  AND tablename IN ('user_agent_assignments', 'agent_chat_messages', 'credit_report_analyses')
+GROUP BY tablename, cmd
+ORDER BY tablename, cmd;
+```
+
+4. Reopen the **My Agent** tab and tap **Try Again**. An agent should be assigned immediately.
+
+> **Security note:** these policies are permissive (`USING true`), matching the pattern migration 019 already uses for `users` and `disputes` — authorization is enforced in the tRPC layer, not the database. That is fine for testing, but before launch you should either add a `SUPABASE_SERVICE_ROLE_KEY` for a server-only client and revoke these policies, or move to Supabase Auth and scope policies with `auth.uid()`. The migration file repeats this note inline.
+
+### Step 3.7 — Preview a Few Agents (Optional but Recommended)
 
 ```sql
 SELECT id, agent_name, specialty, avatar_url, bio, max_users, current_user_count
@@ -842,6 +869,7 @@ The AI agent route depends on the `disputes` table. If you skipped Phase 1, the 
 | `migrations/021_seed_ai_agents.sql` | Seeds 10,000 agent profiles into `ai_agent_pool` | 3.9 KB / 69 lines | < 1 second |
 | `migrations/022_agent_chat_realtime.sql` | Adds `agent_chat_messages` to the Supabase realtime publication so chat messages stream live instead of polling | 1.2 KB / 37 lines | < 1 second |
 | `migrations/023_credit_report_analysis.sql` | Creates `credit_report_analyses` (stores parsed credit reports so the agent can reference them in chat) | 2.3 KB / 60 lines | < 1 second |
+| `migrations/024_fix_agent_rls_policies.sql` | **Required.** Adds the missing INSERT/UPDATE/DELETE RLS policies. Without it agent assignment, chat history, and report analysis all fail silently | 6.3 KB / 124 lines | < 1 second |
 
 ## Quick Reference — Environment Variables
 

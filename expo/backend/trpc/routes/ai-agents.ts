@@ -1,6 +1,6 @@
 import * as z from "zod";
 import { createTRPCRouter, publicProcedure } from "../create-context";
-import { supabase } from "@/lib/supabase";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 
 // ============================================================
 // Types
@@ -42,6 +42,93 @@ interface ChatMessage {
 
 const MAX_USERS_PER_AGENT = 25;
 const TOTAL_AGENTS = 10000;
+
+// ============================================================
+// Diagnostics
+//
+// Agent assignment can fail for several very different reasons, and
+// Postgres/PostgREST report most of them as opaque codes. Previously every
+// failure collapsed into the same "no agent found / run migrations 020 and
+// 021" message, which was frequently wrong and told the user nothing
+// actionable. These helpers classify the real cause so the UI can show it.
+// ============================================================
+
+/** Machine-readable cause of an agent-assignment failure. */
+export type AgentSetupCode =
+  | "SUPABASE_NOT_CONFIGURED"
+  | "MISSING_TABLES"
+  | "RLS_BLOCKED"
+  | "POOL_EMPTY"
+  | "ALL_AGENTS_AT_CAPACITY"
+  | "UNKNOWN";
+
+interface SupabaseErrorLike {
+  code?: string;
+  message?: string;
+  details?: string;
+  hint?: string;
+}
+
+/**
+ * Map a PostgREST/Postgres error to a cause code plus a human explanation
+ * that names the specific fix (which migration, which env var).
+ */
+function classifySupabaseError(err: SupabaseErrorLike | null | undefined): {
+  code: AgentSetupCode;
+  message: string;
+} {
+  if (!isSupabaseConfigured) {
+    return {
+      code: "SUPABASE_NOT_CONFIGURED",
+      message:
+        "Supabase is not configured. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in your Rork Secrets, then rebuild the app (env vars are read at build time, so a reload is not enough).",
+    };
+  }
+
+  const pgCode = err?.code || "";
+  const raw = `${err?.message || ""} ${err?.details || ""} ${err?.hint || ""}`;
+
+  // 42P01 = undefined_table, PGRST205 = table not found in schema cache
+  if (pgCode === "42P01" || pgCode === "PGRST205" || /does not exist/i.test(raw)) {
+    return {
+      code: "MISSING_TABLES",
+      message:
+        "The AI agent tables don't exist yet. Run migration 020_ai_agent_pool_and_assignments.sql, then 021_seed_ai_agents.sql in the Supabase SQL editor.",
+    };
+  }
+
+  // 42501 = insufficient_privilege, PGRST301 = JWT/permission failure.
+  // The classic symptom of RLS enabled with no INSERT policy.
+  if (
+    pgCode === "42501" ||
+    pgCode === "PGRST301" ||
+    /row-level security|violates row-level|permission denied/i.test(raw)
+  ) {
+    return {
+      code: "RLS_BLOCKED",
+      message:
+        "The database blocked the write because Row Level Security has no INSERT policy for this table. Run migration 024_fix_agent_rls_policies.sql in the Supabase SQL editor to add the missing policies.",
+    };
+  }
+
+  return {
+    code: "UNKNOWN",
+    message: err?.message || "Unknown database error.",
+  };
+}
+
+/** An assignment failure that carries a structured cause through tRPC. */
+class AgentSetupError extends Error {
+  readonly code: AgentSetupCode;
+
+  constructor(code: AgentSetupCode, message: string) {
+    // Prefix the code so it survives tRPC's error serialization and can be
+    // parsed client-side even when only `message` reaches the browser.
+    super(`${code}: ${message}`);
+    this.name = "AgentSetupError";
+    this.code = code;
+  }
+}
 
 // The system prompt that makes each agent a credit repair expert.
 // This is the FULL knowledge base from the Credit Repair Expert Guide,
@@ -355,11 +442,34 @@ async function assignAgentToUser(userId: string): Promise<{
     .order("current_user_count", { ascending: true }) // fill least-loaded first
     .limit(50); // grab a batch to try
 
-  if (fetchError) throw fetchError;
+  if (fetchError) {
+    const { code, message } = classifySupabaseError(fetchError);
+    throw new AgentSetupError(code, message);
+  }
 
   if (!availableAgents || availableAgents.length === 0) {
-    throw new Error(
-      "ALL_AGENTS_AT_CAPACITY: All 10,000 AI agents have reached their maximum of 25 users. Please contact support."
+    // No agent had capacity — but that could mean the pool is EMPTY (seed
+    // migration never ran) rather than genuinely full. Those need opposite
+    // fixes, so distinguish them instead of always claiming "at capacity".
+    const { count: poolSize, error: countError } = await supabase
+      .from("ai_agent_pool")
+      .select("*", { count: "exact", head: true });
+
+    if (countError) {
+      const { code, message } = classifySupabaseError(countError);
+      throw new AgentSetupError(code, message);
+    }
+
+    if (!poolSize) {
+      throw new AgentSetupError(
+        "POOL_EMPTY",
+        `The AI agent pool is empty. Run migration 021_seed_ai_agents.sql in the Supabase SQL editor to create the ${TOTAL_AGENTS.toLocaleString()} agents, then tap Try Again.`
+      );
+    }
+
+    throw new AgentSetupError(
+      "ALL_AGENTS_AT_CAPACITY",
+      `All ${poolSize} AI agents have reached their maximum of ${MAX_USERS_PER_AGENT} users. Please contact support.`
     );
   }
 
@@ -423,8 +533,15 @@ async function assignAgentToUser(userId: string): Promise<{
     // Otherwise the agent may have filled up — try the next one.
   }
 
-  throw new Error(
-    `Failed to assign agent after trying ${shuffled.length} candidates. Last error: ${lastError?.message || "unknown"}`
+  // Every candidate INSERT failed. When the cause is RLS or a missing table
+  // it fails identically for all of them, so classify the last error rather
+  // than reporting an unhelpful "tried N candidates".
+  const { code, message } = classifySupabaseError(lastError);
+  throw new AgentSetupError(
+    code,
+    code === "UNKNOWN"
+      ? `Could not create your agent assignment after trying ${shuffled.length} agents. Last database error: ${message}`
+      : message
   );
 }
 
@@ -1144,13 +1261,14 @@ export const aiAgentsRouter = createTRPCRouter({
       } catch (error: any) {
         console.error("[AI Agents] Assignment failed:", error);
 
-        if (error.message?.includes("ALL_AGENTS_AT_CAPACITY")) {
-          throw new Error(
-            "All 10,000 AI agents are currently at capacity (25 users each). This is extraordinary demand — please try again shortly or contact support."
-          );
+        // AgentSetupError already carries a precise, actionable message
+        // (and a machine-readable code prefix) — pass it through untouched.
+        if (error instanceof AgentSetupError) {
+          throw error;
         }
 
-        throw new Error(`Failed to assign agent: ${error.message}`);
+        const { code, message } = classifySupabaseError(error);
+        throw new AgentSetupError(code, message);
       }
     }),
 
@@ -1172,11 +1290,27 @@ export const aiAgentsRouter = createTRPCRouter({
         .eq("is_active", true)
         .single();
 
-      if (error || !data) {
-        return { agent: null, assignment: null };
+      // PGRST116 = "no rows returned" from .single(). That is the normal
+      // "this user has no agent yet" case, NOT a failure — the client will
+      // follow up by calling `assign`. Any OTHER error is a real problem
+      // (missing tables, RLS, bad credentials) and must be surfaced rather
+      // than silently collapsed into "no agent found".
+      if (error && error.code !== "PGRST116") {
+        const { code, message } = classifySupabaseError(error);
+        console.error("[AI Agents] getMyAgent failed:", code, message);
+        return {
+          agent: null,
+          assignment: null,
+          setupError: { code, message },
+        };
+      }
+
+      if (!data) {
+        return { agent: null, assignment: null, setupError: null };
       }
 
       return {
+        setupError: null,
         agent: data.agent as AIAgent,
         assignment: {
           id: data.id,
