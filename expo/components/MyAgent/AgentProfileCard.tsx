@@ -14,6 +14,7 @@ import {
   FileText,
   ClipboardList,
   ChevronRight,
+  FileSearch,
 } from "lucide-react-native";
 import Colors from "@/constants/colors";
 import { useSubscription } from "@/contexts/SubscriptionContext";
@@ -42,6 +43,8 @@ export interface AgentProfileCardProps {
   onOpenCreditRepair?: () => void;
   /** Open the dispute tracker modal */
   onOpenDisputeTracker?: () => void;
+  /** Open the AI Dispute Assistant (credit report analysis) modal */
+  onOpenCreditAnalysis?: () => void;
   /** Whether the current user is an ACE-1 student (controls action button visibility) */
   isACE1?: boolean;
 }
@@ -56,6 +59,7 @@ export default function AgentProfileCard({
   onOpenChat,
   onOpenCreditRepair,
   onOpenDisputeTracker,
+  onOpenCreditAnalysis,
   isACE1 = true,
 }: AgentProfileCardProps) {
   const { tier } = useSubscription();
@@ -84,6 +88,14 @@ export default function AgentProfileCard({
       icon: MessageCircle,
       color: Colors.primary,
       onPress: onOpenChat,
+    },
+    {
+      id: "credit-analysis",
+      label: "Analyze My Credit Report",
+      description: "Upload a report — your agent finds what to dispute",
+      icon: FileSearch,
+      color: Colors.success,
+      onPress: onOpenCreditAnalysis,
     },
     {
       id: "credit-repair",

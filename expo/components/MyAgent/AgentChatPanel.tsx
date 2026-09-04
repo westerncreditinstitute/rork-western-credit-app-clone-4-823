@@ -60,6 +60,11 @@ const SUGGESTIONS: { label: string; message: string }[] = [
     message: "Can you write a 609 dispute letter for me?",
   },
   {
+    label: "Analyze my credit report",
+    message:
+      "Please analyze my credit report and tell me which accounts I should dispute first.",
+  },
+  {
     label: "How do I raise my score?",
     message: "What are the best credit building tips for me right now?",
   },

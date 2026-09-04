@@ -72,6 +72,8 @@ export interface UseAgentChatOptions {
   onLetterGenerated?: (letter: TriggeredLetter) => void;
   /** Fired when a tool call changed dispute data so counters can refresh. */
   onDisputeDataChanged?: () => void;
+  /** Fired when the agent wants the credit report uploader opened. */
+  onRequestCreditAnalysis?: () => void;
 }
 
 // ============================================================
@@ -174,6 +176,7 @@ export function useAgentChat({
   enabled = true,
   onLetterGenerated,
   onDisputeDataChanged,
+  onRequestCreditAnalysis,
 }: UseAgentChatOptions) {
   const [messages, setMessages] = useState<AgentChatMessage[]>([]);
   const [connection, setConnection] = useState<ConnectionState>("connecting");
@@ -353,6 +356,16 @@ export function useAgentChat({
               });
             }
           }
+          // The agent asked to open the uploader, or tried to analyze a
+          // report and found none on file — send the user to upload one.
+          if (
+            call.name === "open_credit_report_upload" ||
+            (call.name === "analyze_credit_report" &&
+              call.result &&
+              (call.result as { found?: boolean }).found === false)
+          ) {
+            onRequestCreditAnalysis?.();
+          }
         }
       } catch (error) {
         console.log("[AgentChat] Send failed:", error);
@@ -372,6 +385,7 @@ export function useAgentChat({
       applyRows,
       onLetterGenerated,
       onDisputeDataChanged,
+      onRequestCreditAnalysis,
     ],
   );
 

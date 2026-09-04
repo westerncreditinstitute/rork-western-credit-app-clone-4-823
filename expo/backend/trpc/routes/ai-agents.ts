@@ -267,6 +267,17 @@ TOOLS AVAILABLE TO YOU
 - get_disputes: Retrieve the user's current dispute status and history from the dispute tracker. Use when the user asks about their disputes, dispute status, or what letters have been sent.
 - generate_dispute_letter: Generate a specific dispute letter (609, 611, 623, 809, intent_to_sue, or hand_written) for a negative account. Use when the user asks you to write, draft, or generate a dispute letter.
 - get_credit_tips: Retrieve personalized credit tips for the user. Use when the user asks for general credit advice or tips.
+- analyze_credit_report: Analyze the user's most recently uploaded credit report. Returns every negative account with a recommended dispute letter type and the legal reasoning behind it. Use when the user asks you to review/analyze their credit report, asks what is hurting their score, asks which accounts to dispute, or asks where to start. If it returns found=false, no report has been uploaded yet — offer to open the upload screen.
+- open_credit_report_upload: Open the credit report upload screen. Use only when the user explicitly wants to upload a new report, or agrees to upload one after analyze_credit_report returned found=false.
+
+=====================================================================
+USING THE CREDIT REPORT ANALYSIS
+=====================================================================
+- When a user asks anything about THEIR specific accounts, balances, or what to dispute, call analyze_credit_report FIRST. Never guess at their account details.
+- Only cite creditors, balances, and account numbers that appear in the tool result. If a detail is not in the data, say you don't have it rather than inventing it.
+- After presenting the analysis, recommend ONE account to start with (usually the most recent or highest-balance derogatory), and offer to generate that letter via generate_dispute_letter.
+- Dispute ONE item per letter. Do not offer to generate letters for every account at once.
+- Explain WHY a given letter type fits the negative item, using the rationale in the tool result plus your FCRA/FDCPA knowledge.
 
 =====================================================================
 BEHAVIORAL GUIDELINES
@@ -583,6 +594,195 @@ const CREDIT_TIPS = [
 ];
 
 // ============================================================
+// Helper: Credit report analysis (AI Dispute Assistant)
+// ============================================================
+
+export interface ParsedAccountRecord {
+  creditor: string;
+  accountNumber: string;
+  balance: string;
+  status: string;
+  openDate: string;
+  lastReported: string;
+  negativeType?: string;
+}
+
+// Maps a detected negative item type to the dispute letter that is
+// legally most appropriate as a first step.
+const NEGATIVE_TYPE_STRATEGY: Record<
+  string,
+  { letterType: string; rationale: string }
+> = {
+  "Collection Account": {
+    letterType: "809 Letter",
+    rationale:
+      "Collection accounts must be validated by the collector under FDCPA 809(b). Demanding validation first forces them to prove the debt is yours before it can legally remain.",
+  },
+  "Charge-off": {
+    letterType: "623 Letter",
+    rationale:
+      "Charge-offs are reported by the original furnisher, so a 623 dispute sent directly to them triggers their FCRA 623(b) duty to investigate.",
+  },
+  "Late Payments": {
+    letterType: "611 Letter",
+    rationale:
+      "A 611 method-of-verification request forces the bureau to disclose HOW it verified the late payment. Many cannot produce it, which leads to deletion.",
+  },
+  Foreclosure: {
+    letterType: "609 Letter",
+    rationale:
+      "A 609 request compels the bureau to produce the original documentation supporting the foreclosure entry.",
+  },
+  Repossession: {
+    letterType: "609 Letter",
+    rationale:
+      "Request the original contract and documentation. Repossession entries frequently lack complete records.",
+  },
+  Bankruptcy: {
+    letterType: "611 Letter",
+    rationale:
+      "Bureaus often report bankruptcies without verifying with the court, which does not furnish this data. A 611 challenges that verification.",
+  },
+  "Derogatory Status": {
+    letterType: "609 Letter",
+    rationale:
+      "Start with a 609 documentation request to establish what the bureau actually has on file.",
+  },
+};
+
+function parseBalance(balance: string): number {
+  if (!balance) return 0;
+  const cleaned = String(balance).replace(/[^0-9.]/g, "");
+  const n = parseFloat(cleaned);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Builds a structured, deterministic analysis of parsed credit report
+ * accounts. This runs server-side so the AI agent can reference real
+ * numbers rather than hallucinating them.
+ */
+function analyzeCreditAccounts(accounts: ParsedAccountRecord[]): {
+  negativeAccounts: ParsedAccountRecord[];
+  negativeCount: number;
+  totalNegativeBalance: number;
+  recommendations: {
+    creditor: string;
+    accountNumber: string;
+    negativeType: string;
+    letterType: string;
+    rationale: string;
+    balance: string;
+  }[];
+  summary: string;
+} {
+  const negativeAccounts = accounts.filter(
+    (a) => a.negativeType && a.negativeType.trim().length > 0,
+  );
+
+  const totalNegativeBalance = negativeAccounts.reduce(
+    (sum, a) => sum + parseBalance(a.balance),
+    0,
+  );
+
+  const recommendations = negativeAccounts.map((a) => {
+    const type = a.negativeType || "Derogatory Status";
+    const strategy =
+      NEGATIVE_TYPE_STRATEGY[type] ||
+      NEGATIVE_TYPE_STRATEGY["Derogatory Status"];
+    return {
+      creditor: a.creditor,
+      accountNumber: a.accountNumber,
+      negativeType: type,
+      letterType: strategy.letterType,
+      rationale: strategy.rationale,
+      balance: a.balance,
+    };
+  });
+
+  // Group counts by negative type for the summary.
+  const byType: Record<string, number> = {};
+  for (const a of negativeAccounts) {
+    const t = a.negativeType || "Derogatory Status";
+    byType[t] = (byType[t] || 0) + 1;
+  }
+  const typeBreakdown = Object.entries(byType)
+    .map(([t, c]) => `${c} ${t}${c > 1 ? "s" : ""}`)
+    .join(", ");
+
+  const summary =
+    negativeAccounts.length === 0
+      ? `Reviewed ${accounts.length} account${accounts.length === 1 ? "" : "s"} and found no negative items. That's excellent — the focus now shifts to building positive history and keeping utilization low.`
+      : `Reviewed ${accounts.length} account${accounts.length === 1 ? "" : "s"} and identified ${negativeAccounts.length} negative item${negativeAccounts.length === 1 ? "" : "s"} (${typeBreakdown}) totaling $${totalNegativeBalance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} in reported balances.`;
+
+  return {
+    negativeAccounts,
+    negativeCount: negativeAccounts.length,
+    totalNegativeBalance,
+    recommendations,
+    summary,
+  };
+}
+
+/**
+ * Fetches the user's most recent stored credit report analysis.
+ * Used by the `analyze_credit_report` tool so the agent can discuss
+ * a report the user uploaded earlier in a previous session.
+ */
+async function fetchLatestCreditAnalysis(userId: string): Promise<{
+  found: boolean;
+  bureau?: string;
+  accounts: ParsedAccountRecord[];
+  negativeCount: number;
+  totalNegativeBalance: number;
+  summary: string;
+  recommendations: any[];
+  createdAt?: string;
+}> {
+  try {
+    const { data, error } = await supabase
+      .from("credit_report_analyses")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error || !data) {
+      return {
+        found: false,
+        accounts: [],
+        negativeCount: 0,
+        totalNegativeBalance: 0,
+        summary: "",
+        recommendations: [],
+      };
+    }
+
+    return {
+      found: true,
+      bureau: data.bureau || undefined,
+      accounts: (data.accounts || []) as ParsedAccountRecord[],
+      negativeCount: data.negative_count || 0,
+      totalNegativeBalance: Number(data.total_negative_balance || 0),
+      summary: data.summary || "",
+      recommendations: data.recommendations || [],
+      createdAt: data.created_at,
+    };
+  } catch (e) {
+    console.error("[AI Agents] fetchLatestCreditAnalysis error:", e);
+    return {
+      found: false,
+      accounts: [],
+      negativeCount: 0,
+      totalNegativeBalance: 0,
+      summary: "",
+      recommendations: [],
+    };
+  }
+}
+
+// ============================================================
 // Helper: Call AI backend (OpenAI-compatible)
 // ============================================================
 
@@ -645,6 +845,24 @@ async function callAIBackend(params: {
       function: {
         name: "get_credit_tips",
         description: "Retrieve personalized credit tips for the user. Use when the user asks for credit advice, tips, or strategies.",
+        parameters: { type: "object", properties: {}, required: [] },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "analyze_credit_report",
+        description:
+          "Analyze the user's most recently uploaded credit report and return every negative account with a recommended dispute strategy. Use when the user asks you to review, analyze, or look at their credit report, asks what's hurting their score, asks which accounts they should dispute, or asks where to start. If no report has been uploaded yet, this returns found=false and you should ask them to upload one via the Analyze Report button.",
+        parameters: { type: "object", properties: {}, required: [] },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "open_credit_report_upload",
+        description:
+          "Open the credit report upload screen so the user can upload or paste their credit report for analysis. Use ONLY when the user explicitly wants to upload/add a new report, or when analyze_credit_report returned found=false and the user agrees to upload one.",
         parameters: { type: "object", properties: {}, required: [] },
       },
     },
@@ -823,6 +1041,47 @@ async function executeTool(
         displayContent: `💡 **Credit Tips for You**\n\n${tips
           .map((t, i) => `${i + 1}. ${t}`)
           .join("\n\n")}`,
+      };
+    }
+
+    case "analyze_credit_report": {
+      const analysis = await fetchLatestCreditAnalysis(userId);
+
+      if (!analysis.found) {
+        return {
+          toolName: "analyze_credit_report",
+          result: { found: false },
+          displayContent: `📄 **No Credit Report Found**\n\nI don't have a credit report on file for you yet. Tap **Analyze Report** on your agent card to upload a PDF or paste your report text — then I can walk through every negative item with you and recommend exactly which dispute letter to send for each one.`,
+        };
+      }
+
+      if (analysis.negativeCount === 0) {
+        return {
+          toolName: "analyze_credit_report",
+          result: analysis,
+          displayContent: `✅ **Credit Report Analyzed**${analysis.bureau ? ` (${analysis.bureau})` : ""}\n\n${analysis.summary}\n\nSince there are no negative items to dispute, our focus should be on building positive history: keep utilization under 10%, never miss a payment, and let your accounts age.`,
+        };
+      }
+
+      const lines = (analysis.recommendations || [])
+        .map(
+          (r: any, i: number) =>
+            `**${i + 1}. ${r.creditor}** — ${r.negativeType}${r.balance ? ` — ${r.balance}` : ""}\n   → Recommended: **${r.letterType}**\n   → Why: ${r.rationale}`,
+        )
+        .join("\n\n");
+
+      return {
+        toolName: "analyze_credit_report",
+        result: analysis,
+        displayContent: `🔍 **Credit Report Analysis**${analysis.bureau ? ` (${analysis.bureau})` : ""}\n\n${analysis.summary}\n\n**Recommended dispute strategy:**\n\n${lines}\n\nTell me which account you'd like to start with and I'll generate that letter for you right now.`,
+      };
+    }
+
+    case "open_credit_report_upload": {
+      return {
+        toolName: "open_credit_report_upload",
+        result: { action: "open_upload" },
+        displayContent: `📤 **Opening Credit Report Upload**\n\nUpload a PDF or paste your report text, and I'll analyze every account and tell you exactly what to dispute.`,
       };
     }
 
@@ -1178,6 +1437,82 @@ export const aiAgentsRouter = createTRPCRouter({
         letterType: letter.letterType,
         disputeId: savedDispute?.id,
       };
+    }),
+
+  // ----------------------------------------------------------
+  // saveCreditAnalysis: Store a parsed credit report so the agent
+  // can reference the user's real accounts during chat.
+  // ----------------------------------------------------------
+  saveCreditAnalysis: publicProcedure
+    .input(
+      z.object({
+        userId: z.string(),
+        bureau: z.string().optional(),
+        accounts: z.array(
+          z.object({
+            creditor: z.string(),
+            accountNumber: z.string(),
+            balance: z.string(),
+            status: z.string(),
+            openDate: z.string(),
+            lastReported: z.string(),
+            negativeType: z.string().optional(),
+          })
+        ),
+      })
+    )
+    .mutation(async ({ input }) => {
+      console.log(
+        "[AI Agents] Saving credit analysis:",
+        input.accounts.length,
+        "accounts"
+      );
+
+      const analysis = analyzeCreditAccounts(
+        input.accounts as ParsedAccountRecord[]
+      );
+
+      const { data, error } = await supabase
+        .from("credit_report_analyses")
+        .insert({
+          user_id: input.userId,
+          bureau: input.bureau || "Unknown",
+          accounts: input.accounts,
+          negative_count: analysis.negativeCount,
+          total_negative_balance: analysis.totalNegativeBalance,
+          summary: analysis.summary,
+          recommendations: analysis.recommendations,
+        })
+        .select("*")
+        .single();
+
+      if (error) {
+        console.error("[AI Agents] saveCreditAnalysis error:", error);
+        // Still return the computed analysis so the UI can display it
+        // even if persistence failed (e.g. migration 022 not run yet).
+        return {
+          success: false,
+          error: error.message,
+          analysisId: null,
+          ...analysis,
+        };
+      }
+
+      return {
+        success: true,
+        error: null,
+        analysisId: data?.id ?? null,
+        ...analysis,
+      };
+    }),
+
+  // ----------------------------------------------------------
+  // getCreditAnalysis: Fetch the user's latest stored analysis
+  // ----------------------------------------------------------
+  getCreditAnalysis: publicProcedure
+    .input(z.object({ userId: z.string() }))
+    .query(async ({ input }) => {
+      return await fetchLatestCreditAnalysis(input.userId);
     }),
 
   // ----------------------------------------------------------

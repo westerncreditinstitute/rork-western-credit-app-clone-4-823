@@ -169,6 +169,29 @@ You should see:
 - `active_agents`: **10000**
 - `first_agent` and `last_agent`: agent names (like "Alex Hart #1" and something ending with "#10000")
 
+### Step 3.4 — Run Migration 022 (Live Chat Delivery)
+
+This enables **real-time** chat on the My Agent page. Without it the chat still works, but messages arrive by polling instead of streaming.
+
+1. Open `migrations/022_agent_chat_realtime.sql`.
+2. Paste it into a new SQL Editor query and click **Run**.
+
+### Step 3.5 — Run Migration 023 (AI Dispute Assistant)
+
+This migration powers the **AI Dispute Assistant** on the My Agent page — it stores the accounts parsed from a user's uploaded credit report so their agent can reference real balances and creditors during chat instead of guessing.
+
+1. Open `migrations/023_credit_report_analysis.sql`.
+2. Paste the entire file into a new SQL Editor query and click **Run**.
+3. Verify with:
+
+```sql
+SELECT COUNT(*) FROM public.credit_report_analyses;
+```
+
+It should return `0` on a fresh install — that's correct. Rows appear once users upload reports.
+
+> **If you skip 023:** credit report analysis still *works* in the moment, but nothing is saved. The agent won't remember the report in a later chat session, and the UI will show a warning saying so.
+
 Let's also verify the distribution of specialties:
 
 ```sql
@@ -180,7 +203,7 @@ ORDER BY count DESC;
 
 You should see 10 specialty rows, each with approximately 1,000 agents.
 
-### Step 3.4 — Preview a Few Agents (Optional but Recommended)
+### Step 3.6 — Preview a Few Agents (Optional but Recommended)
 
 ```sql
 SELECT id, agent_name, specialty, avatar_url, bio, max_users, current_user_count
@@ -817,6 +840,8 @@ The AI agent route depends on the `disputes` table. If you skipped Phase 1, the 
 | `supabase-schema.sql` | Full base schema (all project tables). **Too large to paste into the web SQL Editor** — use `psql` or the Supabase CLI. | 130 KB / 2,767 lines | < 5 seconds |
 | `migrations/020_ai_agent_pool_and_assignments.sql` | Creates `ai_agent_pool`, `user_agent_assignments`, `agent_chat_messages` tables + indexes + RLS + trigger | 6.7 KB / 145 lines | < 5 seconds |
 | `migrations/021_seed_ai_agents.sql` | Seeds 10,000 agent profiles into `ai_agent_pool` | 3.9 KB / 69 lines | < 1 second |
+| `migrations/022_agent_chat_realtime.sql` | Adds `agent_chat_messages` to the Supabase realtime publication so chat messages stream live instead of polling | 1.2 KB / 37 lines | < 1 second |
+| `migrations/023_credit_report_analysis.sql` | Creates `credit_report_analyses` (stores parsed credit reports so the agent can reference them in chat) | 2.3 KB / 60 lines | < 1 second |
 
 ## Quick Reference — Environment Variables
 

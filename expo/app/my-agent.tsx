@@ -40,6 +40,7 @@ import AgentProfileCard, {
 import AgentChatPanel from "@/components/MyAgent/AgentChatPanel";
 import CreditRepairModal from "@/components/MyAgent/CreditRepairModal";
 import DisputeTrackerModal from "@/components/MyAgent/DisputeTrackerModal";
+import CreditAnalysisModal from "@/components/MyAgent/CreditAnalysisModal";
 
 // ============================================================
 // Constants
@@ -76,6 +77,7 @@ export default function MyAgentScreen({
   const [view, setView] = useState<AgentView>("chat");
   const [creditRepairVisible, setCreditRepairVisible] = useState(false);
   const [disputeTrackerVisible, setDisputeTrackerVisible] = useState(false);
+  const [creditAnalysisVisible, setCreditAnalysisVisible] = useState(false);
   const [creditRepairPrefill, setCreditRepairPrefill] = useState<{
     letterType?: string;
     creditorName?: string;
@@ -108,7 +110,12 @@ export default function MyAgentScreen({
   });
 
   // ── Auto-assign on mount if no agent and user is ACE-1 ────────
-  const isACE1 = tier === "ace1_student" || tier === "cso_affiliate";
+  // Dev/testing bypass: set EXPO_PUBLIC_UNLOCK_ACE1=true in your Rork Secrets
+  // (or .env) to preview ACE-1 gated features without a paid subscription.
+  // Leave it unset/false in production so real gating applies.
+  const unlockForTesting = process.env.EXPO_PUBLIC_UNLOCK_ACE1 === "true";
+  const isACE1 =
+    unlockForTesting || tier === "ace1_student" || tier === "cso_affiliate";
 
   useEffect(() => {
     if (
@@ -160,6 +167,35 @@ export default function MyAgentScreen({
     setCreditRepairVisible(true);
   }, []);
 
+  /** Jump from an analysis recommendation straight into letter generation. */
+  const handleAnalysisGenerateLetter = useCallback(
+    (data: {
+      letterType: string;
+      creditorName: string;
+      accountNumber: string;
+    }) => {
+      setCreditAnalysisVisible(false);
+      setCreditRepairPrefill(data);
+      setTimeout(() => setCreditRepairVisible(true), 300);
+    },
+    [],
+  );
+
+  /**
+   * Close the analysis and switch to the chat view so the user can ask
+   * follow-ups. The agent pulls the stored analysis via its
+   * analyze_credit_report tool.
+   */
+  const handleDiscussAnalysisInChat = useCallback(() => {
+    setCreditAnalysisVisible(false);
+    setTimeout(() => setView("chat"), 300);
+  }, []);
+
+  /** The agent asked (via tool call) to open the credit report uploader. */
+  const handleTriggerCreditAnalysis = useCallback(() => {
+    setCreditAnalysisVisible(true);
+  }, []);
+
   // ── Live chat ─────────────────────────────────────────────────
   const chat = useAgentChat({
     userId,
@@ -167,6 +203,7 @@ export default function MyAgentScreen({
     enabled: isACE1 && !!agent,
     onLetterGenerated: handleLetterFromAgent,
     onDisputeDataChanged: handleDisputeDataChanged,
+    onRequestCreditAnalysis: handleTriggerCreditAnalysis,
   });
 
   const handleRefresh = useCallback(async () => {
@@ -229,7 +266,7 @@ export default function MyAgentScreen({
             <ActivityIndicator size="large" color={Colors.primary} />
             <Text style={styles.loadingTitle}>Assigning Your AI Agent...</Text>
             <Text style={styles.loadingDesc}>
-              We're matching you with one of 10,000 specialized AI Credit Repair
+              We&apos;re matching you with one of 10,000 specialized AI Credit Repair
               Agents. This only takes a moment.
             </Text>
           </View>
@@ -288,6 +325,60 @@ export default function MyAgentScreen({
               onPress={() => assignAgentMutation.mutate({ userId })}
               accessibilityRole="button"
               accessibilityLabel="Retry agent assignment"
+            >
+              <Text style={styles.retryButtonText}>Try Again</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </>
+    );
+  }
+
+  // ============================================================
+  // Render — No agent yet (query resolved empty, no error)
+  // Happens when the agent pool is empty (migrations 020/021 not run).
+  // Without this branch the page renders with every agent-gated
+  // section hidden — including the chat — which looks broken.
+  // ============================================================
+
+  if (!agent) {
+    return (
+      <>
+        {!embedded && <Stack.Screen options={{ headerShown: false }} />}
+        <View
+          style={[styles.container, { paddingTop: embedded ? 0 : insets.top }]}
+        >
+          <View style={styles.header}>
+            {embedded ? (
+              <View style={{ width: 40 }} />
+            ) : (
+              <TouchableOpacity
+                style={styles.backButton}
+                onPress={() => router.back()}
+                accessibilityRole="button"
+                accessibilityLabel="Go back"
+              >
+                <ArrowLeft color={Colors.text} size={24} />
+              </TouchableOpacity>
+            )}
+            <Text style={styles.headerTitle}>My Agent</Text>
+            <View style={{ width: 40 }} />
+          </View>
+          <View style={styles.errorContainer}>
+            <View style={styles.errorIconWrap}>
+              <Bot size={48} color={Colors.warning} />
+            </View>
+            <Text style={styles.errorTitle}>No Agent Assigned Yet</Text>
+            <Text style={styles.errorDesc}>
+              We couldn&apos;t find an agent for your account. If this is a new
+              install, the agent pool may not be seeded yet — run migrations
+              020 and 021 in Supabase, then tap Try Again.
+            </Text>
+            <TouchableOpacity
+              style={styles.retryButton}
+              onPress={() => assignAgentMutation.mutate({ userId })}
+              accessibilityRole="button"
+              accessibilityLabel="Assign my agent"
             >
               <Text style={styles.retryButtonText}>Try Again</Text>
             </TouchableOpacity>
@@ -447,6 +538,7 @@ export default function MyAgentScreen({
                   setCreditRepairVisible(true);
                 }}
                 onOpenDisputeTracker={() => setDisputeTrackerVisible(true)}
+                onOpenCreditAnalysis={() => setCreditAnalysisVisible(true)}
               />
             ) : null}
 
@@ -580,6 +672,13 @@ export default function MyAgentScreen({
               visible={disputeTrackerVisible}
               onClose={() => setDisputeTrackerVisible(false)}
               onDataChanged={handleDisputeDataChanged}
+            />
+            <CreditAnalysisModal
+              visible={creditAnalysisVisible}
+              onClose={() => setCreditAnalysisVisible(false)}
+              agentName={agent.agent_name}
+              onGenerateLetter={handleAnalysisGenerateLetter}
+              onDiscussInChat={handleDiscussAnalysisInChat}
             />
           </>
         ) : null}
