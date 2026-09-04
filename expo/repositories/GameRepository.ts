@@ -46,6 +46,8 @@ export class GameRepository {
   private lastSavedState: string = '';
   private pendingSave: GameState | null = null;
   private retryTimeout: ReturnType<typeof setTimeout> | null = null;
+  private inFlightSave: Promise<boolean> | null = null;
+  private queuedState: GameState | null = null;
   private isMounted: boolean = true;
   private optimisticUpdates: Map<string, OptimisticUpdate> = new Map();
   private onStateChange?: (state: GameState) => void;
@@ -130,6 +132,15 @@ export class GameRepository {
     }
   }
 
+  /**
+   * Persists state to the server, collapsing overlapping callers into a single
+   * request.
+   *
+   * The debounced save, the 60s autosave, the background-transition save and
+   * manual flushes can all fire within the same second. Without this guard each
+   * one started its own retry ladder, so a single unreachable server saw a dozen
+   * concurrent save chains instead of one request.
+   */
   async saveRemoteState(
     state: GameState,
     userId: string,
@@ -142,8 +153,44 @@ export class GameRepository {
       return true;
     }
 
-    const maxRetries = 3;
-    const baseDelay = 2000;
+    if (this.inFlightSave && retryCount === 0) {
+      // Only the newest state matters; it is flushed once the current save settles.
+      this.queuedState = state;
+      console.log('[GameRepository] Save already in flight, coalescing newer state');
+      return this.inFlightSave;
+    }
+
+    const attempt = this.performRemoteSave(state, stateString, userId, saveMutation, retryCount);
+    this.inFlightSave = attempt;
+
+    try {
+      return await attempt;
+    } finally {
+      this.inFlightSave = null;
+
+      const queued = this.queuedState;
+      this.queuedState = null;
+
+      if (queued && this.isMounted && JSON.stringify(queued) !== this.lastSavedState) {
+        void this.saveRemoteState(queued, userId, saveMutation).catch((error: unknown) => {
+          console.log('[GameRepository] Coalesced flush failed:', error);
+        });
+      }
+    }
+  }
+
+  private async performRemoteSave(
+    state: GameState,
+    stateString: string,
+    userId: string,
+    saveMutation: (params: { userId: string; gameState: GameState }) => Promise<unknown>,
+    retryCount: number
+  ): Promise<boolean> {
+    // The tRPC client already retries transport failures five times with its own
+    // backoff. Stacking three more retries here multiplied into ~20 requests per
+    // save, which is what buried the server during an outage.
+    const maxRetries = 1;
+    const baseDelay = 5000;
     const retryDelay = Math.min(baseDelay * Math.pow(2, retryCount), 30000);
 
     if (this.retryTimeout) {

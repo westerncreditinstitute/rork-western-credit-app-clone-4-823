@@ -53,6 +53,80 @@ const getBaseUrl = () => {
 const RETRYABLE_STATUSES = new Set<number>([408, 425, 429, 500, 502, 503, 504]);
 
 /**
+ * Circuit breaker for transport failures.
+ *
+ * A server that is down must not be met with a full retry ladder per caller.
+ * The app can have a dozen callers in flight at once (debounced save, autosave,
+ * queries, chat polls); at five attempts each that is ~60 requests per second
+ * against a host that is already refusing traffic, which is exactly how an
+ * outage escalates into rate limiting (429) and stops the host recovering.
+ *
+ * Once failures are confirmed the breaker opens and every request fails fast
+ * with the offline message. After the cooldown, traffic resumes normally and
+ * either succeeds (breaker resets) or re-opens after a couple of failures.
+ */
+const BREAKER_FAILURE_THRESHOLD = 2;
+const BREAKER_BASE_COOLDOWN_MS = 5000;
+const BREAKER_MAX_COOLDOWN_MS = 30000;
+
+let consecutiveTransportFailures = 0;
+let circuitOpenUntil = 0;
+
+function isCircuitOpen(): boolean {
+  return Date.now() < circuitOpenUntil;
+}
+
+/** Any real HTTP answer proves the server is back: reset the breaker. */
+function recordTransportSuccess(): void {
+  if (consecutiveTransportFailures > 0 || circuitOpenUntil > 0) {
+    console.log("[tRPC] Server reachable again, resetting circuit breaker");
+  }
+  consecutiveTransportFailures = 0;
+  circuitOpenUntil = 0;
+}
+
+function recordTransportFailure(): void {
+  consecutiveTransportFailures += 1;
+  if (consecutiveTransportFailures < BREAKER_FAILURE_THRESHOLD) return;
+
+  const cooldown = Math.min(
+    BREAKER_BASE_COOLDOWN_MS *
+      Math.pow(2, consecutiveTransportFailures - BREAKER_FAILURE_THRESHOLD),
+    BREAKER_MAX_COOLDOWN_MS,
+  );
+  const openedNow = !isCircuitOpen();
+  circuitOpenUntil = Date.now() + cooldown;
+
+  if (openedNow) {
+    console.log(
+      `[tRPC] Server unreachable, pausing requests for ${Math.round(cooldown / 1000)}s ` +
+        "instead of retrying every caller",
+    );
+  }
+}
+
+/**
+ * Delay requested by the server itself via Retry-After, in ms.
+ * Honouring this is the difference between backing off a rate-limited server
+ * and hammering it with the client's own (much shorter) backoff.
+ */
+function retryAfterDelay(response: Response): number | null {
+  const header = response.headers?.get?.("retry-after");
+  if (!header) return null;
+
+  const seconds = Number(header);
+  if (Number.isFinite(seconds)) {
+    return Math.min(Math.max(seconds, 0) * 1000, BREAKER_MAX_COOLDOWN_MS);
+  }
+
+  const retryAt = Date.parse(header);
+  if (Number.isFinite(retryAt)) {
+    return Math.min(Math.max(retryAt - Date.now(), 0), BREAKER_MAX_COOLDOWN_MS);
+  }
+  return null;
+}
+
+/**
  * True when the failure looks like a transport problem (server unreachable,
  * DNS failure, CORS/offline) rather than an application error.
  */
@@ -112,6 +186,13 @@ const fetchWithRetry = async (
     throw new DOMException("Request was cancelled", "AbortError");
   }
 
+  // Known-down server: fail immediately rather than burning five attempts and
+  // up to 20s of timeouts per caller. Callers already handle this error, and
+  // local-first writes keep their data safe until the server returns.
+  if (isCircuitOpen()) {
+    throw new Error(OFFLINE_MESSAGE);
+  }
+
   let lastError: unknown = null;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -142,7 +223,9 @@ const fetchWithRetry = async (
       // A cold-starting or overloaded server answers with 5xx before tRPC ever
       // sees the body. Retry those instead of surfacing a parse failure.
       if (RETRYABLE_STATUSES.has(response.status) && attempt < maxAttempts - 1) {
-        const delay = backoffDelay(attempt, baseDelay);
+        // A rate-limited server states how long to wait; the client's own
+        // backoff is far too short and would deepen the rate limit.
+        const delay = retryAfterDelay(response) ?? backoffDelay(attempt, baseDelay);
         console.log(
           `[tRPC] Server returned ${response.status} for ${target}, ` +
             `retrying in ${Math.round(delay)}ms (attempt ${attempt + 1}/${maxAttempts})`,
@@ -150,6 +233,14 @@ const fetchWithRetry = async (
         lastError = new Error(SERVER_WAKING_MESSAGE);
         await sleep(delay);
         continue;
+      }
+
+      if (RETRYABLE_STATUSES.has(response.status)) {
+        // Retries exhausted against an unhealthy server - trip the breaker so
+        // the next wave of callers backs off instead of repeating this ladder.
+        recordTransportFailure();
+      } else {
+        recordTransportSuccess();
       }
 
       return response;
@@ -178,6 +269,8 @@ const fetchWithRetry = async (
       await sleep(delay);
     }
   }
+
+  recordTransportFailure();
 
   if (lastError instanceof Error && lastError.message === SERVER_WAKING_MESSAGE) {
     throw lastError;
@@ -221,6 +314,10 @@ async function probeHealthOnce(baseUrl: string): Promise<{ ok: boolean; message?
     if (RETRYABLE_STATUSES.has(response.status)) {
       return { ok: false, message: SERVER_WAKING_MESSAGE };
     }
+
+    // The probe bypasses fetchWithRetry, so it is the one caller that can
+    // clear a breaker opened while the server was down.
+    recordTransportSuccess();
     return { ok: true };
   } catch (error) {
     console.log("[tRPC] Health check failed:", error);
