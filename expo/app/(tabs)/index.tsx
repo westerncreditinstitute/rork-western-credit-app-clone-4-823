@@ -18,7 +18,6 @@ import {
   Bell,
   BookOpen,
   Users,
-  MessageCircle,
   ChevronRight,
   TrendingUp,
   Award,
@@ -175,13 +174,13 @@ export default function HomeScreen() {
         { id: "1", title: "Upgrade", icon: Crown, route: "/subscription-plans", locked: false, color: colors.warning },
         { id: "2", title: "Credit Tips", icon: Lightbulb, route: "/", locked: false, color: colors.info },
         { id: "3", title: "Courses", icon: BookOpen, route: "/courses", locked: true, color: colors.primary },
-        { id: "4", title: "Support", icon: MessageCircle, route: "/profile", locked: false, color: colors.secondary },
+        { id: "4", title: "My Agent", icon: Bot, route: "/my-agent", locked: true, color: colors.secondary },
       ]
     : [
         { id: "1", title: "My Courses", icon: BookOpen, route: "/courses", locked: false, color: colors.primary },
-        { id: "2", title: "Wallet", icon: Wallet, route: "/wallet", locked: false, color: colors.secondary },
-        { id: "3", title: "Refer & Earn", icon: Users, route: "/earnings", locked: false, color: colors.info },
-        { id: "4", title: "Support", icon: MessageCircle, route: "/profile", locked: false, color: colors.accent },
+        { id: "2", title: "My Agent", icon: Bot, route: "/my-agent", locked: false, color: colors.accent },
+        { id: "3", title: "Wallet", icon: Wallet, route: "/wallet", locked: false, color: colors.secondary },
+        { id: "4", title: "Refer & Earn", icon: Users, route: "/earnings", locked: false, color: colors.info },
       ];
 
   const getCategoryColor = (category: string) => {

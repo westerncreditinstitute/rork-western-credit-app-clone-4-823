@@ -131,6 +131,15 @@ function RootLayoutNav() {
           }} 
         />
         <Stack.Screen 
+          name="my-agent" 
+          options={{ 
+            headerShown: false,
+            title: "My Agent",
+            animation: 'slide_from_right',
+          }} 
+        />
+
+        <Stack.Screen 
           name="lawsuit-assistant" 
           options={{ 
             headerShown: true,

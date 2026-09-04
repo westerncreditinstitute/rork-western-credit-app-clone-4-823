@@ -24,6 +24,7 @@ import { activityTrackingRouter } from "./routes/activity-tracking";
 import { adminRouter } from "./routes/admin";
 import { leaderboardsRouter } from "./routes/leaderboards";
 import { challengesRouter } from "./routes/challenges";
+import { aiAgentsRouter } from "./routes/ai-agents";
 
 export const appRouter = createTRPCRouter({
   example: exampleRouter,
@@ -51,6 +52,7 @@ export const appRouter = createTRPCRouter({
   admin: adminRouter,
   leaderboards: leaderboardsRouter,
   challenges: challengesRouter,
+  aiAgents: aiAgentsRouter,
 });
 
 export type AppRouter = typeof appRouter;

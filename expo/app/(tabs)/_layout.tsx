@@ -43,11 +43,23 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen name="courses" options={{ title: "Courses" }} />
-      <Tabs.Screen name="wallet" options={{ title: "Wallet" }} />
-      <Tabs.Screen name="earnings" options={{ title: "Earnings" }} />
-      <Tabs.Screen name="hire-pro" options={{ title: "Hire Pro" }} />
+
+      {/* "My Agent" — the AI Credit Repair Agent, a primary destination. */}
+      <Tabs.Screen
+        name="my-agent"
+        options={{ title: "My Agent", headerShown: false }}
+      />
+
+      {/* Wallet, Earnings, Hire Pro and Admin remain routable but are reached
+          through the "More" tab so the bar stays readable on small screens. */}
+      <Tabs.Screen name="wallet" options={{ href: null }} />
+      <Tabs.Screen name="earnings" options={{ href: null }} />
+      <Tabs.Screen name="hire-pro" options={{ href: null }} />
       <Tabs.Screen name="profile" options={{ title: "Profile" }} />
-      <Tabs.Screen name="admin" options={{ title: "Admin" }} />
+      <Tabs.Screen name="admin" options={{ href: null }} />
+
+      {/* "More" — hosts Wallet, Earnings, Hire Pro, Admin and credit tools. */}
+      <Tabs.Screen name="more" options={{ title: "More" }} />
     </Tabs>
   );
 }

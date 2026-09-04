@@ -120,6 +120,7 @@ export const [SubscriptionProvider, useSubscription] = createContextHook(() => {
 
   const enrollMutation = trpc.progress.enroll.useMutation();
   const createSubscriptionMutation = trpc.subscriptions.create.useMutation();
+  const assignAgentMutation = trpc.aiAgents.assign.useMutation();
 
   // Unified data loading - handles user changes and initial load
   useEffect(() => {
@@ -379,6 +380,24 @@ export const [SubscriptionProvider, useSubscription] = createContextHook(() => {
               },
             }
           );
+
+          // Auto-assign an AI Credit Repair Agent for ACE-1 students.
+          // This is non-blocking — the My Agent page will also auto-assign
+          // on mount if the user visits before this completes.
+          if (isACE1Course) {
+            console.log('[Subscription] ACE-1 enrollment — assigning AI agent');
+            assignAgentMutation.mutate(
+              { userId },
+              {
+                onSuccess: (data) => {
+                  console.log('[Subscription] AI agent assigned:', data.agent?.agent_name);
+                },
+                onError: (err) => {
+                  console.error('[Subscription] AI agent assignment failed:', err.message);
+                },
+              }
+            );
+          }
         }
       }
 
@@ -387,7 +406,7 @@ export const [SubscriptionProvider, useSubscription] = createContextHook(() => {
       console.log('[Subscription] Error enrolling in course:', error);
       return false;
     }
-  }, [enrolledCourses, courseProgress, tier, userId, enrollMutation, createSubscriptionMutation, utils]);
+  }, [enrolledCourses, courseProgress, tier, userId, enrollMutation, createSubscriptionMutation, assignAgentMutation, utils]);
 
   const syncInitialEnrollments = useCallback(async (mockEnrolledIds: string[]) => {
     // Only sync mock data if user is not authenticated (demo mode)

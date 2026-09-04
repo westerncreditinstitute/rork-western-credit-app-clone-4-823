@@ -3,9 +3,11 @@ import { BlurView } from "expo-blur";
 import * as Haptics from "expo-haptics";
 import {
   BadgeCheck,
+  Bot,
   CircleUser,
   GraduationCap,
   Home,
+  MoreHorizontal,
   ShieldCheck,
   TrendingUp,
   WalletCards,
@@ -30,11 +32,13 @@ interface TabConfig {
 const TAB_CONFIG: Record<string, TabConfig> = {
   index: { label: "Home", color: "#10B981", icon: Home },
   courses: { label: "Courses", color: "#3B82F6", icon: GraduationCap },
+  "my-agent": { label: "My Agent", color: "#A78BFA", icon: Bot },
   wallet: { label: "Wallet", color: "#06B6D4", icon: WalletCards },
   earnings: { label: "Earnings", color: "#F59E0B", icon: TrendingUp },
   "hire-pro": { label: "Hire Pro", color: "#8B5CF6", icon: BadgeCheck },
   profile: { label: "Profile", color: "#F43F5E", icon: CircleUser },
   admin: { label: "Admin", color: "#14B8A6", icon: ShieldCheck },
+  more: { label: "More", color: "#87CEEB", icon: MoreHorizontal },
 };
 
 const FALLBACK: TabConfig = { label: "Tab", color: "#3B82F6", icon: Home };
