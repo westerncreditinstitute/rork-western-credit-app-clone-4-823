@@ -27,6 +27,8 @@ struct RootTabView: View {
                     navigationStack { HomeView(selectedTab: $selection, showGame: $showGame) }
                 case .courses:
                     navigationStack { CoursesView() }
+                case .myAgent:
+                    navigationStack { MyAgentView(userId: store.user.id) }
                 case .wallet:
                     navigationStack { WalletView() }
                 case .earnings:

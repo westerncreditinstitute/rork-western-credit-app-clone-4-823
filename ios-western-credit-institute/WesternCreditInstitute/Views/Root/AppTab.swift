@@ -14,6 +14,7 @@ import SwiftUI
 nonisolated enum AppTab: String, CaseIterable, Identifiable, Sendable {
     case home
     case courses
+    case myAgent
     case profile
     case more
     case wallet
@@ -23,8 +24,8 @@ nonisolated enum AppTab: String, CaseIterable, Identifiable, Sendable {
 
     var id: String { rawValue }
 
-    /// The four destinations rendered in the floating tab bar.
-    static let barCases: [AppTab] = [.home, .courses, .profile, .more]
+    /// The five destinations rendered in the floating tab bar.
+    static let barCases: [AppTab] = [.home, .courses, .myAgent, .profile, .more]
 
     /// Destinations that live behind the "More" tab rather than in the bar.
     var isHostedInMore: Bool {
@@ -38,6 +39,7 @@ nonisolated enum AppTab: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .home: return "Home"
         case .courses: return "Courses"
+        case .myAgent: return "My Agent"
         case .wallet: return "Wallet"
         case .earnings: return "Earnings"
         case .hirePro: return "Hire Pro"
@@ -52,6 +54,7 @@ nonisolated enum AppTab: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .home: return "house.fill"
         case .courses: return "graduationcap.fill"
+        case .myAgent: return "bubbles.and.sparkles.fill"
         case .wallet: return "wallet.bifold.fill"
         case .earnings: return "chart.line.uptrend.xyaxis.circle.fill"
         case .hirePro: return "checkmark.seal.fill"
@@ -66,6 +69,7 @@ nonisolated enum AppTab: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .home: return "house"
         case .courses: return "graduationcap"
+        case .myAgent: return "bubbles.and.sparkles"
         case .wallet: return "wallet.bifold"
         case .earnings: return "chart.line.uptrend.xyaxis.circle"
         case .hirePro: return "checkmark.seal"
@@ -84,6 +88,7 @@ nonisolated enum AppTab: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .home: return Color(hex: "#10B981")
         case .courses: return Color(hex: "#3B82F6")
+        case .myAgent: return Color(hex: "#A78BFA")
         case .wallet: return Color(hex: "#06B6D4")
         case .earnings: return Color(hex: "#F59E0B")
         case .hirePro: return Color(hex: "#8B5CF6")
