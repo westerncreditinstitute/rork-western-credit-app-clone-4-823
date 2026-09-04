@@ -3,10 +3,12 @@ import React from "react";
 import { Image, StyleSheet } from "react-native";
 
 import FloatingTabBar from "@/components/navigation/FloatingTabBar";
+import { useNotifications } from "@/contexts/NotificationContext";
 import { useTheme } from "@/contexts/ThemeContext";
 
 export default function TabLayout() {
   const { colors, isDark } = useTheme();
+  const { unreadCount } = useNotifications();
 
   return (
     <Tabs
@@ -33,7 +35,13 @@ export default function TabLayout() {
         },
       }}
     >
-      <Tabs.Screen name="index" options={{ title: "Home" }} />
+      <Tabs.Screen
+        name="index"
+        options={{
+          title: "Home",
+          tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
+        }}
+      />
       <Tabs.Screen name="courses" options={{ title: "Courses" }} />
       <Tabs.Screen name="wallet" options={{ title: "Wallet" }} />
       <Tabs.Screen name="earnings" options={{ title: "Earnings" }} />
