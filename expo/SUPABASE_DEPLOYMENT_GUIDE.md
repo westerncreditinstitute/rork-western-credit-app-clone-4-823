@@ -337,18 +337,102 @@ Redeploy (or restart your local dev server) after saving the secret.
 missing, so the app keeps working during the transition. That safety net also means
 a typo will fail quietly — so check explicitly.
 
-Look at your server logs on startup. If you see this warning, the key did **not**
-load:
+Open `/api/system-status` on your API host (the same value as
+`EXPO_PUBLIC_RORK_API_BASE_URL`), in a browser or with curl:
 
+```bash
+curl -s https://YOUR-API-HOST/api/system-status | jq .supabase
 ```
-[Supabase Admin] SUPABASE_SERVICE_ROLE_KEY is not set — falling back to the anon client.
+
+The one value you're looking for is `"keyType": "configured"`:
+
+```json
+{
+  "urlConfigured": true,
+  "serviceRoleConfigured": true,
+  "activeClient": "service_role",
+  "keyType": "configured",
+  "message": "The backend is using the service-role key and Supabase accepted it — writes bypass RLS. It is now safe to run migration 025.",
+  "probe": { "client": "service_role", "authenticated": true, "detail": "read ok (ai_agent_pool)" }
+}
 ```
 
-Common causes: the secret was saved as client-visible instead of server-side, the
-name is misspelled, or the server wasn't restarted.
+That single value proves two things at once: the key reached the server, **and**
+Supabase accepted it on a live query. Anything else means stop — the response's
+`message` and `action` fields spell out the cause and the fix:
 
-When no warning appears, the backend is on the service-role key. Confirm the feature
-still works end to end: open **My Agent**, load an agent, and send a chat message.
+| `keyType` | Meaning | Fix |
+| --- | --- | --- |
+| `configured` | Key loaded, Supabase accepted it | None — continue to Step 4.7 |
+| `not_set` | Env var empty; running on the anon fallback | Re-do Step 4.4 as a **server-side** secret, redeploy |
+| `wrong_key_anon` | The **anon** key was pasted in | Copy the `service_role` key instead |
+| `wrong_key_publishable` | A `sb_publishable_…` client key was pasted | Copy the `service_role` secret instead |
+| `invalid_key` | Truncated paste, or a user auth token | Re-copy the entire key |
+| `project_mismatch` | Key belongs to another Supabase project | Match the key to `SUPABASE_URL` |
+| `key_rejected` | Looks right, but Supabase refused it | JWT secret was rotated — copy the current key |
+| `configured_unverified` | Looks right; Supabase unreachable | Retry; check the project isn't paused |
+
+> **Why not just read the startup logs?** `lib/supabase-admin.ts` emits
+> `[Supabase Admin] SUPABASE_SERVICE_ROLE_KEY is not set — falling back to the anon
+> client.` at startup, but **the Rork-hosted backend runs as serverless functions
+> with no user-facing log viewer**, so in production that warning is unreadable.
+> Worse, the log can't catch the most dangerous mistake: paste the *anon* key into
+> `SUPABASE_SERVICE_ROLE_KEY` and the warning vanishes — the variable is "set" —
+> while RLS still blocks every write. The endpoint decodes the key's role claim and
+> reports `wrong_key_anon` instead. Where logs *do* live is covered in Step 4.6b.
+
+The endpoint returns only booleans and status codes — never the key, the project
+URL, or the project ref.
+
+Then confirm the feature works end to end: open **My Agent**, load an agent, and
+send a chat message.
+
+### Step 4.6b — Where the logs actually are
+
+Not needed for the verification above, but worth knowing when you're debugging.
+
+**Local development.** The terminal running `bun start` (`bunx rork start`) shows
+all backend `console.log`/`console.warn` output, including the `[Supabase Admin]`
+warning.
+
+**Rork-hosted backend.** Rork hosts the backend as serverless functions and does
+not currently document a user-facing log viewer, so startup output isn't readable
+in production — which is precisely why Step 4.6 uses an endpoint. Paid plans
+include chat support if you need something inspected server-side.
+
+**Supabase (the database side).** This is where you confirm *which role* your
+writes actually arrive as. In the Supabase dashboard go to **Logs → Log Explorer**
+and run:
+
+```sql
+select
+  timestamp,
+  log_attributes['parsed.user_name'] as db_role,
+  log_attributes['parsed.sql_state_code'] as sql_state,
+  event_message
+from logs
+where source = 'postgres_logs'
+  and log_attributes['parsed.sql_state_code'] = '42501'
+order by timestamp desc
+limit 100;
+```
+
+SQLSTATE `42501` is "permission denied" — an RLS refusal, the exact error behind
+the original outage. Once the service-role key is live, backend writes should stop
+generating `42501` rows and `db_role` should read `service_role` instead of `anon`.
+Other codes worth knowing: `42P01` (table missing — a migration didn't run) and
+`23505` (duplicate key).
+
+Log Explorer runs ClickHouse SQL, so a few rules differ from Postgres: use
+`count()` not `count(*)`, avoid `select *`, and cap results at 1000 rows. To see
+what other fields are available:
+
+```sql
+select distinct arrayJoin(mapKeys(log_attributes)) as key
+from logs
+where source = 'postgres_logs'
+limit 100;
+```
 
 ### Step 4.7 — Lock the tables down (migration 025)
 
