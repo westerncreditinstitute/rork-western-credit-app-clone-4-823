@@ -3,6 +3,7 @@ import React from "react";
 import { Image, StyleSheet } from "react-native";
 
 import FloatingTabBar from "@/components/navigation/FloatingTabBar";
+import SyncStatusIndicator from "@/components/SyncStatusIndicator";
 import { useNotifications } from "@/contexts/NotificationContext";
 import { useTheme } from "@/contexts/ThemeContext";
 
@@ -26,6 +27,9 @@ export default function TabLayout() {
             resizeMode="contain"
           />
         ),
+        // Sync state belongs in the chrome, not in a screen: it is true for the
+        // whole app, so it rides the shared header across every tab.
+        headerRight: () => <SyncStatusIndicator />,
         headerStyle: {
           backgroundColor: colors.surface,
         },

@@ -72,6 +72,46 @@ const BREAKER_MAX_COOLDOWN_MS = 30000;
 let consecutiveTransportFailures = 0;
 let circuitOpenUntil = 0;
 
+/** Whether the server is currently answering requests. */
+export type ConnectionState = "online" | "offline";
+
+/**
+ * Connection state derived from real request outcomes rather than from the OS
+ * reachability flag: a device can hold full signal while this specific API is
+ * refusing traffic, and that still means the app cannot sync.
+ *
+ * Exposed as a subscribable store so UI (the header status pill) can react
+ * without polling. Optimistic until proven otherwise - the app starts assuming
+ * it can reach the server, and only a confirmed failure flips it to offline.
+ */
+let connectionState: ConnectionState = "online";
+const connectionListeners = new Set<() => void>();
+
+function setConnectionState(next: ConnectionState): void {
+  if (connectionState === next) return;
+  connectionState = next;
+  connectionListeners.forEach((listener) => {
+    try {
+      listener();
+    } catch (error) {
+      console.log("[tRPC] Connection listener failed:", error);
+    }
+  });
+}
+
+/** Current connection state. Stable value, safe for useSyncExternalStore. */
+export function getConnectionState(): ConnectionState {
+  return connectionState;
+}
+
+/** Subscribes to connection changes. Returns an unsubscribe function. */
+export function subscribeToConnection(listener: () => void): () => void {
+  connectionListeners.add(listener);
+  return () => {
+    connectionListeners.delete(listener);
+  };
+}
+
 function isCircuitOpen(): boolean {
   return Date.now() < circuitOpenUntil;
 }
@@ -83,6 +123,7 @@ function recordTransportSuccess(): void {
   }
   consecutiveTransportFailures = 0;
   circuitOpenUntil = 0;
+  setConnectionState("online");
 }
 
 function recordTransportFailure(): void {
@@ -96,6 +137,10 @@ function recordTransportFailure(): void {
   );
   const openedNow = !isCircuitOpen();
   circuitOpenUntil = Date.now() + cooldown;
+
+  // The breaker opening is the honest signal that the server is unreachable:
+  // it means retries have already been exhausted, not that one request blipped.
+  setConnectionState("offline");
 
   if (openedNow) {
     console.log(

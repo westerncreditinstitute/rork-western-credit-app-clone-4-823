@@ -13,6 +13,15 @@ nonisolated enum TRPCClientError: Error, LocalizedError {
     /// A tRPC procedure answered with an error payload (message preserved).
     case server(message: String)
 
+    /// True for failures that mean the transport itself could not complete.
+    /// A `.server` error proves the opposite: the server answered.
+    var isTransportFailure: Bool {
+        switch self {
+        case .offline, .serverWaking: return true
+        case .notConfigured, .server: return false
+        }
+    }
+
     var errorDescription: String? {
         switch self {
         case .notConfigured: return "The API server is not configured."
@@ -102,7 +111,7 @@ nonisolated final class TRPCClient: Sendable {
         components?.percentEncodedQuery = "input=\(encodedInput)"
         guard let url = components?.url else { throw TRPCClientError.offline }
 
-        return try await execute(request: { URLRequest(url: url) }, session: readSession)
+        return try await execute(request: { URLRequest(url: url) }, session: readSession, isWrite: false)
     }
 
     /// tRPC POST mutation with retry/backoff.
@@ -117,16 +126,47 @@ nonisolated final class TRPCClient: Sendable {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: input)
 
-        return try await execute(request: { request }, session: writeSession)
+        return try await execute(request: { request }, session: writeSession, isWrite: true)
+    }
+
+    /// Probes the health route to confirm reachability, mirroring the Expo
+    /// `checkApiReachable`. Any HTTP answer - even a 404 - proves the server is
+    /// up; only the edge 5xx family means the instance is asleep or down.
+    @discardableResult
+    func checkReachable() async -> Bool {
+        guard isConfigured, let url = URL(string: "\(baseURL)/api") else {
+            Self.reportUnreachable()
+            return false
+        }
+
+        do {
+            let (_, response) = try await readSession.data(for: URLRequest(url: url))
+            guard let http = response as? HTTPURLResponse,
+                  !Self.retryableStatuses.contains(http.statusCode) else {
+                Self.reportUnreachable()
+                return false
+            }
+            Self.reportReachable()
+            return true
+        } catch {
+            Self.reportUnreachable()
+            return false
+        }
     }
 
     // MARK: - Transport
 
     private func execute<T: Decodable>(
         request: @escaping () -> URLRequest,
-        session: URLSession
+        session: URLSession,
+        isWrite: Bool
     ) async throws -> T {
         var lastError: Error = TRPCClientError.offline
+
+        // Writes drive the header "Syncing" state; reads do not, so background
+        // polling never makes the app look like it is saving something.
+        if isWrite { Self.reportWriteBegan() }
+        defer { if isWrite { Self.reportWriteEnded() } }
 
         for attempt in 0..<Self.maxAttempts {
             do {
@@ -143,6 +183,10 @@ nonisolated final class TRPCClient: Sendable {
                     try await Task.sleep(for: .nanoseconds(Self.backoffDelay(attempt: attempt)))
                     continue
                 }
+
+                // Any real HTTP answer proves the server is reachable - even an
+                // application-level 4xx. Only the edge 5xx family means down.
+                Self.reportReachable()
 
                 guard (200..<300).contains(http.statusCode) else {
                     // A 4xx from tRPC carries the procedure's error message.
@@ -168,7 +212,32 @@ nonisolated final class TRPCClient: Sendable {
             }
         }
 
+        // Retries are exhausted: this is a confirmed transport failure, not a
+        // single blip, so it is safe to report the server as unreachable.
+        if let clientError = lastError as? TRPCClientError,
+           clientError.isTransportFailure {
+            Self.reportUnreachable()
+        }
+
         throw lastError
+    }
+
+    // MARK: - Sync status reporting
+
+    private static func reportReachable() {
+        Task { @MainActor in SyncStatusStore.shared.recordSuccess() }
+    }
+
+    private static func reportUnreachable() {
+        Task { @MainActor in SyncStatusStore.shared.recordFailure() }
+    }
+
+    private static func reportWriteBegan() {
+        Task { @MainActor in SyncStatusStore.shared.beginWrite() }
+    }
+
+    private static func reportWriteEnded() {
+        Task { @MainActor in SyncStatusStore.shared.endWrite() }
     }
 
     /// Pulls the tRPC error message out of a failure body when present.

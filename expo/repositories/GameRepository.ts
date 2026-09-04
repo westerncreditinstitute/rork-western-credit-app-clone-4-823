@@ -42,12 +42,25 @@ export interface OptimisticOperationResult<T = unknown> {
   rollback?: () => void;
 }
 
+/**
+ * Sync activity the UI can observe: whether a remote save is in flight, and
+ * whether local changes are still waiting to reach the server.
+ */
+export interface SyncActivity {
+  isSaving: boolean;
+  hasPendingChanges: boolean;
+}
+
 export class GameRepository {
   private lastSavedState: string = '';
   private pendingSave: GameState | null = null;
   private retryTimeout: ReturnType<typeof setTimeout> | null = null;
   private inFlightSave: Promise<boolean> | null = null;
   private queuedState: GameState | null = null;
+  // Held as one object that is replaced only on real change, so repeated reads
+  // stay referentially stable - what useSyncExternalStore needs to avoid loops.
+  private syncActivity: SyncActivity = { isSaving: false, hasPendingChanges: false };
+  private syncActivityListeners: Set<() => void> = new Set();
   private isMounted: boolean = true;
   private optimisticUpdates: Map<string, OptimisticUpdate> = new Map();
   private onStateChange?: (state: GameState) => void;
@@ -55,6 +68,36 @@ export class GameRepository {
   constructor() {
     console.log('[GameRepository] Initialized');
     this.loadPendingOptimisticUpdates();
+  }
+
+  /** Current sync activity. Stable reference until something actually changes. */
+  getSyncActivity(): SyncActivity {
+    return this.syncActivity;
+  }
+
+  /** Subscribes to sync activity changes. Returns an unsubscribe function. */
+  subscribeToSyncActivity(listener: () => void): () => void {
+    this.syncActivityListeners.add(listener);
+    return () => {
+      this.syncActivityListeners.delete(listener);
+    };
+  }
+
+  private updateSyncActivity(patch: Partial<SyncActivity>): void {
+    const next: SyncActivity = { ...this.syncActivity, ...patch };
+    const unchanged =
+      next.isSaving === this.syncActivity.isSaving &&
+      next.hasPendingChanges === this.syncActivity.hasPendingChanges;
+    if (unchanged) return;
+
+    this.syncActivity = next;
+    this.syncActivityListeners.forEach((listener) => {
+      try {
+        listener();
+      } catch (error) {
+        console.log('[GameRepository] Sync activity listener failed:', error);
+      }
+    });
   }
 
   setOnStateChange(callback: (state: GameState) => void): void {
@@ -162,11 +205,15 @@ export class GameRepository {
 
     const attempt = this.performRemoteSave(state, stateString, userId, saveMutation, retryCount);
     this.inFlightSave = attempt;
+    this.updateSyncActivity({ isSaving: true });
 
     try {
       return await attempt;
     } finally {
       this.inFlightSave = null;
+      // A queued state means another save follows immediately: stay "saving"
+      // rather than flickering through Synced on the way.
+      this.updateSyncActivity({ isSaving: this.queuedState !== null });
 
       const queued = this.queuedState;
       this.queuedState = null;
@@ -361,6 +408,7 @@ export class GameRepository {
     try {
       const pendingData: PendingSyncData = { state, userId, timestamp: Date.now() };
       await AsyncStorage.setItem(PENDING_SYNC_KEY, JSON.stringify(pendingData));
+      this.updateSyncActivity({ hasPendingChanges: true });
       console.log('[GameRepository] Marked state for pending sync');
     } catch (error) {
       console.log('[GameRepository] Error marking pending sync:', error);
@@ -370,6 +418,7 @@ export class GameRepository {
   async clearPendingSync(): Promise<void> {
     try {
       await AsyncStorage.removeItem(PENDING_SYNC_KEY);
+      this.updateSyncActivity({ hasPendingChanges: false });
     } catch (error) {
       console.log('[GameRepository] Error clearing pending sync:', error);
     }
@@ -384,9 +433,12 @@ export class GameRepository {
         
         if (parsed.userId === userId && ageInMinutes < 60) {
           console.log('[GameRepository] Found pending sync from', ageInMinutes.toFixed(1), 'minutes ago');
+          // Unsynced work survived a restart - reflect that in the indicator.
+          this.updateSyncActivity({ hasPendingChanges: true });
           return parsed;
         } else {
           await AsyncStorage.removeItem(PENDING_SYNC_KEY);
+          this.updateSyncActivity({ hasPendingChanges: false });
         }
       }
       return null;

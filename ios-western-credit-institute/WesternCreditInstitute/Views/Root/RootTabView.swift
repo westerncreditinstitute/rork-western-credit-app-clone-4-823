@@ -104,6 +104,11 @@ struct RootTabView: View {
                     ToolbarItem(placement: .principal) {
                         BrandLogo()
                     }
+                    // Sync state is true for the whole app, so it rides the
+                    // shared navigation bar across every tab.
+                    ToolbarItem(placement: .topBarTrailing) {
+                        SyncStatusPill()
+                    }
                 }
                 .toolbarBackground(theme.colors.surface, for: .navigationBar)
                 .toolbarBackground(.visible, for: .navigationBar)
