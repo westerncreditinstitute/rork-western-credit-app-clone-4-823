@@ -65,7 +65,7 @@ serve({ fetch: app.fetch, port }, (info) => {
   console.log(`     curl ${url}/api/system-status`);
   console.log("");
   console.log("  Keep this window open and start the app in a second window:");
-  console.log("     npm start");
+  console.log("     npx expo start");
   console.log("");
   console.log("  Press Ctrl+C to stop.");
   console.log("");

@@ -176,7 +176,7 @@ if [ -f .env ]; then
   ok ".env already exists — keeping it (nothing was overwritten)."
   echo
   echo "  To check it is valid:      ${BOLD}node scripts/check-env.js${RESET}"
-  echo "  To start the app:          ${BOLD}npm start${RESET}"
+  echo "  To start the app:          ${BOLD}npx expo start${RESET}   ${D}(NOT npm start \u2014 that runs bunx rork, which needs Bun)${RESET}"
 else
   echo "  You need 3 values from Supabase (⚙ Project Settings → API):"
   echo "     • Project URL        • anon/public key        • service_role key"
@@ -202,7 +202,7 @@ echo "        ${BOLD}npm run backend${RESET}       → serves http://localhost:3
 echo
 echo "     ${BOLD}Window 2 — the app:${RESET}"
 echo "        cd \"$PROJECT_PATH\""
-echo "        ${BOLD}npm start${RESET}             → then press w (web) or i (iOS Simulator)"
+echo "        ${BOLD}npx expo start${RESET}        → then press w (web) or i (iOS Simulator)"
 echo
 echo "  Open a second window with ${BOLD}⌘N${RESET} in Terminal."
 echo "  Your .env must contain: ${BOLD}EXPO_PUBLIC_RORK_API_BASE_URL=http://localhost:3000${RESET}"

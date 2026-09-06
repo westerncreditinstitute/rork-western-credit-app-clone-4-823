@@ -120,7 +120,7 @@ done
 printf "${B}4/6  API Base URL${X}\n"
 printf "${D}REQUIRED — the app throws on startup without it.${X}\n"
 printf "${D}This is the BACKEND (port 3000, started by 'npm run backend'),${X}\n"
-printf "${D}NOT Metro (port 8081, started by 'npm start').${X}\n"
+printf "${D}NOT Metro (port 8081, started by .npx expo start.).${X}\n"
 printf "  ${B}1${X}) http://localhost:3000   ${D}(browser, this computer)${X}\n"
 printf "  ${B}2${X}) http://<LAN-IP>:3000    ${D}(phone / simulator)${X}\n"
 printf "  ${B}3${X}) enter a custom URL      ${D}(Rork tunnel / production)${X}\n"
@@ -204,4 +204,4 @@ fi
 
 printf "\n${B}Next:${X}\n"
 printf "  1. ${B}node scripts/check-env.js${X}   ${D}verify everything works${X}\n"
-printf "  2. ${B}npm start${X}                   ${D}full restart (env is build-time)${X}\n\n"
+printf "  2. ${B}npx expo start${X}              ${D}full restart (env is build-time)${X}\n\n"

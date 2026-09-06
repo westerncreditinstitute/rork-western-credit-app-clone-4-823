@@ -28,10 +28,10 @@ npm run backend            # → http://localhost:3000
 
 # Window 2 — the app
 cd ~/Documents/rork-western-credit-app-clone-4-823/expo
-npm start                  # → then press w for web, or i for iOS Simulator
+npx expo start             # → then press w for web, or i for iOS Simulator
 ```
 
-**Why two windows?** Rork ran two programs for you inside one cloud machine behind one URL: Metro (the app bundler) and the Hono API server. Locally they are two separate processes on two ports — `npm start` runs Metro on **8081**, and `npm run backend` runs the API on **3000**. Metro does not know how to serve `backend/hono.ts`, so if you skip the backend window every data-loading screen fails. This is the single most common local-setup mistake.
+**Why two windows?** Rork ran two programs for you inside one cloud machine behind one URL: Metro (the app bundler) and the Hono API server. Locally they are two separate processes on two ports — `npx expo start` runs Metro on **8081**, and `npm run backend` runs the API on **3000**. Metro does not know how to serve `backend/hono.ts`, so if you skip the backend window every data-loading screen fails. This is the single most common local-setup mistake.
 
 The rest of this document explains the same steps manually, plus troubleshooting.
 
@@ -205,7 +205,7 @@ If any line says `NO`, your `.env` is incomplete — run `bash scripts/setup-env
 **Window 2 — the app (open with `⌘N`, then `cd` back into the project):**
 
 ```bash
-npm start
+npx expo start
 ```
 
 Starts Metro (the bundler) on **8081**, then press `w` for web or `i` for the iOS Simulator.
@@ -238,7 +238,7 @@ Expect `"status":"ok"`, `"service":"western-credit-api"`, and `"keyType":"config
 
 ## 5. Day-to-day loop
 
-**Morning:** open two windows — `npm run backend` in the first, `npm start` in the second → press `i` / `a` / `w` → build features.
+**Morning:** open two windows — `npm run backend` in the first, `npx expo start` in the second → press `i` / `a` / `w` → build features.
 
 **Evening:** Ctrl+C in both windows. Commit and push as usual — `.env` is git-ignored (`.gitignore` line 43), so secrets never land in the repo.
 
@@ -282,4 +282,4 @@ When you need real binaries: `npm i -g eas-cli`, `eas login`, `eas build --platf
 
 ---
 
-*Verified facts in this guide: variable names and sources (`.env.example`, `SUPABASE_DEPLOYMENT_GUIDE.md` Step A2), LAN-IP guidance (guide lines 650–656), check-env tooling and output (scripts/check-env.js, Step A3), the two-process local run model (verified Sep 6 by running `npm run backend` and `npm start` from a clean clone and curling both ports), build-time env rule (Step A4, metro.config.js), `rork` CLI v1.0.1 on public npm (verified Sep 6), withRorkMetro is local polyfills only (source read Sep 6), service-role key verified working via the Sep 4 probe. QR/Expo-Go and npm-install steps are standard Expo behavior.*
+*Verified facts in this guide: variable names and sources (`.env.example`, `SUPABASE_DEPLOYMENT_GUIDE.md` Step A2), LAN-IP guidance (guide lines 650–656), check-env tooling and output (scripts/check-env.js, Step A3), the two-process local run model (verified Sep 6 by running `npm run backend` and `npx expo start` from a clean clone and curling both ports), build-time env rule (Step A4, metro.config.js), `rork` CLI v1.0.1 on public npm (verified Sep 6), withRorkMetro is local polyfills only (source read Sep 6), service-role key verified working via the Sep 4 probe. QR/Expo-Go and npm-install steps are standard Expo behavior.*
