@@ -75,8 +75,10 @@ done
 # --- 3. API base URL -------------------------------------------
 printf "${B}3/5  API Base URL${X}\n"
 printf "${D}REQUIRED — the app throws on startup without it.${X}\n"
-printf "  ${B}1${X}) http://localhost:8081   ${D}(browser, this computer)${X}\n"
-printf "  ${B}2${X}) http://<LAN-IP>:8081    ${D}(phone / simulator)${X}\n"
+printf "${D}This is the BACKEND (port 3000, started by 'npm run backend'),${X}\n"
+printf "${D}NOT Metro (port 8081, started by 'npm start').${X}\n"
+printf "  ${B}1${X}) http://localhost:3000   ${D}(browser, this computer)${X}\n"
+printf "  ${B}2${X}) http://<LAN-IP>:3000    ${D}(phone / simulator)${X}\n"
 printf "  ${B}3${X}) enter a custom URL      ${D}(Rork tunnel / production)${X}\n"
 read -r -p "Choose [1/2/3] (default 1): " choice
 case "${choice:-1}" in
@@ -91,7 +93,7 @@ case "${choice:-1}" in
     else
       read -r -p "Could not auto-detect. Enter your LAN IP: " LAN_IP
     fi
-    API_URL="http://${LAN_IP}:8081" ;;
+    API_URL="http://${LAN_IP}:3000" ;;
   3)
     while :; do
       read -r -p "Full base URL (no trailing slash, no /api/trpc): " API_URL
@@ -102,7 +104,7 @@ case "${choice:-1}" in
         *) printf "${R}Must start with http:// or https://${X}\n" ;;
       esac
     done ;;
-  *) API_URL="http://localhost:8081" ;;
+  *) API_URL="http://localhost:3000" ;;
 esac
 printf "${G}✓ %s${X}  ${D}→ tRPC at %s/api/trpc${X}\n\n" "$API_URL" "$API_URL"
 
