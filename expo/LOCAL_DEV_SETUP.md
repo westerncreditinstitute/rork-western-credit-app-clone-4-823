@@ -7,28 +7,73 @@
 
 ---
 
-## 0. What you need before starting (5 minutes)
+## 0. What you need before starting (10 minutes, one-time)
 
-| Need | Where to get it |
+**The only application you type commands into is Terminal** — already on your Mac (Applications → Utilities → Terminal, or press `⌘ + Space` and type `Terminal`). Windows: PowerShell or Git Bash. Everything else installs through it or via normal installer packages.
+
+Install two things first (one-time):
+
+| Need | How to install it |
 |---|---|
-| Node.js 20+ | https://nodejs.org (or `brew install node`) |
-| Git | You already have it |
+| **Node.js 20+** (includes `npm`) | Go to https://nodejs.org → click the green **LTS** button → open the downloaded `.pkg` (Windows: `.msi`) → click through the installer |
+| **Git** | Mac: run `xcode-select --install` in Terminal → click **Install** in the popup. Windows: download from https://git-scm.com and run the installer |
+
+Have these values ready too (credentials, not installs):
+
+| Value | Where to find it |
+|---|---|
 | Supabase **Project URL** + **anon key** | Supabase dashboard → ⚙ Project Settings → API |
 | Supabase **service_role key** | Same page — root-password equivalent, treat carefully |
 | OpenAI API key (optional) | https://platform.openai.com/api-keys — without it My Agent runs in demo mode |
-| Xcode (iOS Simulator) or Chrome (web) | Xcode from the Mac App Store; web needs nothing |
+| Xcode (iOS Simulator) or Chrome (web) | Xcode from the Mac App Store — only needed for the iOS Simulator; web testing needs nothing |
 
-Everything else installs with the project (`npm install`).
+Everything else (the ~70 project packages) installs with one command in step 1.
 
 ---
 
-## 1. Clone and install (5 minutes)
+## 1. Clone and install (10 minutes)
+
+**1a. Open Terminal** (Applications → Utilities → Terminal). Everything below happens in this one window.
+
+**1b. Verify the installs worked** — type each line, press Return after each; each should print a version number:
+
+```bash
+node -v
+npm -v
+git --version
+```
+
+If any line prints `command not found`, that installer didn't finish — re-run it before continuing.
+
+**1c. Choose a home for the project** — this example uses your Documents folder:
+
+```bash
+cd ~/Documents
+```
+
+**1d. Download the repository (clone):**
 
 ```bash
 git clone https://github.com/westerncreditinstitute/rork-western-credit-app-clone-4-823.git
+```
+
+Progress bars ending in `Resolving deltas: 100%` mean success. The repo is **public**, so no login or password is needed.
+
+**1e. Enter the project folder** — note the app lives one level down, inside `expo/`:
+
+```bash
 cd rork-western-credit-app-clone-4-823/expo
+```
+
+**1f. Install the project's ~70 packages:**
+
+```bash
 npm install
 ```
+
+Takes a few minutes (a wall of package names is normal). It must finish **without** `npm ERR!` lines — success looks like `added 829 packages in 92s`.
+
+**Done?** Your prompt should look like `… rork-western-credit-app-clone-4-823/expo %`. Stay in this Terminal window — step 2 continues here.
 
 > The project historically used `bun`, but `npm install` works identically here — same manifest, full node_modules. If you prefer bun: `brew install bun`, then `bun install`.
 
