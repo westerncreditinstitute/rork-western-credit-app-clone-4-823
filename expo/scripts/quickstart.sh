@@ -143,16 +143,16 @@ step "Step 4 of 5 — Preparing the local backend"
 # Rork's hosted platform runs backend/hono.ts for you. Locally, Metro only
 # serves the app, so the backend needs its own small server (scripts/
 # serve-backend.ts). These packages make that possible; they are dev-only.
-if node -e "const p=require('./package.json'); const d={...p.dependencies,...p.devDependencies}; process.exit(d['@hono/node-server']&&d.tsx&&d.ws?0:1)" 2>/dev/null; then
+if node -e "const p=require('./package.json'); const d={...p.dependencies,...p.devDependencies}; process.exit(d['@hono/node-server']&&d.tsx&&d.ws&&d.dotenv?0:1)" 2>/dev/null; then
   ok "Backend tooling already installed."
 else
   echo "  Installing the local backend runner (dev-only packages)..."
-  if npm install --legacy-peer-deps --no-audit --no-fund --save-dev @hono/node-server tsx ws @types/ws >/tmp/wci-backend-install.log 2>&1; then
+  if npm install --legacy-peer-deps --no-audit --no-fund --save-dev @hono/node-server tsx ws @types/ws dotenv >/tmp/wci-backend-install.log 2>&1; then
     ok "Backend tooling installed."
   else
     warn "Could not install backend tooling — the app will still run, but"
     warn "API calls will fail until this succeeds. Retry manually with:"
-    echo "     npm install --legacy-peer-deps --save-dev @hono/node-server tsx ws @types/ws"
+    echo "     npm install --legacy-peer-deps --save-dev @hono/node-server tsx ws @types/ws dotenv"
   fi
 fi
 

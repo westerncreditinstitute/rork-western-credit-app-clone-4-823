@@ -28,9 +28,9 @@
  * `/api/trpc/*` and `/api/system-status`, so that base URL is all it needs.
  */
 
-// MUST be first: installs globalThis.WebSocket before Supabase is evaluated.
-// (Import order matters here — see scripts/ws-polyfill.ts for why.)
-import "./ws-polyfill";
+// MUST be the first import: loads .env and installs globalThis.WebSocket
+// before Supabase is evaluated. (Import order matters — see scripts/bootstrap.ts.)
+import "./bootstrap";
 
 import { serve } from "@hono/node-server";
 
@@ -38,17 +38,34 @@ import app from "../backend/hono";
 
 const port = Number(process.env.BACKEND_PORT ?? 3000);
 
+const hasUrl = Boolean(process.env.EXPO_PUBLIC_SUPABASE_URL);
+const hasAnon = Boolean(process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY);
+const hasService = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
+const mark = (ok: boolean) => (ok ? "yes" : "NO");
+
 serve({ fetch: app.fetch, port }, (info) => {
   const url = `http://localhost:${info.port}`;
   console.log("");
   console.log("  Western Credit backend is running");
   console.log(`     ${url}`);
   console.log("");
+  console.log("  Environment loaded from .env:");
+  console.log(`     Supabase URL ......... ${mark(hasUrl)}`);
+  console.log(`     Supabase anon key .... ${mark(hasAnon)}`);
+  console.log(`     Service role key ..... ${mark(hasService)}`);
+
+  if (!hasUrl || !hasAnon) {
+    console.log("");
+    console.log("  Running in DEMO MODE — the database is not connected.");
+    console.log("  Fix it with:  bash scripts/setup-env.sh");
+  }
+
+  console.log("");
   console.log("  Check it:");
   console.log(`     curl ${url}/api/system-status`);
   console.log("");
-  console.log("  Your .env should contain:");
-  console.log(`     EXPO_PUBLIC_RORK_API_BASE_URL=${url}`);
+  console.log("  Keep this window open and start the app in a second window:");
+  console.log("     npm start");
   console.log("");
   console.log("  Press Ctrl+C to stop.");
   console.log("");
