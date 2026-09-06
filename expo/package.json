@@ -6,7 +6,8 @@
     "start": "bunx rork start -p ulx77mlx9b7syygnanmal",
     "start-web": "bunx rork start -p ulx77mlx9b7syygnanmal --web",
     "start-web-dev": "DEBUG=expo* bunx rork start -p ulx77mlx9b7syygnanmal --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "backend": "tsx scripts/serve-backend.ts"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -76,7 +77,11 @@
     "@types/react": "~19.1.10",
     "eslint": "^9.31.0",
     "eslint-config-expo": "~10.0.0",
-    "typescript": "~5.9.2"
+    "typescript": "~5.9.2",
+    "@hono/node-server": "^2.1.1",
+    "tsx": "^4.23.13",
+    "ws": "^8.18.0",
+    "@types/ws": "^8.5.13"
   },
   "private": true
 }
