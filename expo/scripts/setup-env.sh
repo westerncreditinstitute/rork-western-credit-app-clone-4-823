@@ -30,7 +30,7 @@ if [ -f "$ENV_FILE" ]; then
 fi
 
 # --- 1. Supabase URL -------------------------------------------
-printf "${B}1/5  Supabase Project URL${X}\n"
+printf "${B}1/6  Supabase Project URL${X}\n"
 printf "${D}Supabase dashboard → Project Settings (gear) → API → 'Project URL'${X}\n"
 printf "${D}Looks like: https://abcdefghijkl.supabase.co${X}\n"
 while :; do
@@ -46,7 +46,7 @@ while :; do
 done
 
 # --- 2. Supabase anon key (hidden input) -----------------------
-printf "${B}2/5  Supabase anon / public key${X}\n"
+printf "${B}2/6  Supabase anon / public key${X}\n"
 printf "${D}Same page → 'anon' 'public' key. Starts with eyJ...${X}\n"
 printf "${D}Input is hidden. Use the ANON key, NOT service_role.${X}\n"
 while :; do
@@ -72,8 +72,52 @@ while :; do
   break
 done
 
-# --- 3. API base URL -------------------------------------------
-printf "${B}3/5  API Base URL${X}\n"
+# --- 3. Supabase service_role key (hidden input) ----------------
+printf "${B}3/6  Supabase service_role key${X}\n"
+printf "${D}REQUIRED — the local backend uses it to bypass RLS for writes.${X}\n"
+printf "${D}Same Supabase API page → the 'service_role' row, 'Reveal' to copy.${X}\n"
+printf "${D}Input is hidden. Starts with eyJ... (or sb_secret_... on newer projects).${X}\n"
+printf "${D}Stays server-side — it is written WITHOUT the EXPO_PUBLIC_ prefix.${X}\n"
+while :; do
+  read -r -s -p "> " SUPA_SERVICE_KEY; printf "\n"
+  if [ -z "$SUPA_SERVICE_KEY" ]; then
+    printf "${R}Required — migration 025 removed the anonymous write policies,${X}\n"
+    printf "${R}so agent assignment and chat will fail without it.${X}\n"
+    continue
+  fi
+  case "$SUPA_SERVICE_KEY" in
+    eyJ*)
+      # decode the JWT payload and CONFIRM it really is service_role
+      spayload=$(printf '%s' "$SUPA_SERVICE_KEY" | cut -d. -f2)
+      case $(( ${#spayload} % 4 )) in 2) spayload="${spayload}==";; 3) spayload="${spayload}=";; esac
+      srole=$(printf '%s' "$spayload" | tr '_-' '/+' | base64 -d 2>/dev/null \
+             | grep -oE '"role"[[:space:]]*:[[:space:]]*"[^"]+"' | cut -d'"' -f4 || true)
+      if [ "$srole" = "service_role" ]; then
+        printf "${G}✓ service_role key verified (JWT role: service_role)${X}\n\n"
+        break
+      elif [ -n "$srole" ]; then
+        printf "${R}✗ That key's role is '%s', not 'service_role' — copy the${X}\n" "$srole"
+        printf "${R}  service_role row from the API keys page instead.${X}\n"
+        continue
+      else
+        printf "${Y}! Could not decode the key to verify — saving anyway.${X}\n\n"
+        break
+      fi
+      ;;
+    sb_secret_*)
+      printf "${G}✓ service_role secret accepted (new sb_secret_ format)${X}\n\n"
+      break
+      ;;
+    *)
+      printf "${R}✗ Expected the service_role JWT (eyJ...) or sb_secret_... key.${X}\n"
+      printf "${R}  Re-copy it from Supabase → Project Settings → API → service_role.${X}\n"
+      continue
+      ;;
+  esac
+done
+
+# --- 4. API base URL -------------------------------------------
+printf "${B}4/6  API Base URL${X}\n"
 printf "${D}REQUIRED — the app throws on startup without it.${X}\n"
 printf "${D}This is the BACKEND (port 3000, started by 'npm run backend'),${X}\n"
 printf "${D}NOT Metro (port 8081, started by 'npm start').${X}\n"
@@ -109,7 +153,7 @@ esac
 printf "${G}✓ %s${X}  ${D}→ tRPC at %s/api/trpc${X}\n\n" "$API_URL" "$API_URL"
 
 # --- 4. OpenAI key (hidden input) ------------------------------
-printf "${B}4/5  OpenAI API key${X}\n"
+printf "${B}5/6  OpenAI API key${X}\n"
 printf "${D}Optional — press Enter to skip and use demo mode.${X}\n"
 printf "${D}Input is hidden. Starts with sk-...${X}\n"
 read -r -s -p "> " OPENAI_KEY; printf "\n"
@@ -123,7 +167,7 @@ else
 fi
 
 # --- 5. Model ---------------------------------------------------
-printf "${B}5/5  OpenAI model${X}\n"
+printf "${B}6/6  OpenAI model${X}\n"
 read -r -p "Model [gpt-4o-mini]: " MODEL
 MODEL="${MODEL:-gpt-4o-mini}"
 printf "${G}✓ %s${X}\n\n" "$MODEL"
@@ -137,6 +181,7 @@ cat > "$ENV_FILE" <<EOF
 # --- Supabase (required) ---
 EXPO_PUBLIC_SUPABASE_URL=$SUPA_URL
 EXPO_PUBLIC_SUPABASE_ANON_KEY=$SUPA_KEY
+SUPABASE_SERVICE_ROLE_KEY=$SUPA_SERVICE_KEY
 
 # --- API base URL (required) ---
 EXPO_PUBLIC_RORK_API_BASE_URL=$API_URL

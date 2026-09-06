@@ -78,6 +78,39 @@ else if (!sKey.startsWith("eyJ")) {
   } catch { /* ignore decode issues */ }
 }
 
+// ---- 1b. Supabase service_role key (required server-side) -----
+head("1b. Supabase service_role key (REQUIRED — migration 025 removed anon write policies)");
+
+const svcKey = env.SUPABASE_SERVICE_ROLE_KEY;
+if (!svcKey) {
+  bad("SUPABASE_SERVICE_ROLE_KEY is missing");
+  info("The local backend needs it to write (assign agents, save chat).");
+  info("Supabase dashboard → Project Settings → API → 'service_role' row → Reveal → copy.");
+  errors++;
+} else if (PLACEHOLDER.test(svcKey)) {
+  bad("SUPABASE_SERVICE_ROLE_KEY is still a placeholder");
+  errors++;
+} else if (svcKey.startsWith("eyJ")) {
+  let role = null;
+  try {
+    role = JSON.parse(Buffer.from(svcKey.split(".")[1], "base64").toString()).role;
+  } catch { /* not a decodable JWT */ }
+  if (role === "anon") {
+    bad("This is the ANON key, not service_role! Re-copy the service_role row.");
+    errors++;
+  } else if (role === "service_role") {
+    ok(`SUPABASE_SERVICE_ROLE_KEY = ${mask(svcKey)} (role: service_role)`);
+  } else {
+    warn(`Decoded role was '${role || "unknown"}' — verify you copied the service_role key.`);
+    warnings++;
+  }
+} else if (svcKey.startsWith("sb_secret_")) {
+  ok(`SUPABASE_SERVICE_ROLE_KEY = ${mask(svcKey)} (new sb_secret_ format)`);
+} else {
+  warn("Unusual service-role key format (expected eyJ... or sb_secret_...) — verify it.");
+  warnings++;
+}
+
 // ---- 2. API base URL ------------------------------------------
 head("2. API Base URL (required)");
 
@@ -95,7 +128,7 @@ if (!api) {
   info(`tRPC endpoint -> ${api}/api/trpc`);
   if (/localhost|127\.0\.0\.1/.test(api)) {
     warn("localhost only works in a browser on this machine.");
-    info("On a phone/simulator use your LAN IP, e.g. http://192.168.1.50:8081");
+    info("On a phone/simulator use your LAN IP, e.g. http://192.168.1.50:3000");
     warnings++;
   }
 }
