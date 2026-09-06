@@ -123,7 +123,9 @@ npm install --legacy-peer-deps --save-dev @hono/node-server tsx ws @types/ws dot
 bash scripts/setup-env.sh
 ```
 
-Prompts for each value with hidden input (nothing saved to shell history), auto-detects your LAN IP, rejects a `service_role` key pasted where the anon key belongs, and writes `.env` with `600` permissions.
+Prompts for **six values** with hidden input (nothing saved to shell history): Supabase URL, anon key, **service_role key** (required — it verifies the JWT's role is actually `service_role` and rejects the anon key if you paste that here by mistake), the API base URL (port 3000, with your LAN IP auto-detected), OpenAI key, and model. Writes `.env` with `600` permissions.
+
+> ⚠️ **Re-running with an existing `.env`:** it will ask to overwrite and make a timestamped backup first. If your current `.env` already works except for one missing value, it's simpler to edit it directly — see the manual option below.
 
 **Option 2 — Manual:**
 
