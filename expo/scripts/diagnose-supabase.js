@@ -173,17 +173,20 @@ function analyzeKey(label, key, urlRef) {
  * description) when the key is valid for this project, and the exact
  * 'Invalid API key' error when it is not.
  */
-async function liveKeyTest(url, key) {
+async function liveKeyTest(url, key, endpoint = "/rest/v1/") {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort("timeout"), 10000);
   try {
-    const r = await fetch(`${url}/rest/v1/`, {
+    const r = await fetch(`${url}${endpoint}`, {
       headers: { apikey: key, Authorization: `Bearer ${key}` },
       signal: controller.signal,
     });
     let body = "";
     try { body = (await r.text()).slice(0, 300); } catch (_) { /* body optional */ }
-    return { reached: true, status: r.status, ok: r.ok, body };
+    // This hint means the server RECOGNIZED the key as valid — the endpoint
+    // just only accepts service_role (true for /rest/v1/ on newer projects).
+    const serviceOnlyHint = /only the .service_role. api key can be used/i.test(body);
+    return { reached: true, status: r.status, ok: r.ok, body, serviceOnlyHint };
   } catch (e) {
     return { reached: false, error: e.message };
   } finally {
@@ -198,7 +201,21 @@ function verdictFor(f, live, urlRef) {
     return { level: "warn", text: `could not live-test the ${f.label} key (the URL itself did not respond)` };
   }
   if (live.ok) return { level: "ok", text: `the ${f.label} key WORKS for this project` };
+  // 404 = the request AUTHENTICATED fine, but the table was not found.
+  // (A bad key would have gotten 401 before PostgREST even looked for it.)
+  if (live.status === 404) {
+    return {
+      level: "ok",
+      text: `the ${f.label} key is VALID (the server accepted it) — but the test table was not found. Run the migrations, then re-run this script`,
+    };
+  }
   if (live.status === 401) {
+    if (live.serviceOnlyHint && f.role === "anon") {
+      return {
+        level: "ok",
+        text: `the anon key WORKS for this project (the server recognized it — this particular API page only accepts service_role keys, but the key itself is valid)`,
+      };
+    }
     if (f.refMatches === false) {
       return {
         level: "bad",
@@ -233,7 +250,7 @@ function printFindings(f, step) {
 }
 
 async function main() {
-  console.log(`${B}Supabase key diagnosis${X}`);
+  console.log(`${B}Supabase key diagnosis${X} (v2 — anon tested against a real table, not the API root)`);
   console.log(`  ${new Date().toISOString()}`);
   let problems = 0;
 
@@ -306,7 +323,7 @@ async function main() {
 
     // 5b: anon key against the public URL (what the client app uses)
     if (anon.present) {
-      results.anon = await liveKeyTest(publicUrl, env.EXPO_PUBLIC_SUPABASE_ANON_KEY);
+      results.anon = await liveKeyTest(publicUrl, env.EXPO_PUBLIC_SUPABASE_ANON_KEY, "/rest/v1/game_states?select=*&limit=1");
       const v = verdictFor(anon, results.anon, urlRef);
       (v.level === "ok" ? ok : v.level === "bad" ? bad : warn).call(null, `anon key    : ${v.text}`);
       if (results.anon.reached && !results.anon.ok && results.anon.body) {
@@ -364,4 +381,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { parseEnv, decodeJwt, extractProjectRef, mask, analyzeKey };
+module.exports = { parseEnv, decodeJwt, extractProjectRef, mask, analyzeKey, verdictFor };
