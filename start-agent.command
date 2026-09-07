@@ -25,14 +25,22 @@ if [ ! -f "$SCRIPT_DIR/expo/.env.local" ]; then
     echo "Setting up environment variables..."
     echo ""
     
-    # Run setup script
-    if [ -f "$SCRIPT_DIR/scripts/setup-env.sh" ]; then
+    # Run setup script - try both locations
+    if [ -f "$SCRIPT_DIR/setup-env.sh" ]; then
+        bash "$SCRIPT_DIR/setup-env.sh"
+    elif [ -f "$SCRIPT_DIR/scripts/setup-env.sh" ]; then
         bash "$SCRIPT_DIR/scripts/setup-env.sh"
     else
         echo -e "${RED}Error: setup-env.sh not found${NC}"
-        echo "Please create .env.local manually in the expo folder"
-        read -p "Press Enter to close..."
-        exit 1
+        echo "Creating .env.local manually..."
+        
+        # Create it manually
+        mkdir -p "$SCRIPT_DIR/expo"
+        cat > "$SCRIPT_DIR/expo/.env.local" << 'EOF'
+EXPO_PUBLIC_SUPABASE_URL=https://ifjihaieakahqcoctmzn.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlmamloYWllYWthaHFjb2N0bXpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgyNTkzODYsImV4cCI6MjA4MzgzNTM4Nn0.CyShNzA0cVZ400qkOooYEjCYdsUNAe9vVTF11qFqU-U
+EOF
+        echo -e "${GREEN}✅ .env.local created successfully!${NC}"
     fi
 fi
 
