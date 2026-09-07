@@ -724,6 +724,8 @@ const CREDIT_TIPS = [
 
 export interface ParsedAccountRecord {
   creditor: string;
+  /** Furnisher mailing address, when extractable from the report. */
+  furnisherAddress?: string;
   accountNumber: string;
   balance: string;
   status: string;
@@ -793,6 +795,7 @@ function analyzeCreditAccounts(accounts: ParsedAccountRecord[]): {
   totalNegativeBalance: number;
   recommendations: {
     creditor: string;
+    furnisherAddress?: string;
     accountNumber: string;
     negativeType: string;
     letterType: string;
@@ -817,6 +820,7 @@ function analyzeCreditAccounts(accounts: ParsedAccountRecord[]): {
       NEGATIVE_TYPE_STRATEGY["Derogatory Status"];
     return {
       creditor: a.creditor,
+      furnisherAddress: a.furnisherAddress,
       accountNumber: a.accountNumber,
       negativeType: type,
       letterType: strategy.letterType,
@@ -904,6 +908,59 @@ async function fetchLatestCreditAnalysis(userId: string): Promise<{
       summary: "",
       recommendations: [],
     };
+  }
+}
+
+/**
+ * Fetches the user's most recent stored analysis PER BUREAU (Experian,
+ * Equifax, TransUnion, Unknown) — powers the per-bureau negative
+ * accounts dashboard. Each upload is saved as its own row (see
+ * saveCreditAnalysis), so this groups all of the user's rows by
+ * bureau and keeps only the newest row for each one.
+ */
+async function fetchAnalysesPerBureau(userId: string): Promise<
+  Array<{
+    analysisId: number;
+    bureau: string;
+    createdAt: string;
+    accounts: ParsedAccountRecord[];
+  }>
+> {
+  try {
+    const { data, error } = await supabase
+      .from("credit_report_analyses")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
+
+    if (error || !data) return [];
+
+    const seenBureaus = new Set<string>();
+    const latestPerBureau: Array<{
+      analysisId: number;
+      bureau: string;
+      createdAt: string;
+      accounts: ParsedAccountRecord[];
+    }> = [];
+
+    // Rows are already ordered newest-first, so the first time we see
+    // a given bureau is guaranteed to be its most recent upload.
+    for (const row of data) {
+      const bureau = row.bureau || "Unknown";
+      if (seenBureaus.has(bureau)) continue;
+      seenBureaus.add(bureau);
+      latestPerBureau.push({
+        analysisId: row.id,
+        bureau,
+        createdAt: row.created_at,
+        accounts: (row.accounts || []) as ParsedAccountRecord[],
+      });
+    }
+
+    return latestPerBureau;
+  } catch (e) {
+    console.error("[AI Agents] fetchAnalysesPerBureau error:", e);
+    return [];
   }
 }
 
@@ -1664,6 +1721,7 @@ export const aiAgentsRouter = createTRPCRouter({
         accounts: z.array(
           z.object({
             creditor: z.string(),
+            furnisherAddress: z.string().optional(),
             accountNumber: z.string(),
             balance: z.string(),
             status: z.string(),
@@ -1726,6 +1784,41 @@ export const aiAgentsRouter = createTRPCRouter({
     .input(z.object({ userId: z.string() }))
     .query(async ({ input }) => {
       return await fetchLatestCreditAnalysis(input.userId);
+    }),
+
+  // ----------------------------------------------------------
+  // getBureauDashboard: latest saved analysis per bureau, with
+  // negative-account details + recommended dispute letter for each,
+  // powers the per-bureau negative accounts dashboard screen.
+  // ----------------------------------------------------------
+  getBureauDashboard: publicProcedure
+    .input(z.object({ userId: z.string() }))
+    .query(async ({ input }) => {
+      const perBureau = await fetchAnalysesPerBureau(input.userId);
+
+      const bureaus = perBureau.map((entry) => {
+        const analysis = analyzeCreditAccounts(entry.accounts);
+        return {
+          analysisId: entry.analysisId,
+          bureau: entry.bureau,
+          createdAt: entry.createdAt,
+          totalAccounts: entry.accounts.length,
+          negativeCount: analysis.negativeCount,
+          totalNegativeBalance: analysis.totalNegativeBalance,
+          summary: analysis.summary,
+          negativeAccounts: analysis.recommendations,
+        };
+      });
+
+      const totalNegativeAcrossBureaus = bureaus.reduce(
+        (sum, b) => sum + b.negativeCount,
+        0,
+      );
+
+      return {
+        bureaus,
+        totalNegativeAcrossBureaus,
+      };
     }),
 
   // ----------------------------------------------------------

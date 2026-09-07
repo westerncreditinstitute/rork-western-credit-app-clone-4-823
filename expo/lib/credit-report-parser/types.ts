@@ -47,6 +47,10 @@ export interface ParsedAccountCompat {
   openDate: string;
   lastReported: string;
   negativeType?: string;
+  /** Furnisher (creditor) mailing address, when the report includes
+   *  one near the account block. Used for dispute-letter generation
+   *  and the per-bureau negative-accounts dashboard. */
+  furnisherAddress?: string;
 }
 
 /** A parsed month from the 24-month payment-history grid. */
@@ -79,6 +83,11 @@ export interface StandardAccount {
   openDate: string;
   lastReported: string;
   negativeType?: NegativeType;
+  /** Furnisher (creditor) mailing address, when found near the account
+   *  block (e.g. directly under the creditor name, or in a labeled
+   *  "Address:" field). Used for dispute-letter generation and the
+   *  per-bureau negative-accounts dashboard. */
+  furnisherAddress?: string;
 
   // ── audit layer (new) ──
   /** Bureau this account block came from ("equifax" etc.). */

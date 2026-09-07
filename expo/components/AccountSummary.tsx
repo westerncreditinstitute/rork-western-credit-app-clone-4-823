@@ -22,6 +22,8 @@ import Colors from "@/constants/colors";
  */
 export interface ParsedAccount {
   creditor: string;
+  /** Furnisher mailing address, when extractable from the report. */
+  furnisherAddress?: string;
   accountNumber: string;
   balance: string;
   status: string;
@@ -46,32 +48,30 @@ interface AccountSummaryProps {
 interface CategorizedAccounts {
   negative: ParsedAccount[];
   positive: ParsedAccount[];
-  neutral: ParsedAccount[];
 }
 
 /**
- * Categorizes accounts based on their status and negativeType
+ * Categorizes accounts based on their negativeType.
+ *
+ * There is no "neutral" category — every account on a credit report is
+ * either negative (has a disqualifying status such as a late payment,
+ * collection, charge-off, foreclosure, repossession, bankruptcy, or
+ * other derogatory mark) or positive (everything else). The engine's
+ * precision-first classifyNegative() already makes this determination
+ * for every account (see lib/credit-report-parser), so an account
+ * simply falls into "positive" whenever it was NOT flagged negative.
  */
 const categorizeAccounts = (accounts: ParsedAccount[]): CategorizedAccounts => {
   const categorized: CategorizedAccounts = {
     negative: [],
     positive: [],
-    neutral: [],
   };
 
   accounts.forEach((account) => {
     if (account.negativeType) {
       categorized.negative.push(account);
-    } else if (
-      account.status &&
-      (account.status.toLowerCase().includes("open") ||
-        account.status.toLowerCase().includes("good standing") ||
-        account.status.toLowerCase().includes("current") ||
-        account.status.toLowerCase().includes("paid as agreed"))
-    ) {
-      categorized.positive.push(account);
     } else {
-      categorized.neutral.push(account);
+      categorized.positive.push(account);
     }
   });
 
@@ -147,6 +147,9 @@ const AccountCard: React.FC<{
           <DetailRow label="Balance" value={account.balance} />
           <DetailRow label="Opened" value={account.openDate} />
           <DetailRow label="Last Reported" value={account.lastReported} />
+          {account.furnisherAddress ? (
+            <DetailRow label="Furnisher Address" value={account.furnisherAddress} />
+          ) : null}
 
           {isNegative && onSelect && (
             <TouchableOpacity
@@ -197,7 +200,7 @@ export const AccountSummary: React.FC<AccountSummaryProps> = ({
   nested = false,
 }) => {
   const [expandedSection, setExpandedSection] = useState<
-    "negative" | "positive" | "neutral" | null
+    "negative" | "positive" | null
   >("negative");
   const [selectedNegativeAccounts, setSelectedNegativeAccounts] = useState<
     ParsedAccount[]
@@ -274,12 +277,6 @@ export const AccountSummary: React.FC<AccountSummaryProps> = ({
           count={categorized.positive.length}
           color={Colors.success}
         />
-        <StatCard
-          icon="◎"
-          label="Neutral"
-          count={categorized.neutral.length}
-          color="#6b7280"
-        />
       </View>
 
       {/* Negative Accounts Section */}
@@ -344,31 +341,6 @@ export const AccountSummary: React.FC<AccountSummaryProps> = ({
         >
           {expandedSection === "positive" &&
             categorized.positive.map((account, index) => (
-              <AccountCard
-                key={`${account.creditor}-${account.accountNumber}-${index}`}
-                account={account}
-                isNegative={false}
-              />
-            ))}
-        </AccountSection>
-      )}
-
-      {/* Neutral Accounts Section */}
-      {categorized.neutral.length > 0 && (
-        <AccountSection
-          title="Neutral/Other Accounts"
-          icon="◎"
-          color="#6b7280"
-          count={categorized.neutral.length}
-          isExpanded={expandedSection === "neutral"}
-          onToggle={() =>
-            setExpandedSection(
-              expandedSection === "neutral" ? null : "neutral"
-            )
-          }
-        >
-          {expandedSection === "neutral" &&
-            categorized.neutral.map((account, index) => (
               <AccountCard
                 key={`${account.creditor}-${account.accountNumber}-${index}`}
                 account={account}

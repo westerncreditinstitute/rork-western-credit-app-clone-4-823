@@ -61,13 +61,24 @@ const VAL_END = String.raw`(?=\s{2,}[A-Za-z0-9$(]|[ \t]*\n|[ \t]*$|[ \t]+[A-Za-z
 function anchorSources(): string[] {
   return [
     // a) labeled creditor lines
-    String.raw`Creditor\s*Name\s*[:\t]|Company\s*Name\s*[:\t]|Account\s*Name\s*[:\t]|Credit\s*Grantor\s*[:\t]|TRADELINE\b\s*[:\t]?`,
+    // NOTE: "TRADELINE" must not match TransUnion's "Tradeline Summary"
+    // section header — require it NOT be followed by "Summary".
+    String.raw`Creditor\s*Name\s*[:\t]|Company\s*Name\s*[:\t]|Account\s*Name\s*[:\t]|Credit\s*Grantor\s*[:\t]|TRADELINE\b(?!\s*Summar)\s*[:\t]?`,
     // b) account-number lines (labeled "Account Number:" or Equifax's
     //    column header "Account Numbers  XXXX-1234")
     String.raw`Account\s*Numbers?\b`,
     // c) TransUnion combined label
     String.raw`Account\s*Type\s*(?:&|and|\/)?\s*(?:Number|Pay\s*Status)\b`,
-    // d) compact Equifax row: "05/2019  XXXX-1234  Open …"
+    // c2) Experian combined label row: "Address:  Account Number:" —
+    // appears once directly under each account's creditor-name line.
+    String.raw`Address\s*[:\t]\s*Account\s*Number\s*[:\t]`,
+    // d) TransUnion "tenant screening" style tradeline row: each
+    //    tradeline block starts with a bare creditor-name line followed
+    //    by "Opened ... Closed ... Verified ..." — anchor on that row
+    //    (the creditor name itself is picked up via the line-above rule
+    //    in extractCreditor).
+    String.raw`Opened\b[^\n]*?Closed\b[^\n]*?Verified\b`,
+    // e) compact Equifax row: "05/2019  XXXX-1234  Open …"
     String.raw`\d{2}[\/\-]\d{4}\s+[A-Za-z0-9*#x\-]{4,20}`,
   ];
 }
@@ -246,35 +257,93 @@ function looksLikeCreditorLine(line: string | undefined): boolean {
   const words = s.split(/\s+/);
   if (words.length > 6) return false;
   if (/^[a-z]/.test(s)) return false;
-  return /^[A-Z0-9&.,'\/\-() ]+$/.test(s) && /[A-Za-z]{3}/.test(s);
+  // All-caps business line (the common case), OR a mixed-case business
+  // name that starts with a digit/capital and ends in a recognizable
+  // company-type word (some real Equifax reports print creditor names
+  // in title case, e.g. "123 Mortgage Company").
+  if (/^[A-Z0-9&.,'\/\-() ]+$/.test(s) && /[A-Za-z]{3}/.test(s)) return true;
+  if (
+    /^[0-9A-Z][A-Za-z0-9&.,'\/\-() ]*\s+(?:Company|Corp|Inc|LLC|Bank|Credit|Union|Mortgage|Loans?|Card|Cards|Financial|Services|Lending)\.?$/.test(
+      s,
+    )
+  )
+    return true;
+  return false;
 }
 
 /** Creditor identity: labeled field → line above the anchor → all-caps
  *  business line → split-boundary context → block start (unanchored). */
-function extractCreditor(
+export function extractCreditor(
   block: string,
   bureau: Bureau,
   ctx: { prevLines: string[]; anchored: boolean },
 ): FieldHit | null {
   // 1. Labeled creditor fields (all bureaus)
+  // NOTE: Equifax's compact per-account TABLE HEADER row ("Account
+  // Name   Account Number   Balance   Past Due Account Status") can
+  // bleed into the tail of a block that belongs to the PREVIOUS
+  // account (it's the header for the NEXT open-accounts sub-table).
+  // Reject any "hit" whose value is itself just another field-label
+  // word — that's the header row, not a real creditor name.
   const labeledHit = labeled(
     block,
     String.raw`(?:Creditor\s*Name|Company\s*Name|Account\s*Name|Credit\s*Grantor|TRADELINE)`,
     60,
   );
-  if (labeledHit) return labeledHit;
+  if (
+    labeledHit &&
+    !/^(?:Account\s*Number|Balance|Past\s*Due|Account\s*Status|Date\s*Opened|Date|Status)s?$/i.test(
+      labeledHit.raw.trim(),
+    )
+  ) {
+    return labeledHit;
+  }
 
   const lines = block.split("\n").filter((l) => l.trim().length > 0);
 
   // 2. Column style: creditor line immediately ABOVE the anchor line
   //    (inside this block when the block starts lower).
   const anchorIdx = lines.findIndex((l) =>
-    /Account\s*Numbers?\b|Account\s*Type\s*(?:&|and|\/)?\s*(?:Number|Pay\s*Status)|TRADELINE\b/i.test(
+    /Account\s*Numbers?\b|Account\s*Type\s*(?:&|and|\/)?\s*(?:Number|Pay\s*Status)|TRADELINE\b|Address\s*[:\t]\s*Account\s*Number\s*[:\t]/i.test(
       l,
     ),
   );
   if (anchorIdx > 0 && looksLikeCreditorLine(lines[anchorIdx - 1])) {
     return positional(lines[anchorIdx - 1]);
+  }
+
+  // 2b. Block begins RIGHT AT its anchor line (no lines before it in
+  //    this block) — this happens for both the TransUnion tenant-report
+  //    "Opened ... Closed ... Verified" row AND Equifax's labeled
+  //    "Account Number:" detail line. In both cases the creditor name
+  //    is NEVER inside this block; it's in the split-boundary context
+  //    (prevLines), directly above the compact table row / address
+  //    block. Check this BEFORE the generic in-block all-caps scan
+  //    below, since that scan can otherwise pick up a payment-history
+  //    "N/A  N/A" cell, or (for Equifax) a wrapped creditor-name
+  //    fragment / detail-section header bleeding in from the START of
+  //    the NEXT account (e.g. "XYZ INSTALLMENT LOANS" appearing near
+  //    the end of THIS block, before the split boundary).
+  const firstLine = lines[0] ?? "";
+  const blockStartsAtAnchor =
+    /^Opened\b.*?Closed\b.*?Verified\b/i.test(firstLine) ||
+    /^Account\s*Numbers?\s*[:\t]/i.test(firstLine) ||
+    /^Address\s*[:\t]\s*Account\s*Number\s*[:\t]/i.test(firstLine);
+  if (blockStartsAtAnchor) {
+    // Search prevLines backwards (nearest first), skipping obvious
+    // address lines (contain digits) and taking the first plausible
+    // creditor-looking line — but prefer a LONGER candidate over a
+    // short wrapped fragment appearing closer to the boundary (e.g.
+    // "EQUITY" wrapped-fragment vs. the full "ABC HOME EQUITY" line
+    // right above it).
+    let best: string | null = null;
+    for (let k = ctx.prevLines.length - 1; k >= 0; k--) {
+      const tail = ctx.prevLines[k];
+      if (looksLikeCreditorLine(tail)) {
+        if (!best || tail.length > best.length) best = tail;
+      }
+    }
+    if (best) return positional(best);
   }
 
   // 3. All-caps business line (not a label, not a section header, not a
@@ -406,6 +475,68 @@ function extractLastReported(block: string, _bureau: Bureau): FieldHit | null {
     labeled(block, String.raw`Date\s*Updated`, 20) ||
     labeled(block, String.raw`(?:Status\s*Updated|Date\s*of\s*Status|Date\s*of\s*Last\s*Update)`, 20)
   );
+}
+
+// ------------------------------------------------------------
+// Furnisher (creditor) address
+// ------------------------------------------------------------
+
+/** A bare street-address line: starts with a house number and contains
+ *  a common street-suffix word. E.g. "100 CENTER RD", "5333 Finsbury Ave". */
+const STREET_LINE_RE =
+  /^\d{1,6}\s+[A-Za-z0-9.'\-\s]{2,40}\b(?:St|Street|Ave|Avenue|Rd|Road|Blvd|Boulevard|Dr|Drive|Ct|Court|Ln|Lane|Way|Pl|Place|Pkwy|Parkway|Cir|Circle|Ter|Terrace|Hwy|Highway|Sq|Square|Trl|Trail|Center|Ctr|PO\s*Box)\b\.?,?\s*[A-Za-z0-9#.\-\s]*$/i;
+
+/** A "CITY, ST ZIP" line, e.g. "BUFFALO, NY 10000" or "ANYTOWN CA 11111". */
+const CITY_STATE_ZIP_RE =
+  /^[A-Za-z][A-Za-z.'\-\s]{1,30},?\s+[A-Z]{2}[\-\s]?\d{5}(?:-\d{4})?$/;
+
+/** A bare phone-number line, e.g. "(555) 555-5555" — commonly the 3rd
+ *  address line; appended when immediately following a matched address. */
+const PHONE_LINE_RE = /^\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}$/;
+
+/** Does this line look like a piece of a furnisher's mailing address
+ *  (street line OR city/state/zip line)? Used to scan prevLines/block
+ *  start for address fragments near the creditor name. */
+function looksLikeAddressLine(line: string | undefined): boolean {
+  if (!line) return false;
+  const s = line.trim();
+  if (s.length < 5 || s.length > 60) return false;
+  return STREET_LINE_RE.test(s) || CITY_STATE_ZIP_RE.test(s);
+}
+
+/** Furnisher (creditor) address: labeled "Address:" field first, then a
+ *  positional scan of the lines immediately around the creditor name
+ *  (prevLines tail, or the block's own early lines) for a street-line +
+ *  optional city/state/zip line + optional phone line, joined into one
+ *  human-readable address string. Returns undefined when nothing
+ *  plausible is found — never guesses from unrelated text. */
+function extractAddress(
+  block: string,
+  ctx: { prevLines: string[]; anchored: boolean },
+): string | undefined {
+  // 1. Labeled field (rare in these formats, but cheap to check first).
+  const labeledHit = labeled(block, String.raw`(?:Address|Furnisher\s*Address)`, 60);
+  if (labeledHit && looksLikeAddressLine(labeledHit.raw)) return labeledHit.raw;
+
+  // 2. Scan prevLines (nearest-to-block-start first) for a street line,
+  //    then greedily append a following city/state/zip and/or phone line.
+  const candidates: string[] = [...ctx.prevLines, ...block.split("\n").slice(0, 4)];
+  for (let i = 0; i < candidates.length; i++) {
+    const line = candidates[i]?.trim();
+    if (line && STREET_LINE_RE.test(line)) {
+      const parts = [line];
+      const next1 = candidates[i + 1]?.trim();
+      if (next1 && (CITY_STATE_ZIP_RE.test(next1) || PHONE_LINE_RE.test(next1))) {
+        parts.push(next1);
+        const next2 = candidates[i + 2]?.trim();
+        if (next2 && PHONE_LINE_RE.test(next2) && !PHONE_LINE_RE.test(next1)) {
+          parts.push(next2);
+        }
+      }
+      return parts.join(", ");
+    }
+  }
+  return undefined;
 }
 
 // ------------------------------------------------------------
@@ -818,6 +949,7 @@ export function parseAccountBlock(
 ): StandardAccount {
   const ctx = { prevLines, anchored };
   const creditor = extractCreditor(block, bureau, ctx);
+  const furnisherAddress = extractAddress(block, ctx);
   const accountNumber = extractAccountNumber(block, bureau);
   const balance = extractBalance(block, bureau);
   const status = extractStatus(block, bureau);
@@ -883,6 +1015,7 @@ export function parseAccountBlock(
 
   return {
     creditor: creditorText,
+    furnisherAddress: furnisherAddress || undefined,
     accountNumber: accountNumberText,
     balance: balanceText || "Unknown",
     status: statusText || "Unknown",
