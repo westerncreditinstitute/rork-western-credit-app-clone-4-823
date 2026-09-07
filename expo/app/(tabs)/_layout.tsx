@@ -13,6 +13,7 @@ export default function TabLayout() {
 
   return (
     <Tabs
+      initialRouteName="index"
       tabBar={(props) => <FloatingTabBar {...props} />}
       screenOptions={{
         headerShown: true,
