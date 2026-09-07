@@ -2,6 +2,12 @@ import React, { useRef, useCallback, useState } from 'react';
 import { View, StyleSheet, Platform, Text, TouchableOpacity } from 'react-native';
 import { Upload, CheckCircle, AlertCircle } from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import {
+  parseCreditReport,
+  toCompatAccounts,
+  htmlToText,
+  type ParsedCreditReport,
+} from '@/lib/credit-report-parser';
 
 let WebView: any = null;
 if (Platform.OS !== 'web') {
@@ -728,35 +734,25 @@ function WebCreditReportParser({
     }
   }, []);
 
-  const detectCreditBureau = useCallback((text: string): string => {
-    const lowerText = text.toLowerCase();
-    
-    if (lowerText.includes('equifax') && !lowerText.includes('experian') && !lowerText.includes('transunion')) {
-      return 'equifax';
-    } else if (lowerText.includes('experian') && !lowerText.includes('equifax') && !lowerText.includes('transunion')) {
-      return 'experian';
-    } else if (lowerText.includes('transunion') && !lowerText.includes('equifax') && !lowerText.includes('experian')) {
-      return 'transunion';
-    }
-    
-    return 'generic';
-  }, []);
-
-  const determineNegativeType = useCallback((status: string, section: string): string => {
-    const lowerStatus = (status || '').toLowerCase();
-    const lowerSection = section.toLowerCase();
-    
-    if (lowerStatus.includes('collection') || lowerSection.includes('collection')) return 'Collection Account';
-    if (lowerStatus.includes('charge') || lowerSection.includes('charge-off') || lowerSection.includes('charged off')) return 'Charge-off';
-    if (lowerStatus.includes('late') || lowerStatus.includes('past due') || lowerSection.includes('late payment')) return 'Late Payments';
-    if (lowerStatus.includes('foreclosure') || lowerSection.includes('foreclosure')) return 'Foreclosure';
-    if (lowerStatus.includes('repossession') || lowerSection.includes('repossession')) return 'Repossession';
-    if (lowerStatus.includes('bankruptcy') || lowerSection.includes('bankruptcy')) return 'Bankruptcy';
-    
-    return 'Derogatory Status';
-  }, []);
-
+  // The old regex-only "generic" splitter. Kept ONLY as the last-resort
+  // fallback when the new engine returns zero accounts for a non-empty
+  // file — better to surface raw guesses (flagged as low-confidence by
+  // the engine's reportFlags) than to show nothing.
   const parseGenericAccounts = useCallback((text: string): ParsedAccount[] => {
+    // Local negative classifier (same vocabulary as the engine + backend
+    // NEGATIVE_TYPE_STRATEGY keys) — fallback path only.
+    const determineNegativeType = (status: string, section: string): string => {
+      const lowerStatus = (status || '').toLowerCase();
+      const lowerSection = section.toLowerCase();
+      if (lowerStatus.includes('collection') || lowerSection.includes('collection')) return 'Collection Account';
+      if (lowerStatus.includes('charge') || lowerSection.includes('charge-off') || lowerSection.includes('charged off')) return 'Charge-off';
+      if (lowerStatus.includes('late') || lowerStatus.includes('past due') || lowerSection.includes('late payment')) return 'Late Payments';
+      if (lowerStatus.includes('foreclosure') || lowerSection.includes('foreclosure')) return 'Foreclosure';
+      if (lowerStatus.includes('repossession') || lowerSection.includes('repossession')) return 'Repossession';
+      if (lowerStatus.includes('bankruptcy') || lowerSection.includes('bankruptcy')) return 'Bankruptcy';
+      return 'Derogatory Status';
+    };
+
     const accounts: ParsedAccount[] = [];
     const negativeKeywords = [
       'potentially negative', 'negative items', 'adverse accounts', 
@@ -819,7 +815,7 @@ function WebCreditReportParser({
     }
     
     return uniqueAccounts;
-  }, [determineNegativeType]);
+  }, []);
 
   const handleParse = useCallback(async () => {
     if (!selectedFile) return;
@@ -829,66 +825,118 @@ function WebCreditReportParser({
     onLoadingChange(true);
     
     try {
-      setStatusText('Loading PDF.js library...');
-      setProgress(10);
-      
-      const pdfjsLib = await import('pdfjs-dist');
-      // The worker version must exactly match the installed pdfjs-dist version, or
-      // pdf.js fails with: The API version "X" does not match the Worker version "Y".
-      // Deriving the URL from pdfjsLib.version keeps them in sync automatically
-      // (jsdelivr serves the exact npm build for any released version).
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
-      
-      setStatusText('Reading PDF file...');
-      setProgress(20);
-      
-      const arrayBuffer = await selectedFile.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      
-      setStatusText(`Extracting text from ${pdf.numPages} pages...`);
-      setProgress(30);
+      const fileName = selectedFile.name.toLowerCase();
+      const isPdf = fileName.endsWith('.pdf') || selectedFile.type === 'application/pdf';
+      const isHtml = /\.(html?|xhtml)$/i.test(fileName) || /text\/html/i.test(selectedFile.type);
       
       let fullText = '';
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const textContent = await page.getTextContent();
-        const pageText = textContent.items.map((item: any) => item.str).join(' ');
-        fullText += pageText + ' ';
+      let sourceFormat: 'pdf' | 'html' | 'text' = 'text';
+      
+      if (isPdf) {
+        setStatusText('Loading PDF.js library...');
+        setProgress(10);
         
-        const progressValue = 30 + (i / pdf.numPages * 40);
-        setProgress(progressValue);
-        setStatusText(`Extracting page ${i} of ${pdf.numPages}...`);
+        const pdfjsLib = await import('pdfjs-dist');
+        // The worker version must exactly match the installed pdfjs-dist version, or
+        // pdf.js fails with: The API version "X" does not match the Worker version "Y".
+        // Deriving the URL from pdfjsLib.version keeps them in sync automatically
+        // (jsdelivr serves the exact npm build for any released version).
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+        
+        setStatusText('Reading PDF file...');
+        setProgress(20);
+        
+        const arrayBuffer = await selectedFile.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        
+        setStatusText(`Extracting text from ${pdf.numPages} pages...`);
+        setProgress(30);
+        
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const textContent = await page.getTextContent();
+          const pageText = textContent.items.map((item: any) => item.str).join(' ');
+          fullText += pageText + ' ';
+          
+          const progressValue = 30 + (i / pdf.numPages * 40);
+          setProgress(progressValue);
+          setStatusText(`Extracting page ${i} of ${pdf.numPages}...`);
+        }
+        sourceFormat = 'pdf';
+      } else if (isHtml) {
+        setStatusText('Reading HTML file...');
+        setProgress(30);
+        const rawHtml = await selectedFile.text();
+        fullText = htmlToText(rawHtml);
+        sourceFormat = 'html';
+        setProgress(70);
+      } else {
+        // Plain text (.txt) — and anything unrecognized as PDF/HTML is
+        // treated as text too; the engine flags unknown formats in
+        // reportFlags instead of failing hard.
+        setStatusText('Reading text file...');
+        setProgress(30);
+        fullText = await selectedFile.text();
+        sourceFormat = 'text';
+        setProgress(70);
       }
       
       setStatusText('Analyzing credit report...');
       setProgress(80);
       
-      let detectedBureau = selectedBureau;
-      if (selectedBureau === 'auto') {
-        detectedBureau = detectCreditBureau(fullText);
+      // New engine: weighted bureau detection, combined-report splitting,
+      // per-bureau labeled-field parsing, normalization, confidence +
+      // flags. See lib/credit-report-parser/.
+      const report: ParsedCreditReport = parseCreditReport(fullText, {
+        userBureau: selectedBureau,
+        sourceFormat,
+      });
+      
+      let accounts: ParsedAccount[] = toCompatAccounts(report.accounts);
+      let detectedBureau: string;
+      
+      if (report.bureaus.length > 1) {
+        detectedBureau = 'Combined (3-Bureau)';
+      } else {
+        detectedBureau = report.bureau === 'unknown' ? 'generic' : report.bureau;
       }
       
-      setStatusText(`Parsing ${detectedBureau.charAt(0).toUpperCase() + detectedBureau.slice(1)} report...`);
+      // Last-resort fallback: keep the old generic splitter alive only when
+      // the new engine found nothing at all in a non-empty file.
+      if (accounts.length === 0 && fullText.trim().length > 0) {
+        accounts = parseGenericAccounts(fullText);
+        if (accounts.length > 0) {
+          detectedBureau = detectedBureau === 'generic' ? 'generic' : detectedBureau;
+        }
+      }
       
-      const accounts = parseGenericAccounts(fullText);
+      const negativeCount = accounts.filter(a => a.negativeType).length;
+      const warningText = report.warnings.length > 0
+        ? report.warnings[0]
+        : '';
       
       setProgress(100);
-      setStatusText(`Found ${accounts.length} potentially negative accounts`);
+      setStatusText(`Found ${accounts.length} accounts (${negativeCount} negative)`);
       
       setTimeout(() => {
         setIsLoading(false);
         onLoadingChange(false);
         onAccountsParsed(accounts, detectedBureau);
+        if (warningText) {
+          // Surface the first engine warning so the user knows when data
+          // quality was questionable — never silently swallowed.
+          console.warn('[CreditReportParser]', report.warnings.join(' | '));
+        }
       }, 500);
       
     } catch (error: any) {
       console.error('Parse error:', error);
       setIsLoading(false);
-      setErrorMessage('Error parsing PDF: ' + error.message);
+      setErrorMessage('Error parsing file: ' + error.message);
       onLoadingChange(false);
       onError(error.message);
     }
-  }, [selectedFile, selectedBureau, onAccountsParsed, onError, onLoadingChange, detectCreditBureau, parseGenericAccounts]);
+  }, [selectedFile, selectedBureau, onAccountsParsed, onError, onLoadingChange, parseGenericAccounts]);
 
   return (
     <View style={webStyles.container}>
@@ -927,15 +975,15 @@ function WebCreditReportParser({
           <Upload color={Colors.primary} size={48} />
         )}
         <Text style={webStyles.fileName}>
-          {selectedFile ? selectedFile.name : 'Tap to select credit report PDF'}
+          {selectedFile ? selectedFile.name : 'Tap to select credit report'}
         </Text>
-        <Text style={webStyles.fileHint}>Supports PDF format</Text>
+        <Text style={webStyles.fileHint}>Supports PDF, HTML & plain text</Text>
       </TouchableOpacity>
       
       <input
         ref={fileInputRef}
         type="file"
-        accept=".pdf"
+        accept=".pdf,.html,.htm,.txt"
         onChange={handleFileSelect}
         style={{ display: 'none' }}
       />
