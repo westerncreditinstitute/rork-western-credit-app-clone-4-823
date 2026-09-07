@@ -923,9 +923,20 @@ async function callAIBackend(params: {
   // Build the full message array with system prompt
   const systemMessage = `${AGENT_SYSTEM_PROMPT}\n\nYour name is ${params.agentName}. ${params.agentBio}\n\nYou are speaking with a user who is enrolled in the ACE-1 credit repair course. Be their personal guide.`;
 
+  // Cap each history message so an entire credit-report analysis in an old
+  // chat message can't balloon every future request toward the token-per-
+  // minute limit. ~4,000 chars ≈ 1,000 tokens; 10 history messages ≈ 10k tokens.
+  const MAX_HISTORY_MESSAGE_CHARS = 4_000;
   const fullMessages = [
     { role: "system", content: systemMessage },
-    ...params.messages,
+    ...params.messages.map((m) => ({
+      role: m.role,
+      content:
+        m.content.length > MAX_HISTORY_MESSAGE_CHARS
+          ? m.content.slice(0, MAX_HISTORY_MESSAGE_CHARS) +
+            "\n…[start of this message was trimmed to save space]"
+          : m.content,
+    })),
   ];
 
   // Define tools for function calling
@@ -1002,27 +1013,84 @@ async function callAIBackend(params: {
   }
 
   try {
-    const response = await fetch(`${baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        messages: fullMessages,
-        tools,
-        tool_choice: "auto",
-        max_tokens: 800,
-        temperature: 0.7,
-      }),
-    });
+    // ── OpenAI call with automatic retry for temporary rate limits ──
+    // A 429 has two very different causes, and we must not treat them alike:
+    //   • "You exceeded your current quota"  → key is out of credit; retrying
+    //     is pointless until billing is topped up, so we bail out immediately.
+    //   • "Rate limit reached for requests"   → temporary; waiting and retrying
+    //     (1.5s → 4s → 9s) almost always succeeds on the second attempt.
+    const RETRYABLE_STATUS = 429;
+    const RETRY_DELAYS_MS = [1500, 4000, 9000];
+    let lastStatus = 0;
+    let lastErrBody = "";
+
+    let response: Response;
+    let attempt = 0;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      response = await fetch(`${baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages: fullMessages,
+          tools,
+          tool_choice: "auto",
+          max_tokens: 800,
+          temperature: 0.7,
+        }),
+      });
+
+      if (response.ok) break; // success — done retrying
+
+      lastStatus = response.status;
+      lastErrBody = await response.text();
+      console.error(
+        "[AI Agents] OpenAI API error:",
+        response.status,
+        lastErrBody
+      );
+
+      // Only 429 with a temporary rate-limit cause is worth retrying.
+      const isTempRateLimit =
+        response.status === RETRYABLE_STATUS &&
+        /rate limit|requests per (minute|second)|too many requests/i.test(
+          lastErrBody
+        );
+      if (!isTempRateLimit || attempt >= RETRY_DELAYS_MS.length) break;
+
+      const delay = RETRY_DELAYS_MS[attempt];
+      attempt += 1;
+      console.warn(
+        `[AI Agents] Temporary rate limit hit — retrying in ${delay}ms (attempt ${attempt}/${RETRY_DELAYS_MS.length})`
+      );
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
 
     if (!response.ok) {
-      const errText = await response.text();
-      console.error("[AI Agents] OpenAI API error:", response.status, errText);
+      // Translate the failure into plain English for the chat bubble so the
+      // user knows WHICH kind of problem it is and what to do about it.
+      let friendly =
+        `I'm having trouble connecting to my AI backend right now. Please try again in a moment. (Error: ${lastStatus})`;
+      if (lastStatus === 429 && /quota|billing/i.test(lastErrBody)) {
+        friendly =
+          "I'm paused because the OpenAI account is out of credit (429). " +
+          "Sign in at platform.openai.com → Billing → add at least $5 of credit, " +
+          "then wait a minute or two and send your message again. Your account and chat history are safe.";
+      } else if (lastStatus === 429) {
+        friendly =
+          "The AI service is rate-limited right now (429) — that's temporary. " +
+          "Wait about 60 seconds and send your message again; I automatically retried a few times before showing this.";
+      } else if (lastStatus === 401) {
+        friendly =
+          "My OpenAI API key was rejected (401). Please re-run the key setup " +
+          "(bash scripts/setup-env.sh) and restart the backend window.";
+      }
       return {
-        response: `I'm having trouble connecting to my AI backend right now. Please try again in a moment. (Error: ${response.status})`,
+        response: friendly,
         toolCalls: [],
       };
     }
@@ -1379,14 +1447,17 @@ export const aiAgentsRouter = createTRPCRouter({
         userId: z.string(),
         agentId: z.number(),
         message: z.string().min(1).max(2000),
-        // Previous messages for context (the frontend sends recent history)
+        // Previous messages for context (the frontend sends recent history).
+        // Server-side cap of 4,000 chars/message is applied inside
+        // callAIBackend, so long tool outputs can't trigger token limits.
         history: z
           .array(
             z.object({
               role: z.enum(["user", "assistant"]),
-              content: z.string(),
+              content: z.string().max(6000),
             })
           )
+          .max(30)
           .optional()
           .default([]),
       })
