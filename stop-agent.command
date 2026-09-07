@@ -29,6 +29,7 @@ pkill -f "npx expo" 2>/dev/null || true
 # Stop Backend
 echo "Stopping Backend server..."
 pkill -f "npm run backend" 2>/dev/null || true
+pkill -f "tsx scripts/serve-backend.ts" 2>/dev/null || true
 
 # Kill any node processes from this app
 echo "Cleaning up remaining processes..."
