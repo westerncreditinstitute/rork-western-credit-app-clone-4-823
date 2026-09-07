@@ -33,20 +33,27 @@ echo "╚═══════════════════════�
 echo -e "${NC}"
 echo ""
 
-# Check if .env exists
-if [ ! -f "$SCRIPT_DIR/expo/.env.local" ]; then
-    echo -e "${RED}❌ .env.local file not found!${NC}"
+# IMPORTANT: the local Node backend (scripts/bootstrap.ts) only loads
+# "expo/.env" — it does NOT read ".env.local". Expo/Metro reads both, so a
+# .env.local-only setup can look fine in the app while the backend silently
+# runs in demo mode (or, before this fix, never started at all). We check
+# for .env here, not .env.local.
+if [ ! -f "$SCRIPT_DIR/expo/.env" ]; then
+    echo -e "${RED}❌ .env file not found!${NC}"
     echo ""
-    echo "Setting up environment variables..."
+    echo "Setting up minimal environment variables..."
     echo ""
-    
-    # Create it manually
+
     mkdir -p "$SCRIPT_DIR/expo"
-    cat > "$SCRIPT_DIR/expo/.env.local" << 'EOF'
+    cat > "$SCRIPT_DIR/expo/.env" << 'EOF'
 EXPO_PUBLIC_SUPABASE_URL=https://ifjihaieakahqcoctmzn.supabase.co
 EXPO_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlmamloYWllYWthaHFjb2N0bXpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgyNTkzODYsImV4cCI6MjA4MzgzNTM4Nn0.CyShNzA0cVZ400qkOooYEjCYdsUNAe9vVTF11qFqU-U
+EXPO_PUBLIC_RORK_API_BASE_URL=http://localhost:3000
 EOF
-    echo -e "${GREEN}✅ .env.local created successfully!${NC}"
+    echo -e "${GREEN}✅ .env created with minimal (anon-only) config.${NC}"
+    echo -e "${YELLOW}   No SUPABASE_SERVICE_ROLE_KEY / OPENAI_API_KEY set — the${NC}"
+    echo -e "${YELLOW}   backend will run in demo mode until you run:${NC}"
+    echo -e "${YELLOW}     bash $SCRIPT_DIR/expo/scripts/setup-env.sh${NC}"
     echo ""
 fi
 
@@ -64,7 +71,28 @@ echo -e "${BLUE}📦 Starting Backend Server on port 3000...${NC}"
 echo "   This server handles AI Agent calls and system status."
 echo ""
 
-cd "$SCRIPT_DIR"
+# IMPORTANT: package.json (and the "backend" script) lives inside expo/,
+# not the repo root. Running "npm run backend" from $SCRIPT_DIR fails
+# instantly with ENOENT ("Could not read package.json"), which is why the
+# backend never actually started even though a PID was printed.
+cd "$SCRIPT_DIR/expo"
+
+# Make sure the backend tooling (tsx, @hono/node-server, ws, dotenv) is
+# installed. If someone only ran `npm install` (without --legacy-peer-deps)
+# or skipped scripts/setup-env.sh, these dev deps may be missing.
+if [ ! -d "node_modules/tsx" ] || [ ! -d "node_modules/@hono/node-server" ]; then
+    echo -e "${YELLOW}📥 Installing backend tooling (first run only)...${NC}"
+    npm install --legacy-peer-deps --save-dev @hono/node-server tsx ws @types/ws dotenv > "$SCRIPT_DIR/install.log" 2>&1
+    echo -e "${GREEN}✅ Backend tooling installed.${NC}"
+    echo ""
+fi
+
+# .env (not .env.local) is what scripts/serve-backend.ts and the app read.
+if [ ! -f "$SCRIPT_DIR/expo/.env" ]; then
+    echo -e "${RED}❌ .env file not found in expo/!${NC}"
+    echo "   Run: bash $SCRIPT_DIR/expo/scripts/setup-env.sh"
+    echo ""
+fi
 
 # Start backend in background
 npm run backend > "$SCRIPT_DIR/backend.log" 2>&1 &
