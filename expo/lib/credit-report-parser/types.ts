@@ -105,7 +105,8 @@ export type AccountFlag =
   | "masked-id-unknown" // no account number/identifier found at all
   | "possible-duplicate" // same creditor+number appeared twice
   | "section-overlap" // fields bled in from a neighboring section
-  | "partial-corruption"; // control chars / mojibake seen in the block
+  | "partial-corruption" // control chars / mojibake seen in the block
+  | "ambiguous-negative"; // clean status contradicts derogatory details — left unmarked, needs review
 
 /** A hard-inquiry row. */
 export interface ParsedInquiry {

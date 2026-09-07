@@ -361,6 +361,19 @@ export function parseCreditReport(
 
   const primary: Bureau =
     bureauList.length > 0 ? bureauList[0] : ("unknown" as Bureau);
+  // Conflicting negative evidence: clean status vs. derogatory
+  // details. Precision-first classifier leaves these unmarked —
+  // surface them so the user reviews instead of trusting a guess.
+  const ambiguousCount = accounts.filter((a) =>
+    a.flags.includes("ambiguous-negative"),
+  ).length;
+  if (ambiguousCount > 0) {
+    warnings.push(
+      `${ambiguousCount} account${ambiguousCount > 1 ? "s" : ""} had conflicting status information ` +
+        "(clean status but derogatory details) — left unmarked rather than guessed. Review manually.",
+    );
+  }
+
   const confidence = overallConfidence(accounts, anyAnchored);
   if (accounts.length > 0 && confidence < 45) {
     reportFlags.push("low-overall-confidence");

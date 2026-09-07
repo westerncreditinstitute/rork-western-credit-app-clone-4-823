@@ -147,11 +147,51 @@ text slice after an anchored split — recovered via a 3-line look-behind
 
 ---
 
-## 5. Negative-type vocabulary (do not rename)
+## 5. Negative-type classification — precision-first (v2)
 
-`classifyNegative()` maps matched keywords to these semantic types, which
-**exactly match the backend `NEGATIVE_TYPE_STRATEGY` keys** used by
-`analyzeCreditAccounts` (recommendation engine) and the AI chat tool:
+`classifyNegative()` implements a **precision-first doctrine**: an account
+is marked negative ONLY on *authoritative* evidence — the account's own
+labeled fields and payment grid. This guarantees no false positives, which
+matter most (a wrongly-disputed good account can damage a client's case).
+
+**Authoritative evidence sources (in priority order):**
+
+1. **Account Type field** — the tradeline's nature
+   (`Account Type: Collection`, `Account Type & Number: Collection ****8888`).
+   Definitive: survives "Paid"/"Current" statuses (a paid collection is
+   still a Collection Account) — but NOT an explicit never-late status.
+2. **Status field** — the account's own current status
+   (`Status`, `Pay Status`, `Account Condition`, `Manner of Payment`,
+   `Payment Status`, or the trailing status column of an Equifax compact row).
+3. **Other labeled values about this account** — Remarks / Comments /
+   `Previously Past Due: N times` history lines (skipped when the block
+   is flagged `section-overlap`, since those lines may belong to a neighbor).
+4. **Payment-history grid marks** — the bureau's month-by-month record
+   (30/60/90/120/150/180 → "Late Payments", `CO` → "Charge-off",
+   `KD` → "Derogatory Status"). Historical lates count even when the
+   account is currently current; the worst mark is recorded as
+   `evidence.worstDelinquency`.
+
+**What can NEVER mark an account negative:**
+
+- Incidental text — a "Collections" section header that bled into the
+  block, educational/boilerplate wording, consumer statements.
+- The creditor's own name ("ACME COLLECTIONS LLC" with `Status: Current`
+  stays clean).
+- Negated phrases — "Never late", "No late payments", "Not delinquent"
+  are stripped before any derogatory test, and a never-late **status**
+  vetoes every other source.
+
+**Contradictions are flagged, never guessed.** When the status says
+"Never late" but the account type or grid says collection/derogatory,
+the account is left unmarked with the `ambiguous-negative` flag, the
+conflict reason is stored in `evidence.matchedKeywords`, and the report
+gains a warning ("N accounts had conflicting status information…").
+Manual review beats a wrong guess.
+
+**Vocabulary (do not rename)** — output types exactly match the backend
+`NEGATIVE_TYPE_STRATEGY` keys used by `analyzeCreditAccounts`
+(recommendation engine) and the AI chat tool:
 
 ```
 "Collection Account" | "Charge-off" | "Late Payments" | "Foreclosure" |
@@ -160,6 +200,16 @@ text slice after an anchored split — recovered via a 3-line look-behind
 
 Renaming any of these requires migrating the backend strategy map **and**
 existing `credit_report_analyses` DB rows — don't.
+
+**History:** this doctrine replaced the original whole-block keyword
+classifier, which produced the reported false positive where an
+original-creditor account with status "Open/Never late" was tagged as a
+Collection Account because the word "collection" appeared in a
+neighboring "Collections" section header. The old classifier's
+`/late/i` block test could also match the word "late" inside the
+status value itself. Regression coverage lives in
+`diag-tools/test-credit-parser.mjs` §4b (18 checks) and
+`diag-tools/test-demo-precision.mjs` (11 checks, native WebView path).
 
 ---
 

@@ -6,6 +6,7 @@ import {
   parseCreditReport,
   toCompatAccounts,
   htmlToText,
+  classifyNegative,
   type ParsedCreditReport,
 } from '@/lib/credit-report-parser';
 
@@ -479,7 +480,7 @@ const PARSER_HTML = `
             
             return {
                 creditor, accountNumber, balance, status, openDate, lastReported,
-                negativeType: determineNegativeType(status, section)
+                negativeType: determineNegativeType(status, section) || undefined
             };
         }
         
@@ -532,7 +533,7 @@ const PARSER_HTML = `
             
             return {
                 creditor, accountNumber, balance, status, openDate, lastReported,
-                negativeType: determineNegativeType(status, section)
+                negativeType: determineNegativeType(status, section) || undefined
             };
         }
         
@@ -585,7 +586,7 @@ const PARSER_HTML = `
             
             return {
                 creditor, accountNumber, balance, status, openDate, lastReported,
-                negativeType: determineNegativeType(status, section)
+                negativeType: determineNegativeType(status, section) || undefined
             };
         }
         
@@ -642,7 +643,7 @@ const PARSER_HTML = `
             
             return {
                 creditor, accountNumber, balance, status: status || 'Unknown', openDate, lastReported,
-                negativeType: determineNegativeType(status, section)
+                negativeType: determineNegativeType(status, section) || undefined
             };
         }
         
@@ -661,35 +662,78 @@ const PARSER_HTML = `
             return null;
         }
         
+        // Status from AUTHORITATIVE lines only — the whole-section word
+        // scan previously matched incidental "Collections" headers and
+        // "never late" remarks, producing false "Collection"/"Past Due".
         function extractStatus(text) {
-            const lowerText = text.toLowerCase();
-            
-            if (lowerText.includes('collection')) return 'Collection';
-            if (lowerText.includes('charge') && lowerText.includes('off')) return 'Charged Off';
-            if (lowerText.includes('past due') || lowerText.includes('late')) {
-                const daysMatch = text.match(/(\\d+)\\s*days?\\s*(?:past\\s*due|late)/i);
-                return daysMatch ? daysMatch[1] + ' Days Late' : 'Past Due';
+            var lines = (text || '').split(/\n/);
+            var labels = /^(pay\s*status|paystatus|account\s*condition|account\s*status|payment\s*status|manner\s+of\s+payment|status)\s*(?:[:\t]|\s{2,})\s*(.+)$/i;
+            for (var i = 0; i < lines.length; i++) {
+                var m = lines[i].trim().match(labels);
+                if (!m) continue;
+                var value = m[2].trim();
+                if (!value) continue;
+                var days = value.match(/(\d+)\s*days?\s*(?:past\s*due|late)/i);
+                if (days) return days[1] + ' Days Late';
+                return value;
             }
-            if (lowerText.includes('settled')) return 'Settled';
-            if (lowerText.includes('foreclosure')) return 'Foreclosure';
-            if (lowerText.includes('repossession')) return 'Repossession';
-            if (lowerText.includes('bankruptcy')) return 'Bankruptcy';
-            
+            var daysOnly = (text || '').match(/\b(\d+)\s*days?\s*(?:past\s*due|late)\b/i);
+            if (daysOnly) return daysOnly[1] + ' Days Late';
             return null;
         }
         
+        // PRECISION-FIRST negative classification: an account is negative
+        // ONLY on authoritative evidence (its own labeled status / account
+        // type / remarks / "previously past due" lines). Incidental text
+        // (section headers like "Collections", creditor names like
+        // "...Collections LLC", boilerplate) can NEVER mark an account
+        // negative, and negated wording ("never late", "no late payments")
+        // is stripped first. Returns null for clean accounts.
         function determineNegativeType(status, section) {
-            const lowerStatus = (status || '').toLowerCase();
-            const lowerSection = section.toLowerCase();
-            
-            if (lowerStatus.includes('collection') || lowerSection.includes('collection')) return 'Collection Account';
-            if (lowerStatus.includes('charge') || lowerSection.includes('charge-off') || lowerSection.includes('charged off')) return 'Charge-off';
-            if (lowerStatus.includes('late') || lowerStatus.includes('past due') || lowerSection.includes('late payment')) return 'Late Payments';
-            if (lowerStatus.includes('foreclosure') || lowerSection.includes('foreclosure')) return 'Foreclosure';
-            if (lowerStatus.includes('repossession') || lowerSection.includes('repossession')) return 'Repossession';
-            if (lowerStatus.includes('bankruptcy') || lowerSection.includes('bankruptcy')) return 'Bankruptcy';
-            
-            return 'Derogatory Status';
+            var stripNeg = function (s) {
+                return s.replace(/\b(?:never|no|not|n['’]t|without)\b(?:\s+(?:any|been|had|have|has|history|of|in|on|currently|reporting|showing|known))*\s+(?:late|delinquen\w*|past\s*due|missed\s+payments?|derogator\w*|adverse|negatives?|collections?|charge[\s-]?offs?|foreclosures?|repossessions?|bankruptc\w*|liens?|judg?ments?|public\s+records?)\b/gi, ' ');
+            };
+            var hardClean = /\b(?:never|no|not|n['’]t|without)\b(?:\s+(?:any|been|had|have|has|history|of|in|on|currently|reporting|showing|known))*\s+(?:late|delinquen\w*|past\s*due|missed\s+payments?|derogator\w*|adverse|negatives?|collections?)/i.test(status || '');
+            var testDerog = function (v) {
+                v = stripNeg(v);
+                if (!v.trim()) return null;
+                if (/collection|placed\s+for\s+collection|assigned\s+to\s+(?:a\s+)?(?:collection|agency)|sold\s+to\s+(?:a\s+)?(?:third|3rd)[\s-]party|transfer(?:red)?\s+(?:to|into)?\s*collection/i.test(v)) return 'Collection Account';
+                if (/charg?e[d]?\s*[- ]?off|charge[\s-]?offs?\b|written\s+off|write[\s-]?offs?\b|bad\s+debt/i.test(v)) return 'Charge-off';
+                if (/past\s*due|delinquen\w*|late\s+payments?|(?:30|60|90|120|150|180)\+?\s*days?\s*(?:past|late)/i.test(v)) return 'Late Payments';
+                if (/foreclos/i.test(v)) return 'Foreclosure';
+                if (/repossess/i.test(v)) return 'Repossession';
+                if (/bankrupt/i.test(v)) return 'Bankruptcy';
+                if (/settled\s+for\s+less|in\s+default|defaulted|voluntary\s+surrender|forfeit|unpaid\s+balance/i.test(v)) return 'Derogatory Status';
+                return null;
+            };
+
+            var statusHit = testDerog(status || '');
+            if (statusHit) return statusHit;
+
+            // Authoritative labeled lines about THIS account (status /
+            // pay status / account type / remarks / previously past due).
+            var lines = (section || '').split(/\n/);
+            var labels = /^(pay\s*status|paystatus|account\s*condition|account\s*status|payment\s*status|manner\s+of\s+payment|status\s+payments?|status|account\s+type(?:\s*(?:&|and|\/)\s*(?:number|pay\s*status))?|type|remarks?|comments?|narrative|previously\s+past\s+due)\s*(?:[:\t]|\s{2,})\s*(.+)$/i;
+            for (var i = 0; i < lines.length; i++) {
+                var m = lines[i].trim().match(labels);
+                if (!m) continue;
+                var label = m[1].toLowerCase();
+                var value = m[2];
+                if (/^previously\s+past\s+due$/.test(label)) {
+                    if (/[1-9]/.test(value)) return 'Late Payments';
+                    continue;
+                }
+                if (label === 'status' || label === 'pay status' || label === 'paystatus' ||
+                    label === 'account condition' || label === 'account status' ||
+                    label === 'payment status' || label === 'manner of payment' ||
+                    label === 'status payments' || label === 'status') continue;
+                var hit = testDerog(value);
+                if (hit) {
+                    if (hardClean) return null; // contradiction → unmarked
+                    return hit;
+                }
+            }
+            return null;
         }
         
         function removeDuplicateAccounts(accounts) {
@@ -739,18 +783,14 @@ function WebCreditReportParser({
   // file — better to surface raw guesses (flagged as low-confidence by
   // the engine's reportFlags) than to show nothing.
   const parseGenericAccounts = useCallback((text: string): ParsedAccount[] => {
-    // Local negative classifier (same vocabulary as the engine + backend
-    // NEGATIVE_TYPE_STRATEGY keys) — fallback path only.
-    const determineNegativeType = (status: string, section: string): string => {
-      const lowerStatus = (status || '').toLowerCase();
-      const lowerSection = section.toLowerCase();
-      if (lowerStatus.includes('collection') || lowerSection.includes('collection')) return 'Collection Account';
-      if (lowerStatus.includes('charge') || lowerSection.includes('charge-off') || lowerSection.includes('charged off')) return 'Charge-off';
-      if (lowerStatus.includes('late') || lowerStatus.includes('past due') || lowerSection.includes('late payment')) return 'Late Payments';
-      if (lowerStatus.includes('foreclosure') || lowerSection.includes('foreclosure')) return 'Foreclosure';
-      if (lowerStatus.includes('repossession') || lowerSection.includes('repossession')) return 'Repossession';
-      if (lowerStatus.includes('bankruptcy') || lowerSection.includes('bankruptcy')) return 'Bankruptcy';
-      return 'Derogatory Status';
+    // Precision-first negative classification — same engine logic as
+    // lib/credit-report-parser (classifyNegative). An account is
+    // negative ONLY on authoritative evidence (its own status/type/
+    // remarks/payment grid); incidental text and negated phrases like
+    // "Never late" can never mark it negative. Fallback path only.
+    const determineNegativeType = (status: string, section: string): string | undefined => {
+      const res = classifyNegative(status, section);
+      return res.isNegative ? res.negativeType : undefined;
     };
 
     const accounts: ParsedAccount[] = [];

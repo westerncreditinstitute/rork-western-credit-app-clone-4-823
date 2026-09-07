@@ -77,10 +77,20 @@ function anchorSources(): string[] {
 const SECTION_BREAK =
   /^(?:[^\w]*)(?:inquiries?|requests?\s+viewed|viewed\s+your\s+credit|credit\s+inquiries|hard\s+inquiries?|public\s+records?|collections?\s+section|potentially\s+negative|negative\s+items?|personal\s+information|credit\s+score|fico|employment\s+information|consumer\s+statement)/i;
 
-/** Truncate a block at the first line that starts a new major section. */
+/** A line that is ONLY a section-header word ("Collections",
+ *  "Public Records", "Trade Lines") — no digits, no data. Distinct
+ *  from SECTION_BREAK so Equifax compact rows legitimately ending in
+ *  the word "Collection" (the status column) are never truncated. */
+const BARE_HEADER_RE =
+  /^(?:collections?|public\s+records?|inquiries?|trade\s*lines?|accounts?)$/i;
+
+/** Truncate a block at the first line that starts a new major section
+ *  or is a bare section-header word. */
 function truncateAtSectionBreak(block: string): string {
   const lines = block.split("\n");
-  const idx = lines.findIndex((l) => SECTION_BREAK.test(l.trim()));
+  const idx = lines.findIndex(
+    (l) => SECTION_BREAK.test(l.trim()) || BARE_HEADER_RE.test(l.trim()),
+  );
   if (idx === -1) return block;
   return lines.slice(0, Math.max(0, idx)).join("\n");
 }
@@ -486,56 +496,269 @@ function monthFromName(name: string): string | null {
 // Negative-type classification (BACKWARD-COMPATIBLE vocabulary)
 // ------------------------------------------------------------
 
-/** Same outputs as the old determineNegativeType — the backend strategy
- *  table (NEGATIVE_TYPE_STRATEGY) keys on these exact strings. */
+// ------------------------------------------------------------
+// Negative-type classification — PRECISION-FIRST (v2)
+// ------------------------------------------------------------
+// An account is marked negative ONLY on authoritative evidence:
+//   1. the account's own labeled ACCOUNT-TYPE field
+//      ("Account Type: Collection", "Account Type & Number: ...")
+//   2. the account's own STATUS field (Pay Status / Account
+//      Condition / Status / column-row trailing status)
+//   3. other labeled values about THIS account (Remarks / Comments /
+//      "Previously Past Due" history)
+//   4. the account's own payment-history grid marks
+//      (30/60/90/120/150/180, CO, KD)
+//
+// Incidental text can NEVER mark an account negative — section
+// headers ("Collections", "Potentially Negative Accounts"), creditor
+// names ("...Collections LLC"), and educational/boilerplate wording
+// are ignored. This fixes the reported false positive where an
+// original-creditor account with status "Open/Never late" was tagged
+// as a Collection Account because a "Collections" section header
+// bled into its block.
+//
+// NEGATION GUARD: "never late" / "no late payments" / "not
+// delinquent" wording is stripped before any derogatory test, and an
+// explicit never-late STATUS vetoes every other source. When
+// authoritative sources contradict (never-late status vs. derogatory
+// type/remarks/grid), the account is NOT marked negative — a
+// conflict is returned so the caller flags it for manual review.
+//
+// Output vocabulary is unchanged (NEGATIVE_TYPE_STRATEGY keys).
+// ------------------------------------------------------------
+
+/** Negated derogatory phrases — stripped from every tested value so
+ *  "no late payments" can never match "late payments". */
+const NEGATED_RE =
+  /\b(?:never|no|not|n['’]t|without)\b(?:\s+(?:any|been|had|have|has|history|of|in|on|currently|reporting|showing|known))*\s+(?:late|delinquen\w*|past\s*due|missed\s+payments?|derogator\w*|adverse|negatives?|collections?|charge[\s-]?offs?|foreclosures?|repossessions?|bankruptc\w*|liens?|judg?ments?|public\s+records?)\b/gi;
+
+/** Explicit no-derogatory claims in the STATUS field ("Never late",
+ *  "No late payments", "Never delinquent"). Vetoes every other
+ *  source; contradicts derogatory evidence -> conflict, not a guess. */
+const HARD_CLEAN_RE =
+  /\b(?:never|no|not|n['’]t|without)\b(?:\s+(?:any|been|had|have|has|history|of|in|on|currently|reporting|showing|known))*\s+(?:late|delinquen\w*|past\s*due|missed\s+payments?|derogator\w*|adverse|negatives?|collections?)/i;
+
+function stripNegations(s: string): string {
+  return s.replace(NEGATED_RE, " ");
+}
+
+/** Derogatory tests, in priority order. Applied ONLY to
+ *  authoritative values (status/type/remarks/grid) — never to
+ *  whole-block text. */
+const DEROG_TESTS: Array<[NegativeType, RegExp]> = [
+  [
+    "Collection Account",
+    /collection|placed\s+for\s+collection|assigned\s+to\s+(?:a\s+)?(?:collection|agency)|sold\s+to\s+(?:a\s+)?(?:third|3rd)[\s-]party|transfer(?:red)?\s+(?:to|into)?\s*collection/i,
+  ],
+  [
+    "Charge-off",
+    /charg?e[d]?\s*[- ]?off|charge[\s-]?offs?\b|written\s+off|write[\s-]?offs?\b|bad\s+debt/i,
+  ],
+  [
+    "Late Payments",
+    /past\s*due|delinquen\w*|late\s+payments?|(?:30|60|90|120|150|180)\+?\s*days?\s*(?:past|late)/i,
+  ],
+  ["Foreclosure", /foreclos/i],
+  ["Repossession", /repossess/i],
+  ["Bankruptcy", /bankrupt/i],
+];
+
+/** Additional derogatory wording (maps to the generic strategy key). */
+const DEROG_CATCHALL =
+  /settled\s+for\s+less|in\s+default|defaulted|voluntary\s+surrender|forfeit|unpaid\s+balance/i;
+
+export interface ClassifyContext {
+  /** Payment-grid marks from parsePaymentHistory (authoritative). */
+  paymentMarks?: string[];
+  /** True when the block shows section overlap — non-status lines may
+   *  belong to a neighboring account and are not trusted. */
+  sectionOverlap?: boolean;
+}
+
+export interface ClassifyResult {
+  negativeType: NegativeType;
+  isNegative: boolean;
+  evidence: string[];
+  /** Set when authoritative sources contradict — the account is NOT
+   *  marked negative; the caller flags it for manual review. */
+  conflict?: string;
+  /** Worst numeric grid delinquency ("120") when present. */
+  worstDelinquency?: string;
+}
+
+/** Labeled lines whose values describe THIS account (authoritative).
+ *  Line-start anchored, with the same separator discipline as
+ *  labeled(): a colon/tab or 2+ spaces — "Status Updated:" must NOT
+ *  be read as label "Status". */
+const AUTHORITY_LABEL_RE =
+  /^(pay\s*status|paystatus|account\s*condition|account\s*status|payment\s*status|manner\s+of\s+payment|status\s+payments?|status|account\s+type(?:\s*(?:&|and|\/)\s*(?:number|pay\s*status))?|type|remarks?|comments?|narrative|previously\s+past\s+due)\s*(?:[:\t]|\s{2,})\s*(.+)$/i;
+
+interface AuthLine {
+  label: string;
+  value: string;
+  isType: boolean;
+}
+
+function authoritativeLines(block: string): AuthLine[] {
+  const out: AuthLine[] = [];
+  for (const line of block.split("\n")) {
+    const m = line.trim().match(AUTHORITY_LABEL_RE);
+    if (m) {
+      const label = m[1].toLowerCase();
+      out.push({
+        label,
+        value: m[2].trim(),
+        isType: /^type$/.test(label) || /account\s+type/.test(label),
+      });
+    }
+  }
+  // Equifax compact row: the status column follows the balance —
+  // "07/2022  XXXX-5678  Open  02/2025  $987.00  Collection"
+  const col = block.match(
+    /\$\s?[\d,]+\.\d{2}\s{2,}([A-Za-z][A-Za-z0-9 ,'\/()+-]{0,40}?)(?=\n|$)/,
+  );
+  if (col) out.push({ label: "column status", value: col[1].trim(), isType: false });
+  return out;
+}
+
+/** One authoritative value -> negative type (or null when clean). */
+function testDerog(value: string): NegativeType | null {
+  const v = stripNegations(value);
+  if (!v.trim()) return null;
+  for (const [type, re] of DEROG_TESTS) {
+    if (re.test(v)) return type;
+  }
+  if (DEROG_CATCHALL.test(v)) return "Derogatory Status";
+  return null;
+}
+
+/** Grid marks -> worst delinquency + type. OK/XX/CL are not
+ *  derogatory classification evidence (CL is a non-standard code). */
+function gridEvidence(marks: string[]): { worst?: string; type?: NegativeType } {
+  const numeric = marks
+    .map((m) => parseInt(m, 10))
+    .filter((n) => [30, 60, 90, 120, 150, 180].includes(n));
+  const worst = numeric.length > 0 ? String(Math.max(...numeric)) : undefined;
+  if (worst) return { worst, type: "Late Payments" };
+  if (marks.some((m) => /^co$/i.test(m))) return { type: "Charge-off" };
+  if (marks.some((m) => /^kd$/i.test(m))) return { type: "Derogatory Status" };
+  return {};
+}
+
+/** PRECISION-FIRST negative classification. Backward-compatible
+ *  signature: the optional context carries grid marks + overlap info. */
 export function classifyNegative(
   status: string,
   block: string,
-): { negativeType: NegativeType; isNegative: boolean; evidence: string[] } {
-  const ls = (status || "").toLowerCase();
-  const lb = block.toLowerCase();
+  ctx: ClassifyContext = {},
+): ClassifyResult {
+  const statusRaw = (status || "").trim();
+  const hardClean = HARD_CLEAN_RE.test(statusRaw);
+  const statusNeg = stripNegations(statusRaw);
   const evidence: string[] = [];
 
-  const tests: Array<[NegativeType, RegExp, RegExp]> = [
-    ["Collection Account", /collection|placed\s+for\s+collection|sold\s+to\s+(?:a\s+)?(?:third|3rd)[\s-]party|transfer(?:red)?\s+to\s+collection/i, /collection/i],
-    ["Charge-off", /charg?e[d]?\s*[- ]?off|write[d]?\s*[- ]?off|bad\s*debt/i, /charge\s*[- ]?off|bad\s*debt/i],
-    ["Late Payments", /past\s*due|delinq|late\s+payment|\b(?:30|60|90|120|150|180)\+?\s*days?\b/i, /late|delinq|past\s*due/i],
-    ["Foreclosure", /foreclos/i, /foreclos/i],
-    ["Repossession", /repossess/i, /repossess/i],
-    ["Bankruptcy", /bankrupt/i, /bankrupt/i],
-  ];
+  const grid = gridEvidence(ctx.paymentMarks ?? []);
+  const auth = authoritativeLines(block);
 
-  for (const [type, statusRe, blockRe] of tests) {
-    if (statusRe.test(ls) || blockRe.test(lb)) {
-      if (statusRe.test(ls)) evidence.push(`status: "${status.trim().slice(0, 40)}"`);
-      if (blockRe.test(lb)) evidence.push(`report text: matched /${blockRe.source}/`);
-      return { negativeType: type, isNegative: true, evidence };
+  const record = (msg: string) => {
+    if (!evidence.includes(msg)) evidence.push(msg);
+  };
+  const conflict = (why: string): ClassifyResult => ({
+    negativeType: "Derogatory Status",
+    isNegative: false,
+    evidence,
+    conflict:
+      `Status "${statusRaw.slice(0, 40)}" looks clean, but the account also shows ${why}. ` +
+      "Left unmarked — review manually.",
+    worstDelinquency: grid.worst,
+  });
+
+  // 1. Derogatory ACCOUNT TYPE — the tradeline's nature. Definitive:
+  //    survives "paid"/"current" statuses (a paid collection is still
+  //    a Collection Account), but NOT an explicit never-late status.
+  const typeLine = auth.find((l) => l.isType);
+  const typeHit = typeLine ? testDerog(typeLine.value) : null;
+  if (typeHit) {
+    record(`account type: "${typeLine.value.slice(0, 40)}"`);
+    if (grid.worst) record(`payment grid: worst mark ${grid.worst}`);
+    if (hardClean) return conflict("a derogatory account type");
+    return {
+      negativeType: typeHit,
+      isNegative: true,
+      evidence,
+      worstDelinquency: grid.worst,
+    };
+  }
+
+  // 2. Derogatory STATUS field — the account's own current status.
+  const statusHit = testDerog(statusNeg);
+  if (statusHit) {
+    record(`status: "${statusRaw.slice(0, 40)}"`);
+    if (grid.worst) record(`payment grid: worst mark ${grid.worst}`);
+    return {
+      negativeType: statusHit,
+      isNegative: true,
+      evidence,
+      worstDelinquency: grid.worst,
+    };
+  }
+
+  // 3. Other authoritative labeled values about this account
+  //    (remarks, conditions, previously-past-due history, column
+  //    status). Skipped under section overlap — those lines may
+  //    belong to a neighboring account.
+  if (!ctx.sectionOverlap) {
+    let otherHit: NegativeType | null = null;
+    const otherEv: string[] = [];
+    for (const l of auth) {
+      if (l.isType) continue;
+      if (/^previously\s+past\s+due$/.test(l.label)) {
+        if (/[1-9]/.test(l.value)) {
+          if (!otherHit) otherHit = "Late Payments";
+          otherEv.push(`previously past due: "${l.value.slice(0, 40)}"`);
+        }
+        continue;
+      }
+      const hit = testDerog(l.value);
+      if (hit) {
+        if (!otherHit) otherHit = hit;
+        otherEv.push(`${l.label}: "${l.value.slice(0, 40)}"`);
+      }
+    }
+    if (otherHit) {
+      otherEv.forEach(record);
+      if (grid.worst) record(`payment grid: worst mark ${grid.worst}`);
+      if (hardClean) return conflict(otherEv.join("; "));
+      return {
+        negativeType: otherHit,
+        isNegative: true,
+        evidence,
+        worstDelinquency: grid.worst,
+      };
     }
   }
 
-  // Additional derogatory wording (fell through to "Derogatory Status"
-  // in the old generic keyword list too).
-  if (
-    /settled\s+for\s+less|in\s+default|defaulted|voluntary\s+surrender|forfeit|written\s+off|unpaid\s+balance\s+written\s+off/i.test(
-      lb,
-    )
-  ) {
+  // 4. Payment-history grid marks — the bureau's own month-by-month
+  //    record (historical lates are real even when currently current).
+  if (grid.type) {
+    record(
+      grid.worst
+        ? `payment grid: worst mark ${grid.worst}`
+        : `payment grid: ${grid.type} mark`,
+    );
+    if (hardClean) return conflict("derogatory payment-history marks");
     return {
-      negativeType: "Derogatory Status",
+      negativeType: grid.type,
       isNegative: true,
-      evidence: ["report text: matched derogatory wording (settled/defaulted/surrendered)"],
+      evidence,
+      worstDelinquency: grid.worst,
     };
   }
 
-  // Potentially-negative section headers (Experian/Equifax style)
-  if (/potentially\s+negative|adverse|negative\s*(?:items|accounts|information)|derog/i.test(lb)) {
-    return {
-      negativeType: "Derogatory Status",
-      isNegative: true,
-      evidence: ["report text: account appears in a negative/adverse section"],
-    };
-  }
-
+  // 5. Nothing authoritative and derogatory -> NOT negative.
+  //    Incidental text (headers, creditor names, boilerplate) never
+  //    counts. Missing/ambiguous data is surfaced by flags, not
+  //    guessed into a negative mark.
   return { negativeType: "Derogatory Status", isNegative: false, evidence };
 }
 
@@ -636,7 +859,14 @@ export function parseAccountBlock(
     if ((block.match(overlapRe) ?? []).length >= 2) flags.push("section-overlap");
   }
 
-  const { negativeType, isNegative, evidence } = classifyNegative(statusText, block);
+  // Payment history first — grid marks are authoritative negative
+  // evidence and feed the precision-first classifier.
+  const paymentHistory = parsePaymentHistory(block);
+  const neg = classifyNegative(statusText, block, {
+    paymentMarks: paymentHistory?.map((m) => m.mark),
+    sectionOverlap: flags.includes("section-overlap"),
+  });
+  if (neg.conflict) flags.push("ambiguous-negative");
 
   const confidence = scoreAccount({
     creditor,
@@ -658,14 +888,18 @@ export function parseAccountBlock(
     status: statusText || "Unknown",
     openDate: openDateHit,
     lastReported: lastReportedText,
-    negativeType: isNegative ? negativeType : undefined,
+    negativeType: neg.isNegative ? neg.negativeType : undefined,
     sourceBureau: bureau,
     confidence,
     flags,
     missingFields,
-    isNegative,
-    paymentHistory: parsePaymentHistory(block),
-    evidence: isNegative ? { matchedKeywords: evidence } : undefined,
+    isNegative: neg.isNegative,
+    paymentHistory,
+    evidence: neg.isNegative
+      ? { matchedKeywords: neg.evidence, worstDelinquency: neg.worstDelinquency }
+      : neg.conflict
+        ? { matchedKeywords: [neg.conflict] }
+        : undefined,
   };
 }
 
