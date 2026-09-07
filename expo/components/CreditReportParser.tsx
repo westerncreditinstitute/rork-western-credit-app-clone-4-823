@@ -833,7 +833,11 @@ function WebCreditReportParser({
       setProgress(10);
       
       const pdfjsLib = await import('pdfjs-dist');
-      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      // The worker version must exactly match the installed pdfjs-dist version, or
+      // pdf.js fails with: The API version "X" does not match the Worker version "Y".
+      // Deriving the URL from pdfjsLib.version keeps them in sync automatically
+      // (jsdelivr serves the exact npm build for any released version).
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
       
       setStatusText('Reading PDF file...');
       setProgress(20);
