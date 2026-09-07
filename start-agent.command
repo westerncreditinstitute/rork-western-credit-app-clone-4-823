@@ -1,7 +1,19 @@
 #!/bin/bash
 
 # Get the directory where this script is located
+# If it's on Desktop, find the actual rork823 folder
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# If we're on Desktop, the script is a copy - find the original rork823 folder
+if [[ "$SCRIPT_DIR" == *"Desktop"* ]]; then
+    # Look for rork823 in common locations
+    for dir in "$HOME/rork823" "$HOME/Documents/rork823" "$HOME/Downloads/rork823" "$HOME/Projects/rork823"; do
+        if [ -d "$dir" ] && [ -f "$dir/package.json" ]; then
+            SCRIPT_DIR="$dir"
+            break
+        fi
+    done
+fi
 
 # Colors
 GREEN='\033[0;32m'
