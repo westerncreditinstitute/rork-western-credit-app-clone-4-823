@@ -31,6 +31,8 @@ import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system/legacy';
 import Colors from "@/constants/colors";
 import CreditReportParser, { ParsedAccount } from "@/components/CreditReportParser";
+import AccountSummary from "@/components/AccountSummary";
+import DisputeLetterPrompt from "@/components/DisputeLetterPrompt";
 import { useDisputes } from "@/contexts/DisputesContext";
 import { useUser } from "@/contexts/UserContext";
 
@@ -105,6 +107,7 @@ export default function AIDisputeAssistantScreen() {
 
   const [currentStep, setCurrentStep] = useState(1);
   const [detectedBureau, setDetectedBureau] = useState<string>("auto");
+  const [parsedAccounts, setParsedAccounts] = useState<ParsedAccount[]>([]);
   const [negativeAccounts, setNegativeAccounts] = useState<NegativeAccount[]>([]);
   const [selectedAccounts, setSelectedAccounts] = useState<NegativeAccount[]>([]);
   const [currentAccountIndex, setCurrentAccountIndex] = useState(0);
@@ -117,6 +120,7 @@ export default function AIDisputeAssistantScreen() {
   const [showManualEntry, setShowManualEntry] = useState(false);
   const [isSavingToCloud, setIsSavingToCloud] = useState(false);
   const [savedToCloud, setSavedToCloud] = useState(false);
+  const [showAccountSummary, setShowAccountSummary] = useState(false);
   const [manualAccount, setManualAccount] = useState({
     name: "",
     accountNumber: "",
@@ -139,17 +143,19 @@ export default function AIDisputeAssistantScreen() {
   const handleAccountsParsed = useCallback((accounts: ParsedAccount[], bureau: string) => {
     console.log("Parsed accounts:", accounts.length, "from bureau:", bureau);
     setDetectedBureau(bureau);
+    setParsedAccounts(accounts);
     
     if (accounts.length === 0) {
       Alert.alert(
-        "No Negative Accounts Found",
-        "No potentially negative accounts were found in your credit report. You can add accounts manually if needed.",
+        "No Accounts Found",
+        "No accounts were found in your credit report. You can add accounts manually if needed.",
         [
           {
             text: "Add Manually",
             onPress: () => {
               setShowManualEntry(true);
               setCurrentStep(2);
+              setShowAccountSummary(false);
             },
           },
           { text: "OK", style: "cancel" },
@@ -158,23 +164,30 @@ export default function AIDisputeAssistantScreen() {
       return;
     }
 
-    const newAccounts: NegativeAccount[] = accounts.map((acc, index) => ({
-      id: Date.now() + index,
-      name: acc.creditor.toUpperCase(),
-      accountNumber: acc.accountNumber,
-      status: acc.status,
-      negativeType: acc.negativeType || "Derogatory Status",
-      selected: false,
-      bureau: bureau,
-    }));
+    // Show the account summary first
+    setShowAccountSummary(true);
+
+    const newAccounts: NegativeAccount[] = accounts
+      .filter((acc) => acc.negativeType)
+      .map((acc, index) => ({
+        id: Date.now() + index,
+        name: acc.creditor.toUpperCase(),
+        accountNumber: acc.accountNumber,
+        status: acc.status,
+        negativeType: acc.negativeType || "Derogatory Status",
+        selected: false,
+        bureau: bureau,
+      }));
 
     setNegativeAccounts(newAccounts);
-    setCurrentStep(2);
     
-    Alert.alert(
-      "Parsing Complete",
-      `Found ${accounts.length} potentially negative account(s) from your ${bureau.charAt(0).toUpperCase() + bureau.slice(1)} report.`
-    );
+    if (newAccounts.length === 0) {
+      Alert.alert(
+        "No Negative Accounts Found",
+        "Your credit report shows no negative accounts. All your accounts are in good standing.",
+        [{ text: "OK", style: "cancel" }]
+      );
+    }
   }, []);
 
   const handleParserError = useCallback((error: string) => {
@@ -677,46 +690,102 @@ export default function AIDisputeAssistantScreen() {
 
   const renderStep1 = () => (
     <View style={styles.stepContent}>
-      <View style={styles.headerCard}>
-        <Image
-          source={{ uri: DARK_LOGO_URL }}
-          style={styles.logo}
-          resizeMode="contain"
-        />
-        <Text style={styles.headerTitle}>AI Dispute Assistant</Text>
-        <Text style={styles.headerSubtitle}>Find and dispute negative accounts on your credit report</Text>
-      </View>
-
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Upload & Parse Credit Report</Text>
-        <Text style={styles.cardSubtitle}>
-          Select your credit bureau and upload your PDF credit report. Our AI will automatically extract negative accounts.
-        </Text>
-
-        <View style={styles.parserContainer}>
-          <CreditReportParser
-            onAccountsParsed={handleAccountsParsed}
-            onError={handleParserError}
-            onLoadingChange={handleParserLoading}
+      {showAccountSummary && parsedAccounts.length > 0 ? (
+        <View>
+          <AccountSummary
+            accounts={parsedAccounts}
+            bureau={detectedBureau}
+            onSelectNegativeAccounts={(selected) => {
+              const negAccounts = selected.map((acc, index) => ({
+                id: Date.now() + index,
+                name: acc.creditor.toUpperCase(),
+                accountNumber: acc.accountNumber,
+                status: acc.status,
+                negativeType: acc.negativeType || "Derogatory Status",
+                selected: true,
+                bureau: detectedBureau,
+              }));
+              setSelectedAccounts(negAccounts);
+            }}
           />
-        </View>
-
-        {isParserLoading && (
-          <View style={styles.loadingOverlay}>
-            <View style={styles.loadingContainer}>
-              <View style={styles.loadingSpinner} />
-              <Text style={styles.loadingText}>Processing credit report...</Text>
+          
+          {negativeAccounts.length > 0 && (
+            <View style={styles.disputePromptContainer}>
+              <DisputeLetterPrompt
+                negativeAccounts={negativeAccounts}
+                onStartDispute={(selected) => {
+                  const negAccounts = selected.map((acc, index) => ({
+                    id: Date.now() + index,
+                    name: acc.creditor.toUpperCase(),
+                    accountNumber: acc.accountNumber,
+                    status: acc.status,
+                    negativeType: acc.negativeType || "Derogatory Status",
+                    selected: true,
+                    bureau: detectedBureau,
+                  }));
+                  setSelectedAccounts(negAccounts);
+                  setCurrentStep(2);
+                }}
+              />
             </View>
-          </View>
-        )}
+          )}
 
-        <View style={styles.manualEntryPrompt}>
-          <Text style={styles.manualEntryText}>No PDF file? </Text>
-          <TouchableOpacity onPress={() => { setShowManualEntry(true); setCurrentStep(2); }}>
-            <Text style={styles.manualEntryLink}>Add accounts manually</Text>
+          <TouchableOpacity
+            style={styles.newReportButton}
+            onPress={() => {
+              setShowAccountSummary(false);
+              setParsedAccounts([]);
+              setNegativeAccounts([]);
+              setSelectedAccounts([]);
+            }}
+          >
+            <Text style={styles.newReportButtonText}>Upload Another Report</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      ) : (
+        <>
+          <View style={styles.headerCard}>
+            <Image
+              source={{ uri: DARK_LOGO_URL }}
+              style={styles.logo}
+              resizeMode="contain"
+            />
+            <Text style={styles.headerTitle}>AI Dispute Assistant</Text>
+            <Text style={styles.headerSubtitle}>Find and dispute negative accounts on your credit report</Text>
+          </View>
+
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Upload & Parse Credit Report</Text>
+            <Text style={styles.cardSubtitle}>
+              Select your credit bureau and upload your PDF credit report. Our AI will automatically extract all accounts.
+            </Text>
+
+            <View style={styles.parserContainer}>
+              <CreditReportParser
+                onAccountsParsed={handleAccountsParsed}
+                onError={handleParserError}
+                onLoadingChange={handleParserLoading}
+              />
+            </View>
+
+            {isParserLoading && (
+              <View style={styles.loadingOverlay}>
+                <View style={styles.loadingContainer}>
+                  <View style={styles.loadingSpinner} />
+                  <Text style={styles.loadingText}>Processing credit report...</Text>
+                </View>
+              </View>
+            )}
+
+            <View style={styles.manualEntryPrompt}>
+              <Text style={styles.manualEntryText}>No PDF file? </Text>
+              <TouchableOpacity onPress={() => { setShowManualEntry(true); setCurrentStep(2); setShowAccountSummary(false); }}>
+                <Text style={styles.manualEntryLink}>Add accounts manually</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </>
+      )}
     </View>
   );
 
@@ -1948,5 +2017,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
     color: Colors.surface,
+  },
+  disputePromptContainer: {
+    marginTop: 16,
+  },
+  newReportButton: {
+    backgroundColor: "#e5e7eb",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    alignItems: "center",
+  },
+  newReportButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: Colors.textPrimary,
   },
 });
