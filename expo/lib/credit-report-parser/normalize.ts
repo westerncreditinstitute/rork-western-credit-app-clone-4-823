@@ -170,6 +170,67 @@ export function collapseWhitespace(s: string): string {
     .trim();
 }
 
+/** Known PDF text-extraction artifact: some report generators emit
+ *  glyph runs with a stray space baked into the word itself (e.g. a
+ *  kerning/ligature quirk around the letter "t"), so pdf.js's raw
+ *  string comes out as "St at us" instead of "Status", "Indust ry"
+ *  instead of "Industry", etc. This breaks every label-based field
+ *  extractor (extractStatus, extractOpenDate, ...) since they look for
+ *  the real words. Rather than a risky generic "remove all stray
+ *  spaces" pass (which would wrongly merge real adjacent short words,
+ *  e.g. "Paid or paying"), this repairs only a known, explicit set of
+ *  field-label words observed to be affected — safe because these
+ *  exact broken spellings never occur elsewhere in real report text. */
+const KERNED_WORD_FIXES: Array<[RegExp, string]> = [
+  [/\bSt\s*at\s*us\b/g, "Status"],
+  [/\bIndust\s*ry\b/g, "Industry"],
+  [/\bAut\s*omat\s*ed\b/g, "Automated"],
+  [/\bAut\s*omot\s*ive\b/g, "Automotive"],
+  [/\bCollect\s*ion(?!s)\b/g, "Collection"],
+  [/\bCollect\s*ions\b/g, "Collections"],
+  [/\bPaym\s*ent\b/g, "Payment"],
+  [/\bHist\s*or\s*y\b/g, "History"],
+  [/\bSum\s*m\s*ar\s*y\b/g, "Summary"],
+  [/\bDat\s*e\b/g, "Date"],
+  [/\bInst\s*allm\s*ent\b/g, "Installment"],
+  [/\bUndesignat\s*ed\b/g, "Undesignated"],
+  [/\bUt\s*ilit\s*y\b/g, "Utility"],
+  [/\bUt\s*ilit\s*ies\b/g, "Utilities"],
+  [/\bM\s*ort\s*gage\b/g, "Mortgage"],
+  [/\bDerogat\s*or\s*y\b/g, "Derogatory"],
+  [/\bNot\s*es\b/g, "Notes"],
+  [/\bAct\s*ivit\s*y\b/g, "Activity"],
+  [/\bAct\s*ion\b/g, "Action"],
+  [/\bDisposit\s*ion\b/g, "Disposition"],
+  [/\bEvict\s*ion\b/g, "Eviction"],
+  [/\bJurisdict\s*ion\b/g, "Jurisdiction"],
+  [/\bOrganizat\s*ion\b/g, "Organization"],
+  [/\bClassif\s*icat\s*ion\b/g, "Classification"],
+  [/\bDescript\s*ion\b/g, "Description"],
+  [/\bInformat\s*ion\b/g, "Information"],
+  [/\bExpirat\s*ion\b/g, "Expiration"],
+  [/\bReport\s*ed\b/g, "Reported"],
+  [/\bSet\s*t\s*led\b/g, "Settled"],
+  [/\bPot\s*ent\s*ial\b/g, "Potential"],
+  [/\bNegat\s*ive\b/g, "Negative"],
+  [/\bGrant\s*or\b/g, "Grantor"],
+  [/\bSt\s*at\s*e\b/g, "State"],
+  [/\bSt\s*at\s*ut\s*e\b/g, "Statute"],
+  [/\bTot\s*al\b/g, "Total"],
+  [/\bTot\s*als\b/g, "Totals"],
+  [/\bCount\s*y\b/g, "County"],
+  [/\bCourt\s*\b/g, "Court "],
+];
+
+/** Apply the known kerning-artifact word fixes (see KERNED_WORD_FIXES). */
+export function repairKernedWords(text: string): string {
+  let out = text;
+  for (const [re, replacement] of KERNED_WORD_FIXES) {
+    out = out.replace(re, replacement);
+  }
+  return out;
+}
+
 /** Count control/replaceable chars to detect a corrupted extraction. */
 export function corruptionRatio(s: string): number {
   if (!s) return 0;
@@ -179,4 +240,103 @@ export function corruptionRatio(s: string): number {
     if (c === 0 || c === 0xFFFD || (c < 32 && c !== 9 && c !== 10 && c !== 13)) bad++;
   }
   return bad / s.length;
+}
+
+// ------------------------------------------------------------
+// PDF.js text-item -> line reconstruction
+// ------------------------------------------------------------
+//
+// pdf.js's getTextContent() returns a flat list of positioned text
+// fragments per page \u2014 it does NOT tell you where lines/columns are.
+// Naively joining every fragment with a single space (the previous
+// approach) destroys the document's line structure entirely, which is
+// fatal here: every account-splitting anchor in this engine
+// (splitAccountBlocks, extractInquiriesSection, etc.) looks for
+// patterns at the START of a line. A page with no newlines collapses
+// into ONE giant blob \u2192 exactly the "only 1 account found" bug.
+//
+// Fix: group fragments into rows by their Y coordinate (item.transform[5]),
+// sort rows top-to-bottom, sort each row's fragments left-to-right, and
+// insert a wide gap (2 spaces \u2014 this engine's column-separator marker,
+// see SEP/collapseWhitespace) wherever the horizontal gap between two
+// fragments is large enough to be a column boundary rather than a normal
+// word space. This reconstructs real, parseable line/column text from
+// any PDF.js-produced text-item list, on web OR inside a WebView.
+
+/** Minimal shape of a pdf.js TextItem \u2014 kept structural so callers don't
+ *  need to import pdfjs-dist types here (this file must build UN-styled,
+ *  e.g. inside the WebView's plain-<script> HTML string). */
+export interface PdfTextItemLike {
+  str: string;
+  /** pdf.js text-render matrix: [a, b, c, d, e, f] \u2014 e = x, f = y. */
+  transform: number[];
+  width?: number;
+}
+
+/** Reconstruct a page's text with real line breaks + column gaps from a
+ *  flat pdf.js text-item array. `yTolerance` groups fragments whose
+ *  baselines differ by only a pixel or two (sub-pixel font rendering)
+ *  into the same visual line. */
+export function reconstructPageLines(
+  items: PdfTextItemLike[],
+  yTolerance = 2,
+): string {
+  const usable = items.filter((it) => it && typeof it.str === "string" && it.str !== "");
+  if (usable.length === 0) return "";
+
+  const rows = new Map<number, PdfTextItemLike[]>();
+  for (const it of usable) {
+    const y = Math.round(it.transform[5]);
+    const arr = rows.get(y);
+    if (arr) arr.push(it);
+    else rows.set(y, [it]);
+  }
+
+  // Top-to-bottom in PDF space = descending Y.
+  const sortedY = Array.from(rows.keys()).sort((a, b) => b - a);
+
+  // Merge row-keys within tolerance (handles items whose rounded Y
+  // differs by 1-2px due to mixed font baselines on the same visual line).
+  const mergedRowKeys: number[][] = [];
+  let bucket: number[] = [];
+  let lastY: number | null = null;
+  for (const y of sortedY) {
+    if (lastY === null || Math.abs(lastY - y) <= yTolerance) bucket.push(y);
+    else {
+      mergedRowKeys.push(bucket);
+      bucket = [y];
+    }
+    lastY = y;
+  }
+  if (bucket.length) mergedRowKeys.push(bucket);
+
+  const lines: string[] = [];
+  for (const ys of mergedRowKeys) {
+    const rowItems: PdfTextItemLike[] = [];
+    for (const y of ys) {
+      const arr = rows.get(y);
+      if (arr) rowItems.push(...arr);
+    }
+    rowItems.sort((a, b) => a.transform[4] - b.transform[4]);
+
+    let line = "";
+    let lastEndX: number | null = null;
+    for (const it of rowItems) {
+      const x = it.transform[4];
+      if (lastEndX !== null) {
+        const gap = x - lastEndX;
+        // A big horizontal gap is a column boundary \u2014 mark it with 2
+        // spaces (this engine's column-separator convention). A small
+        // gap is a normal inter-word space (or already-included in the
+        // fragment). Fragments that already end in whitespace don't
+        // need an extra space injected.
+        if (gap > 20) line += "  ";
+        else if (gap > 1 && !/\s$/.test(line) && !/^\s/.test(it.str)) line += " ";
+      }
+      line += it.str;
+      lastEndX = x + (typeof it.width === "number" ? it.width : it.str.length * 5);
+    }
+    lines.push(line);
+  }
+  return lines.join("\n");
 }

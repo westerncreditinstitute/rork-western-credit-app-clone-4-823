@@ -32,6 +32,7 @@ import { AccountSummary } from "@/components/AccountSummary";
 
 export interface AnalysisRecommendation {
   creditor: string;
+  furnisherAddress?: string;
   accountNumber: string;
   negativeType: string;
   letterType: string;
@@ -106,6 +107,7 @@ export default function CreditAnalysisModal({
           bureau: detectedBureau,
           accounts: accounts.map((a) => ({
             creditor: a.creditor || "Unknown Creditor",
+            furnisherAddress: a.furnisherAddress,
             accountNumber: a.accountNumber || "",
             balance: a.balance || "",
             status: a.status || "",

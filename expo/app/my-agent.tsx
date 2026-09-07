@@ -41,6 +41,7 @@ import AgentChatPanel from "@/components/MyAgent/AgentChatPanel";
 import CreditRepairModal from "@/components/MyAgent/CreditRepairModal";
 import DisputeTrackerModal from "@/components/MyAgent/DisputeTrackerModal";
 import CreditAnalysisModal from "@/components/MyAgent/CreditAnalysisModal";
+import NegativeAccountsDashboard from "@/components/MyAgent/NegativeAccountsDashboard";
 
 // ============================================================
 // Constants
@@ -78,6 +79,7 @@ export default function MyAgentScreen({
   const [creditRepairVisible, setCreditRepairVisible] = useState(false);
   const [disputeTrackerVisible, setDisputeTrackerVisible] = useState(false);
   const [creditAnalysisVisible, setCreditAnalysisVisible] = useState(false);
+  const [negativeDashboardVisible, setNegativeDashboardVisible] = useState(false);
   const [creditRepairPrefill, setCreditRepairPrefill] = useState<{
     letterType?: string;
     creditorName?: string;
@@ -267,6 +269,20 @@ export default function MyAgentScreen({
       accountNumber: string;
     }) => {
       setCreditAnalysisVisible(false);
+      setCreditRepairPrefill(data);
+      setTimeout(() => setCreditRepairVisible(true), 300);
+    },
+    [],
+  );
+
+  /** Jump from the per-bureau dashboard straight into letter generation. */
+  const handleDashboardGenerateLetter = useCallback(
+    (data: {
+      letterType: string;
+      creditorName: string;
+      accountNumber: string;
+    }) => {
+      setNegativeDashboardVisible(false);
       setCreditRepairPrefill(data);
       setTimeout(() => setCreditRepairVisible(true), 300);
     },
@@ -601,6 +617,9 @@ export default function MyAgentScreen({
                 }}
                 onOpenDisputeTracker={() => setDisputeTrackerVisible(true)}
                 onOpenCreditAnalysis={() => setCreditAnalysisVisible(true)}
+                onOpenNegativeAccountsDashboard={() =>
+                  setNegativeDashboardVisible(true)
+                }
               />
             ) : null}
 
@@ -741,6 +760,11 @@ export default function MyAgentScreen({
               agentName={agent.agent_name}
               onGenerateLetter={handleAnalysisGenerateLetter}
               onDiscussInChat={handleDiscussAnalysisInChat}
+            />
+            <NegativeAccountsDashboard
+              visible={negativeDashboardVisible}
+              onClose={() => setNegativeDashboardVisible(false)}
+              onGenerateLetter={handleDashboardGenerateLetter}
             />
           </>
         ) : null}

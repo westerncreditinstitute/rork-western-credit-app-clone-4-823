@@ -7,6 +7,7 @@ import {
   toCompatAccounts,
   htmlToText,
   classifyNegative,
+  reconstructPageLines,
   type ParsedCreditReport,
 } from '@/lib/credit-report-parser';
 
@@ -18,6 +19,8 @@ if (Platform.OS !== 'web') {
 
 export interface ParsedAccount {
   creditor: string;
+  /** Furnisher mailing address, when extractable from the report. */
+  furnisherAddress?: string;
   accountNumber: string;
   balance: string;
   status: string;
@@ -30,6 +33,125 @@ interface CreditReportParserProps {
   onAccountsParsed: (accounts: ParsedAccount[], bureau: string) => void;
   onError: (error: string) => void;
   onLoadingChange: (loading: boolean) => void;
+}
+
+// ---------------------------------------------------------------------------
+// Shared fallback + engine-runner, used by BOTH web and native platforms so
+// there is exactly ONE parsing engine in the app (the shared engine in
+// lib/credit-report-parser). The WebView on native now only extracts raw
+// text (with proper line reconstruction) from the PDF and hands it back to
+// React Native via postMessage; the actual account parsing happens here,
+// identically to the web platform.
+// ---------------------------------------------------------------------------
+
+// The old regex-only "generic" splitter. Kept ONLY as the last-resort
+// fallback when the new engine returns zero accounts for a non-empty
+// file — better to surface raw guesses (flagged as low-confidence) than
+// to show nothing.
+function genericAccountsFallback(text: string): ParsedAccount[] {
+  const determineNegativeType = (status: string, section: string): string | undefined => {
+    const res = classifyNegative(status, section);
+    return res.isNegative ? res.negativeType : undefined;
+  };
+
+  const accounts: ParsedAccount[] = [];
+  const negativeKeywords = [
+    'potentially negative', 'negative items', 'adverse accounts',
+    'derogatory', 'collection', 'charge-off', 'charged off',
+    'past due', 'delinquent', 'late payment', 'late 30', 'late 60', 'late 90',
+    'days late', 'in dispute', 'settlement', 'foreclosure', 'repossession',
+    'bankruptcy', 'public record', 'tax lien', 'judgment', 'default'
+  ];
+
+  const sections = text.split(/(?=(?:[A-Z][a-z]+ )+(?:Bank|Financial|Credit|Mortgage|Auto|Loan|Card|Services|Inc|LLC|Corp|Corporation))/);
+
+  for (const section of sections) {
+    const hasNegativeInfo = negativeKeywords.some(keyword =>
+      section.toLowerCase().includes(keyword.toLowerCase())
+    );
+
+    if (hasNegativeInfo || sections.length <= 5) {
+      const creditorMatch = section.match(/^(?:[A-Z][a-z]+ )+(?:Bank|Financial|Credit|Mortgage|Auto|Loan|Card|Services|Inc|LLC|Corp|Corporation)/);
+      const creditor = creditorMatch ? creditorMatch[0].trim() : null;
+
+      if (creditor && creditor.length >= 2) {
+        const accountNumberMatch = section.match(/(?:Account\s*(?:#|Number|No):?\s*|#\s*)([\w\d-*]+)/i);
+        const accountNumber = accountNumberMatch ? accountNumberMatch[1].trim() : 'Unknown';
+
+        const balanceMatch = section.match(/(?:Balance|Amount|Debt):?\s*\$?([\d,]+\.\d{2}|\d+)/i);
+        const balance = balanceMatch ? balanceMatch[1].trim() : 'Unknown';
+
+        const statusMatch = section.match(/(?:Status|Condition|Payment Status):?\s*([^,\n\r.]+)/i) ||
+                          section.match(/(?:30|60|90|120|150|180)\s*days?\s*(?:past\s*due|late)/i);
+        const status = statusMatch ? statusMatch[0].trim() : 'Unknown';
+
+        const openDateMatch = section.match(/(?:Open(?:ed)?\s*(?:Date|On):?\s*|Date\s*Opened:?\s*)([A-Za-z]+\s*\d{1,2},?\s*\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4})/i);
+        const openDate = openDateMatch ? openDateMatch[1].trim() : 'Unknown';
+
+        const lastReportedMatch = section.match(/(?:Last\s*Reported|Reported\s*Date|Date\s*Reported):?\s*([A-Za-z]+\s*\d{1,2},?\s*\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4})/i);
+        const lastReported = lastReportedMatch ? lastReportedMatch[1].trim() : 'Unknown';
+
+        accounts.push({
+          creditor,
+          accountNumber,
+          balance,
+          status,
+          openDate,
+          lastReported,
+          negativeType: determineNegativeType(status, section)
+        });
+      }
+    }
+  }
+
+  const uniqueAccounts: ParsedAccount[] = [];
+  const seen = new Set<string>();
+
+  for (const account of accounts) {
+    const key = account.creditor + '-' + account.accountNumber;
+    if (!seen.has(key)) {
+      seen.add(key);
+      uniqueAccounts.push(account);
+    }
+  }
+
+  return uniqueAccounts;
+}
+
+interface EngineResult {
+  accounts: ParsedAccount[];
+  detectedBureau: string;
+  warnings: string[];
+}
+
+// Runs the ONE shared parsing engine (lib/credit-report-parser) against
+// already-extracted plain text. Used identically on web and native.
+function runCreditReportEngine(
+  fullText: string,
+  userBureau: string,
+  sourceFormat: 'pdf' | 'html' | 'text'
+): EngineResult {
+  const report: ParsedCreditReport = parseCreditReport(fullText, {
+    userBureau,
+    sourceFormat,
+  });
+
+  let accounts: ParsedAccount[] = toCompatAccounts(report.accounts);
+  let detectedBureau: string;
+
+  if (report.bureaus.length > 1) {
+    detectedBureau = 'Combined (3-Bureau)';
+  } else {
+    detectedBureau = report.bureau === 'unknown' ? 'generic' : report.bureau;
+  }
+
+  // Last-resort fallback: keep the old generic splitter alive only when
+  // the new engine found nothing at all in a non-empty file.
+  if (accounts.length === 0 && fullText.trim().length > 0) {
+    accounts = genericAccountsFallback(fullText);
+  }
+
+  return { accounts, detectedBureau, warnings: report.warnings };
 }
 
 const PARSER_HTML = `
@@ -314,6 +436,71 @@ const PARSER_HTML = `
         
         // Parse button
         parseBtn.addEventListener('click', handleParse);
+
+        // ----------------------------------------------------------------
+        // Line reconstruction (JS port of lib/credit-report-parser's
+        // reconstructPageLines). This WebView's ONLY job is to extract
+        // PDF text with correct line structure preserved and hand it back
+        // to React Native via postMessage. ALL account parsing/classifying
+        // happens on the RN side using the single shared engine
+        // (lib/credit-report-parser) - this file no longer contains its
+        // own separate/duplicate parsing logic.
+        // ----------------------------------------------------------------
+        function reconstructPageLines(items, yTolerance) {
+            yTolerance = yTolerance || 2;
+            const usable = items.filter(function (it) {
+                return it && typeof it.str === 'string' && it.str !== '';
+            });
+            if (usable.length === 0) return '';
+
+            const rows = new Map();
+            for (let i = 0; i < usable.length; i++) {
+                const it = usable[i];
+                const y = Math.round(it.transform[5]);
+                if (rows.has(y)) rows.get(y).push(it);
+                else rows.set(y, [it]);
+            }
+
+            const sortedY = Array.from(rows.keys()).sort(function (a, b) { return b - a; });
+
+            const mergedRowKeys = [];
+            let bucket = [];
+            let lastY = null;
+            for (let i = 0; i < sortedY.length; i++) {
+                const y = sortedY[i];
+                if (lastY === null || Math.abs(lastY - y) <= yTolerance) bucket.push(y);
+                else { mergedRowKeys.push(bucket); bucket = [y]; }
+                lastY = y;
+            }
+            if (bucket.length) mergedRowKeys.push(bucket);
+
+            const lines = [];
+            for (let r = 0; r < mergedRowKeys.length; r++) {
+                const ys = mergedRowKeys[r];
+                let rowItems = [];
+                for (let j = 0; j < ys.length; j++) {
+                    const arr = rows.get(ys[j]);
+                    if (arr) rowItems = rowItems.concat(arr);
+                }
+                rowItems.sort(function (a, b) { return a.transform[4] - b.transform[4]; });
+
+                let line = '';
+                let lastEndX = null;
+                for (let k = 0; k < rowItems.length; k++) {
+                    const it = rowItems[k];
+                    const x = it.transform[4];
+                    if (lastEndX !== null) {
+                        const gap = x - lastEndX;
+                        if (gap > 20) line += '  ';
+                        else if (gap > 1 && !/\s$/.test(line) && !/^\s/.test(it.str)) line += ' ';
+                    }
+                    line += it.str;
+                    lastEndX = x + (typeof it.width === 'number' ? it.width : it.str.length * 5);
+                }
+                lines.push(line);
+            }
+            return lines.join('\n');
+        }
         
         async function handleParse() {
             if (!selectedFile) return;
@@ -343,39 +530,30 @@ const PARSER_HTML = `
                 for (let i = 1; i <= pdf.numPages; i++) {
                     const page = await pdf.getPage(i);
                     const textContent = await page.getTextContent();
-                    const pageText = textContent.items.map(item => item.str).join(' ');
-                    fullText += pageText + ' ';
+                    const pageText = reconstructPageLines(textContent.items);
+                    fullText += pageText + '\n\n';
                     
                     const progress = 30 + (i / pdf.numPages * 40);
                     progressFill.style.width = progress + '%';
                     statusText.textContent = 'Extracting page ' + i + ' of ' + pdf.numPages + '...';
                 }
                 
-                statusText.textContent = 'Analyzing credit report...';
-                progressFill.style.width = '80%';
-                
-                let detectedBureau = selectedBureau;
-                if (selectedBureau === 'auto') {
-                    detectedBureau = detectCreditBureau(fullText);
-                }
-                
-                statusText.textContent = 'Parsing ' + capitalizeFirstLetter(detectedBureau) + ' report...';
-                
-                const accounts = parseNegativeAccounts(fullText, detectedBureau);
-                
+                progressFill.style.width = '90%';
+                statusText.textContent = 'Sending text for analysis...';
+
+                // Hand the raw, line-reconstructed text back to React Native.
+                // React Native runs it through the SAME shared parsing
+                // engine (lib/credit-report-parser) used on web - no
+                // separate/duplicate logic lives in this WebView.
+                sendMessage({
+                    type: 'extractedText',
+                    text: fullText,
+                    selectedBureau: selectedBureau,
+                    sourceFormat: 'pdf'
+                });
+
                 progressFill.style.width = '100%';
-                statusText.textContent = 'Found ' + accounts.length + ' potentially negative accounts';
-                
-                setTimeout(() => {
-                    loading.classList.remove('show');
-                    parseBtn.disabled = false;
-                    
-                    sendMessage({
-                        type: 'accounts',
-                        accounts: accounts,
-                        bureau: detectedBureau
-                    });
-                }, 500);
+                statusText.textContent = 'Analyzing credit report...';
                 
             } catch (error) {
                 console.error('Parse error:', error);
@@ -385,370 +563,27 @@ const PARSER_HTML = `
                 parseBtn.disabled = false;
                 
                 sendMessage({ type: 'error', error: error.message });
+                sendMessage({ type: 'loading', loading: false });
             }
-            
-            sendMessage({ type: 'loading', loading: false });
         }
+
+        // React Native tells us when it's done analyzing so we can reset
+        // the loading UI and re-enable the parse button.
+        function receiveAnalysisComplete(payload) {
+            const loading = document.getElementById('loading');
+            const statusText = document.getElementById('statusText');
+            loading.classList.remove('show');
+            parseBtn.disabled = false;
+            if (payload && typeof payload.message === 'string') {
+                statusText.textContent = payload.message;
+            }
+        }
+        window.receiveAnalysisComplete = receiveAnalysisComplete;
         
         function sendMessage(data) {
             if (window.ReactNativeWebView) {
                 window.ReactNativeWebView.postMessage(JSON.stringify(data));
             }
-        }
-        
-        function capitalizeFirstLetter(string) {
-            return string.charAt(0).toUpperCase() + string.slice(1);
-        }
-        
-        function detectCreditBureau(text) {
-            const lowerText = text.toLowerCase();
-            
-            if (lowerText.includes('equifax') && !lowerText.includes('experian') && !lowerText.includes('transunion')) {
-                return 'equifax';
-            } else if (lowerText.includes('experian') && !lowerText.includes('equifax') && !lowerText.includes('transunion')) {
-                return 'experian';
-            } else if (lowerText.includes('transunion') && !lowerText.includes('equifax') && !lowerText.includes('experian')) {
-                return 'transunion';
-            }
-            
-            if (lowerText.includes('date of status') && lowerText.includes('manner of payment')) {
-                return 'equifax';
-            } else if (lowerText.includes('status updated') && lowerText.includes('account condition')) {
-                return 'experian';
-            } else if (lowerText.includes('pay status') && lowerText.includes('account type')) {
-                return 'transunion';
-            }
-            
-            return 'generic';
-        }
-        
-        function parseNegativeAccounts(text, bureau) {
-            switch(bureau) {
-                case 'equifax': return parseEquifaxAccounts(text);
-                case 'experian': return parseExperianAccounts(text);
-                case 'transunion': return parseTransUnionAccounts(text);
-                default: return parseGenericAccounts(text);
-            }
-        }
-        
-        function parseEquifaxAccounts(text) {
-            const accounts = [];
-            const negativeKeywords = [
-                'collection', 'charge-off', 'charged off', 'past due', 'delinquent', 
-                '30 days past due', '60 days past due', '90 days past due',
-                'manner of payment: late', 'foreclosure', 'repossession'
-            ];
-            
-            const accountSections = text.split(/(?=Date Opened:|Account #:|Creditor Name:|Account Type:)/i);
-            
-            for (const section of accountSections) {
-                const hasNegativeInfo = negativeKeywords.some(keyword => 
-                    section.toLowerCase().includes(keyword.toLowerCase())
-                );
-                
-                if (hasNegativeInfo || accountSections.length <= 5) {
-                    const account = extractEquifaxAccountInfo(section);
-                    if (account) accounts.push(account);
-                }
-            }
-            
-            return removeDuplicateAccounts(accounts);
-        }
-        
-        function extractEquifaxAccountInfo(section) {
-            const creditorMatch = section.match(/(?:Creditor Name:|Company Name:)\\s*([^\\n\\r]+)/i) ||
-                                 section.match(/([A-Z][A-Za-z\\s&,.']+)(?=\\s+Account #)/i);
-            const creditor = creditorMatch ? creditorMatch[1].trim() : null;
-            
-            if (!creditor || creditor.length < 2) return null;
-            
-            const accountNumberMatch = section.match(/(?:Account #:|Account Number:)\\s*([^\\n\\r]+)/i);
-            const accountNumber = accountNumberMatch ? accountNumberMatch[1].trim() : 'Unknown';
-            
-            const balanceMatch = section.match(/(?:Balance:|Current Balance:)\\s*\\$?([\\d,]+\\.\\d{2}|\\d+)/i);
-            const balance = balanceMatch ? balanceMatch[1].trim() : 'Unknown';
-            
-            const statusMatch = section.match(/(?:Status:|Account Status:|Manner of Payment:)\\s*([^\\n\\r]+)/i) ||
-                              section.match(/(?:30|60|90|120)\\s*Days Past Due/i);
-            const status = statusMatch ? statusMatch[0].trim() : 'Unknown';
-            
-            const openDateMatch = section.match(/(?:Date Opened:|Opened:)\\s*([^\\n\\r]+)/i);
-            const openDate = openDateMatch ? openDateMatch[1].trim() : 'Unknown';
-            
-            const lastReportedMatch = section.match(/(?:Date of Status:|Last Reported:|Date Updated:)\\s*([^\\n\\r]+)/i);
-            const lastReported = lastReportedMatch ? lastReportedMatch[1].trim() : 'Unknown';
-            
-            return {
-                creditor, accountNumber, balance, status, openDate, lastReported,
-                negativeType: determineNegativeType(status, section) || undefined
-            };
-        }
-        
-        function parseExperianAccounts(text) {
-            const accounts = [];
-            const negativeKeywords = [
-                'collection', 'charge-off', 'charged off', 'past due', 'delinquent', 
-                'late', 'missed payment', 'adverse', 'negative', 'status: bad debt',
-                'payment status: late', 'foreclosure', 'repossession'
-            ];
-            
-            const accountSections = text.split(/(?=Account Name:|Account Information:|ACCOUNT INFORMATION:)/i);
-            
-            for (const section of accountSections) {
-                const hasNegativeInfo = negativeKeywords.some(keyword => 
-                    section.toLowerCase().includes(keyword.toLowerCase())
-                );
-                
-                if (hasNegativeInfo || accountSections.length <= 5) {
-                    const account = extractExperianAccountInfo(section);
-                    if (account) accounts.push(account);
-                }
-            }
-            
-            return removeDuplicateAccounts(accounts);
-        }
-        
-        function extractExperianAccountInfo(section) {
-            const creditorMatch = section.match(/(?:Account Name:|Creditor:|Company Name:)\\s*([^\\n\\r]+)/i) ||
-                                 section.match(/^([A-Z][A-Za-z\\s&,.']+)(?=\\s+Account #)/i);
-            const creditor = creditorMatch ? creditorMatch[1].trim() : null;
-            
-            if (!creditor || creditor.length < 2) return null;
-            
-            const accountNumberMatch = section.match(/(?:Account Number:|Account #:)\\s*([^\\n\\r]+)/i);
-            const accountNumber = accountNumberMatch ? accountNumberMatch[1].trim() : 'Unknown';
-            
-            const balanceMatch = section.match(/(?:Balance:|Recent Balance:|Current Balance:)\\s*\\$?([\\d,]+\\.\\d{2}|\\d+)/i);
-            const balance = balanceMatch ? balanceMatch[1].trim() : 'Unknown';
-            
-            const statusMatch = section.match(/(?:Status:|Account Status:|Payment Status:|Condition:)\\s*([^\\n\\r]+)/i) ||
-                              section.match(/(?:30|60|90|120)\\s*Days Past Due/i);
-            const status = statusMatch ? statusMatch[0].trim() : 'Unknown';
-            
-            const openDateMatch = section.match(/(?:Date Opened:|Opened Date:)\\s*([^\\n\\r]+)/i);
-            const openDate = openDateMatch ? openDateMatch[1].trim() : 'Unknown';
-            
-            const lastReportedMatch = section.match(/(?:Status Updated:|Last Reported:|Date Updated:)\\s*([^\\n\\r]+)/i);
-            const lastReported = lastReportedMatch ? lastReportedMatch[1].trim() : 'Unknown';
-            
-            return {
-                creditor, accountNumber, balance, status, openDate, lastReported,
-                negativeType: determineNegativeType(status, section) || undefined
-            };
-        }
-        
-        function parseTransUnionAccounts(text) {
-            const accounts = [];
-            const negativeKeywords = [
-                'collection', 'charge-off', 'charged off', 'past due', 'delinquent', 
-                'late', 'pay status: late', 'pay status: 30 days', 'pay status: 60 days',
-                'pay status: 90 days', 'foreclosure', 'repossession'
-            ];
-            
-            const accountSections = text.split(/(?=Company Name:|COMPANY NAME:|TRADELINE:|Account Type & Number:)/i);
-            
-            for (const section of accountSections) {
-                const hasNegativeInfo = negativeKeywords.some(keyword => 
-                    section.toLowerCase().includes(keyword.toLowerCase())
-                );
-                
-                if (hasNegativeInfo || accountSections.length <= 5) {
-                    const account = extractTransUnionAccountInfo(section);
-                    if (account) accounts.push(account);
-                }
-            }
-            
-            return removeDuplicateAccounts(accounts);
-        }
-        
-        function extractTransUnionAccountInfo(section) {
-            const creditorMatch = section.match(/(?:Company Name:|Creditor:|Company:)\\s*([^\\n\\r]+)/i) ||
-                                 section.match(/^([A-Z][A-Za-z\\s&,.']+)(?=\\s+Account #)/i);
-            const creditor = creditorMatch ? creditorMatch[1].trim() : null;
-            
-            if (!creditor || creditor.length < 2) return null;
-            
-            const accountNumberMatch = section.match(/(?:Account Number:|Account #:|Account Type & Number:.*?)\\s*([^\\n\\r]+)/i);
-            const accountNumber = accountNumberMatch ? accountNumberMatch[1].trim() : 'Unknown';
-            
-            const balanceMatch = section.match(/(?:Balance:|Current Balance:|High Balance:)\\s*\\$?([\\d,]+\\.\\d{2}|\\d+)/i);
-            const balance = balanceMatch ? balanceMatch[1].trim() : 'Unknown';
-            
-            const statusMatch = section.match(/(?:Pay Status:|Account Status:|Status:)\\s*([^\\n\\r]+)/i) ||
-                              section.match(/(?:30|60|90|120)\\s*Days Past Due/i);
-            const status = statusMatch ? statusMatch[0].trim() : 'Unknown';
-            
-            const openDateMatch = section.match(/(?:Date Opened:|Opened:)\\s*([^\\n\\r]+)/i);
-            const openDate = openDateMatch ? openDateMatch[1].trim() : 'Unknown';
-            
-            const lastReportedMatch = section.match(/(?:Date Updated:|Last Reported:|Date Reported:)\\s*([^\\n\\r]+)/i);
-            const lastReported = lastReportedMatch ? lastReportedMatch[1].trim() : 'Unknown';
-            
-            return {
-                creditor, accountNumber, balance, status, openDate, lastReported,
-                negativeType: determineNegativeType(status, section) || undefined
-            };
-        }
-        
-        function parseGenericAccounts(text) {
-            const accounts = [];
-            const negativeKeywords = [
-                'potentially negative', 'negative items', 'adverse accounts', 
-                'derogatory', 'collection', 'charge-off', 'charged off', 
-                'past due', 'delinquent', 'late payment', 'late 30', 'late 60', 'late 90',
-                'days late', 'in dispute', 'settlement', 'foreclosure', 'repossession',
-                'bankruptcy', 'public record', 'tax lien', 'judgment', 'default'
-            ];
-            
-            const sections = text.split(/(?=(?:[A-Z][a-z]+ )+(?:Bank|Financial|Credit|Mortgage|Auto|Loan|Card|Services|Inc|LLC|Corp|Corporation))/);
-            
-            for (const section of sections) {
-                const hasNegativeInfo = negativeKeywords.some(keyword => 
-                    section.toLowerCase().includes(keyword.toLowerCase())
-                );
-                
-                if (hasNegativeInfo || sections.length <= 5) {
-                    const account = extractGenericAccountInfo(section);
-                    if (account) accounts.push(account);
-                }
-            }
-            
-            return removeDuplicateAccounts(accounts);
-        }
-        
-        function extractGenericAccountInfo(section) {
-            const creditorMatch = section.match(/^(?:[A-Z][a-z]+ )+(?:Bank|Financial|Credit|Mortgage|Auto|Loan|Card|Services|Inc|LLC|Corp|Corporation)/);
-            const creditor = creditorMatch ? creditorMatch[0].trim() : extractCreditorName(section);
-            
-            if (!creditor || creditor.length < 2) return null;
-            
-            const accountNumberMatch = section.match(/(?:Account\\s*(?:#|Number|No):?\\s*|#\\s*)([\\w\\d-*]+)/i) || 
-                                      section.match(/(?:Account|Acct)(?:\\s*#|\\s+Number|\\s+No)?:?\\s*([\\w\\d-*]+)/i);
-            const accountNumber = accountNumberMatch ? accountNumberMatch[1].trim() : 'Unknown';
-            
-            const balanceMatch = section.match(/(?:Balance|Amount|Debt):?\\s*\\$?([\\d,]+\\.\\d{2}|\\d+)/i) || 
-                               section.match(/\\$\\s*([\\d,]+\\.\\d{2}|\\d+)/);
-            const balance = balanceMatch ? balanceMatch[1].trim() : 'Unknown';
-            
-            const statusMatch = section.match(/(?:Status|Condition|Payment Status):?\\s*([^,\\n\\r.]+)/i) ||
-                              section.match(/(?:30|60|90|120|150|180)\\s*days?\\s*(?:past\\s*due|late)/i) ||
-                              section.match(/(?:Charge[d\\s-]*off|Collection|Settled|Foreclosure|Repossession|Default)/i);
-            const status = statusMatch ? statusMatch[0].trim() : extractStatus(section);
-            
-            const openDateMatch = section.match(/(?:Open(?:ed)?\\s*(?:Date|On):?\\s*|Date\\s*Opened:?\\s*)([A-Za-z]+\\s*\\d{1,2},?\\s*\\d{4}|\\d{1,2}\\/\\d{1,2}\\/\\d{2,4})/i);
-            const openDate = openDateMatch ? openDateMatch[1].trim() : 'Unknown';
-            
-            const lastReportedMatch = section.match(/(?:Last\\s*Reported|Reported\\s*Date|Date\\s*Reported):?\\s*([A-Za-z]+\\s*\\d{1,2},?\\s*\\d{4}|\\d{1,2}\\/\\d{1,2}\\/\\d{2,4})/i);
-            const lastReported = lastReportedMatch ? lastReportedMatch[1].trim() : 'Unknown';
-            
-            return {
-                creditor, accountNumber, balance, status: status || 'Unknown', openDate, lastReported,
-                negativeType: determineNegativeType(status, section) || undefined
-            };
-        }
-        
-        function extractCreditorName(text) {
-            const patterns = [
-                /([A-Z][A-Za-z\\s&,.']+)(?=\\s+Account)/i,
-                /([A-Z][A-Za-z\\s&,.']+)(?=\\s+opened)/i,
-                /([A-Z][A-Za-z\\s&,.']+)(?=\\s+reported)/i
-            ];
-            
-            for (const pattern of patterns) {
-                const match = text.match(pattern);
-                if (match) return match[1].trim();
-            }
-            
-            return null;
-        }
-        
-        // Status from AUTHORITATIVE lines only — the whole-section word
-        // scan previously matched incidental "Collections" headers and
-        // "never late" remarks, producing false "Collection"/"Past Due".
-        function extractStatus(text) {
-            var lines = (text || '').split(/\n/);
-            var labels = /^(pay\s*status|paystatus|account\s*condition|account\s*status|payment\s*status|manner\s+of\s+payment|status)\s*(?:[:\t]|\s{2,})\s*(.+)$/i;
-            for (var i = 0; i < lines.length; i++) {
-                var m = lines[i].trim().match(labels);
-                if (!m) continue;
-                var value = m[2].trim();
-                if (!value) continue;
-                var days = value.match(/(\d+)\s*days?\s*(?:past\s*due|late)/i);
-                if (days) return days[1] + ' Days Late';
-                return value;
-            }
-            var daysOnly = (text || '').match(/\b(\d+)\s*days?\s*(?:past\s*due|late)\b/i);
-            if (daysOnly) return daysOnly[1] + ' Days Late';
-            return null;
-        }
-        
-        // PRECISION-FIRST negative classification: an account is negative
-        // ONLY on authoritative evidence (its own labeled status / account
-        // type / remarks / "previously past due" lines). Incidental text
-        // (section headers like "Collections", creditor names like
-        // "...Collections LLC", boilerplate) can NEVER mark an account
-        // negative, and negated wording ("never late", "no late payments")
-        // is stripped first. Returns null for clean accounts.
-        function determineNegativeType(status, section) {
-            var stripNeg = function (s) {
-                return s.replace(/\b(?:never|no|not|n['’]t|without)\b(?:\s+(?:any|been|had|have|has|history|of|in|on|currently|reporting|showing|known))*\s+(?:late|delinquen\w*|past\s*due|missed\s+payments?|derogator\w*|adverse|negatives?|collections?|charge[\s-]?offs?|foreclosures?|repossessions?|bankruptc\w*|liens?|judg?ments?|public\s+records?)\b/gi, ' ');
-            };
-            var hardClean = /\b(?:never|no|not|n['’]t|without)\b(?:\s+(?:any|been|had|have|has|history|of|in|on|currently|reporting|showing|known))*\s+(?:late|delinquen\w*|past\s*due|missed\s+payments?|derogator\w*|adverse|negatives?|collections?)/i.test(status || '');
-            var testDerog = function (v) {
-                v = stripNeg(v);
-                if (!v.trim()) return null;
-                if (/collection|placed\s+for\s+collection|assigned\s+to\s+(?:a\s+)?(?:collection|agency)|sold\s+to\s+(?:a\s+)?(?:third|3rd)[\s-]party|transfer(?:red)?\s+(?:to|into)?\s*collection/i.test(v)) return 'Collection Account';
-                if (/charg?e[d]?\s*[- ]?off|charge[\s-]?offs?\b|written\s+off|write[\s-]?offs?\b|bad\s+debt/i.test(v)) return 'Charge-off';
-                if (/past\s*due|delinquen\w*|late\s+payments?|(?:30|60|90|120|150|180)\+?\s*days?\s*(?:past|late)/i.test(v)) return 'Late Payments';
-                if (/foreclos/i.test(v)) return 'Foreclosure';
-                if (/repossess/i.test(v)) return 'Repossession';
-                if (/bankrupt/i.test(v)) return 'Bankruptcy';
-                if (/settled\s+for\s+less|in\s+default|defaulted|voluntary\s+surrender|forfeit|unpaid\s+balance/i.test(v)) return 'Derogatory Status';
-                return null;
-            };
-
-            var statusHit = testDerog(status || '');
-            if (statusHit) return statusHit;
-
-            // Authoritative labeled lines about THIS account (status /
-            // pay status / account type / remarks / previously past due).
-            var lines = (section || '').split(/\n/);
-            var labels = /^(pay\s*status|paystatus|account\s*condition|account\s*status|payment\s*status|manner\s+of\s+payment|status\s+payments?|status|account\s+type(?:\s*(?:&|and|\/)\s*(?:number|pay\s*status))?|type|remarks?|comments?|narrative|previously\s+past\s+due)\s*(?:[:\t]|\s{2,})\s*(.+)$/i;
-            for (var i = 0; i < lines.length; i++) {
-                var m = lines[i].trim().match(labels);
-                if (!m) continue;
-                var label = m[1].toLowerCase();
-                var value = m[2];
-                if (/^previously\s+past\s+due$/.test(label)) {
-                    if (/[1-9]/.test(value)) return 'Late Payments';
-                    continue;
-                }
-                if (label === 'status' || label === 'pay status' || label === 'paystatus' ||
-                    label === 'account condition' || label === 'account status' ||
-                    label === 'payment status' || label === 'manner of payment' ||
-                    label === 'status payments' || label === 'status') continue;
-                var hit = testDerog(value);
-                if (hit) {
-                    if (hardClean) return null; // contradiction → unmarked
-                    return hit;
-                }
-            }
-            return null;
-        }
-        
-        function removeDuplicateAccounts(accounts) {
-            const uniqueAccounts = [];
-            const seen = new Set();
-            
-            for (const account of accounts) {
-                const key = account.creditor + '-' + account.accountNumber;
-                if (!seen.has(key)) {
-                    seen.add(key);
-                    uniqueAccounts.push(account);
-                }
-            }
-            
-            return uniqueAccounts;
         }
     </script>
 </body>
@@ -776,85 +611,6 @@ function WebCreditReportParser({
       setSelectedFile(file);
       setErrorMessage('');
     }
-  }, []);
-
-  // The old regex-only "generic" splitter. Kept ONLY as the last-resort
-  // fallback when the new engine returns zero accounts for a non-empty
-  // file — better to surface raw guesses (flagged as low-confidence by
-  // the engine's reportFlags) than to show nothing.
-  const parseGenericAccounts = useCallback((text: string): ParsedAccount[] => {
-    // Precision-first negative classification — same engine logic as
-    // lib/credit-report-parser (classifyNegative). An account is
-    // negative ONLY on authoritative evidence (its own status/type/
-    // remarks/payment grid); incidental text and negated phrases like
-    // "Never late" can never mark it negative. Fallback path only.
-    const determineNegativeType = (status: string, section: string): string | undefined => {
-      const res = classifyNegative(status, section);
-      return res.isNegative ? res.negativeType : undefined;
-    };
-
-    const accounts: ParsedAccount[] = [];
-    const negativeKeywords = [
-      'potentially negative', 'negative items', 'adverse accounts', 
-      'derogatory', 'collection', 'charge-off', 'charged off', 
-      'past due', 'delinquent', 'late payment', 'late 30', 'late 60', 'late 90',
-      'days late', 'in dispute', 'settlement', 'foreclosure', 'repossession',
-      'bankruptcy', 'public record', 'tax lien', 'judgment', 'default'
-    ];
-    
-    const sections = text.split(/(?=(?:[A-Z][a-z]+ )+(?:Bank|Financial|Credit|Mortgage|Auto|Loan|Card|Services|Inc|LLC|Corp|Corporation))/);
-    
-    for (const section of sections) {
-      const hasNegativeInfo = negativeKeywords.some(keyword => 
-        section.toLowerCase().includes(keyword.toLowerCase())
-      );
-      
-      if (hasNegativeInfo || sections.length <= 5) {
-        const creditorMatch = section.match(/^(?:[A-Z][a-z]+ )+(?:Bank|Financial|Credit|Mortgage|Auto|Loan|Card|Services|Inc|LLC|Corp|Corporation)/);
-        const creditor = creditorMatch ? creditorMatch[0].trim() : null;
-        
-        if (creditor && creditor.length >= 2) {
-          const accountNumberMatch = section.match(/(?:Account\s*(?:#|Number|No):?\s*|#\s*)([\w\d-*]+)/i);
-          const accountNumber = accountNumberMatch ? accountNumberMatch[1].trim() : 'Unknown';
-          
-          const balanceMatch = section.match(/(?:Balance|Amount|Debt):?\s*\$?([\d,]+\.\d{2}|\d+)/i);
-          const balance = balanceMatch ? balanceMatch[1].trim() : 'Unknown';
-          
-          const statusMatch = section.match(/(?:Status|Condition|Payment Status):?\s*([^,\n\r.]+)/i) ||
-                            section.match(/(?:30|60|90|120|150|180)\s*days?\s*(?:past\s*due|late)/i);
-          const status = statusMatch ? statusMatch[0].trim() : 'Unknown';
-          
-          const openDateMatch = section.match(/(?:Open(?:ed)?\s*(?:Date|On):?\s*|Date\s*Opened:?\s*)([A-Za-z]+\s*\d{1,2},?\s*\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4})/i);
-          const openDate = openDateMatch ? openDateMatch[1].trim() : 'Unknown';
-          
-          const lastReportedMatch = section.match(/(?:Last\s*Reported|Reported\s*Date|Date\s*Reported):?\s*([A-Za-z]+\s*\d{1,2},?\s*\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4})/i);
-          const lastReported = lastReportedMatch ? lastReportedMatch[1].trim() : 'Unknown';
-          
-          accounts.push({
-            creditor,
-            accountNumber,
-            balance,
-            status,
-            openDate,
-            lastReported,
-            negativeType: determineNegativeType(status, section)
-          });
-        }
-      }
-    }
-    
-    const uniqueAccounts: ParsedAccount[] = [];
-    const seen = new Set<string>();
-    
-    for (const account of accounts) {
-      const key = account.creditor + '-' + account.accountNumber;
-      if (!seen.has(key)) {
-        seen.add(key);
-        uniqueAccounts.push(account);
-      }
-    }
-    
-    return uniqueAccounts;
   }, []);
 
   const handleParse = useCallback(async () => {
@@ -895,8 +651,14 @@ function WebCreditReportParser({
         for (let i = 1; i <= pdf.numPages; i++) {
           const page = await pdf.getPage(i);
           const textContent = await page.getTextContent();
-          const pageText = textContent.items.map((item: any) => item.str).join(' ');
-          fullText += pageText + ' ';
+          // CRITICAL: reconstruct real lines from text-item Y/X coordinates
+          // instead of naively joining all items with a single space. A
+          // flattened join destroys every line break the downstream
+          // parsing engine relies on (splitAccountBlocks, section
+          // anchors, etc.), which previously collapsed entire reports
+          // into a single fake "account".
+          const pageText = reconstructPageLines(textContent.items as any);
+          fullText += pageText + '\n\n';
           
           const progressValue = 30 + (i / pdf.numPages * 40);
           setProgress(progressValue);
@@ -924,36 +686,18 @@ function WebCreditReportParser({
       setStatusText('Analyzing credit report...');
       setProgress(80);
       
-      // New engine: weighted bureau detection, combined-report splitting,
-      // per-bureau labeled-field parsing, normalization, confidence +
-      // flags. See lib/credit-report-parser/.
-      const report: ParsedCreditReport = parseCreditReport(fullText, {
-        userBureau: selectedBureau,
-        sourceFormat,
-      });
-      
-      let accounts: ParsedAccount[] = toCompatAccounts(report.accounts);
-      let detectedBureau: string;
-      
-      if (report.bureaus.length > 1) {
-        detectedBureau = 'Combined (3-Bureau)';
-      } else {
-        detectedBureau = report.bureau === 'unknown' ? 'generic' : report.bureau;
-      }
-      
-      // Last-resort fallback: keep the old generic splitter alive only when
-      // the new engine found nothing at all in a non-empty file.
-      if (accounts.length === 0 && fullText.trim().length > 0) {
-        accounts = parseGenericAccounts(fullText);
-        if (accounts.length > 0) {
-          detectedBureau = detectedBureau === 'generic' ? 'generic' : detectedBureau;
-        }
-      }
+      // ONE shared engine (used identically on web + native): weighted
+      // bureau detection, combined-report splitting, per-bureau
+      // labeled-field parsing, normalization, confidence + flags. See
+      // lib/credit-report-parser/.
+      const { accounts, detectedBureau, warnings } = runCreditReportEngine(
+        fullText,
+        selectedBureau,
+        sourceFormat
+      );
       
       const negativeCount = accounts.filter(a => a.negativeType).length;
-      const warningText = report.warnings.length > 0
-        ? report.warnings[0]
-        : '';
+      const warningText = warnings.length > 0 ? warnings[0] : '';
       
       setProgress(100);
       setStatusText(`Found ${accounts.length} accounts (${negativeCount} negative)`);
@@ -965,7 +709,7 @@ function WebCreditReportParser({
         if (warningText) {
           // Surface the first engine warning so the user knows when data
           // quality was questionable — never silently swallowed.
-          console.warn('[CreditReportParser]', report.warnings.join(' | '));
+          console.warn('[CreditReportParser]', warnings.join(' | '));
         }
       }, 500);
       
@@ -976,7 +720,7 @@ function WebCreditReportParser({
       onLoadingChange(false);
       onError(error.message);
     }
-  }, [selectedFile, selectedBureau, onAccountsParsed, onError, onLoadingChange, parseGenericAccounts]);
+  }, [selectedFile, selectedBureau, onAccountsParsed, onError, onLoadingChange]);
 
   return (
     <View style={webStyles.container}>
@@ -1071,10 +815,38 @@ function NativeCreditReportParser({
         console.log('WebView message:', data.type);
 
         switch (data.type) {
-          case 'accounts':
-            onAccountsParsed(data.accounts, data.bureau);
+          case 'extractedText': {
+            // The WebView only extracted raw, line-reconstructed PDF
+            // text. Run it through the SAME shared engine used on web
+            // (lib/credit-report-parser) so both platforms produce
+            // identical results — no separate/duplicate parsing logic.
+            const fullText: string = data.text || '';
+            const selectedBureau: string = data.selectedBureau || 'auto';
+            const sourceFormat: 'pdf' | 'html' | 'text' = data.sourceFormat || 'pdf';
+
+            const { accounts, detectedBureau, warnings } = runCreditReportEngine(
+              fullText,
+              selectedBureau,
+              sourceFormat
+            );
+
+            if (warnings.length > 0) {
+              console.warn('[CreditReportParser]', warnings.join(' | '));
+            }
+
+            const negativeCount = accounts.filter((a) => a.negativeType).length;
+            webViewRef.current?.injectJavaScript(
+              `window.receiveAnalysisComplete && window.receiveAnalysisComplete(${JSON.stringify({
+                message: `Found ${accounts.length} accounts (${negativeCount} negative)`,
+              })}); true;`
+            );
+
+            onLoadingChange(false);
+            onAccountsParsed(accounts, detectedBureau);
             break;
+          }
           case 'error':
+            onLoadingChange(false);
             onError(data.error);
             break;
           case 'loading':

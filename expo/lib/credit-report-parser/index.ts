@@ -29,7 +29,7 @@ import type {
   SourceFormat,
   StandardAccount,
 } from "./types";
-import { collapseWhitespace, corruptionRatio } from "./normalize";
+import { collapseWhitespace, corruptionRatio, repairKernedWords } from "./normalize";
 import { bureauConflicts, detectBureaus, splitCombinedReport } from "./detect";
 import { dedupeAccounts, parseBureauAccounts } from "./parsers";
 
@@ -47,7 +47,15 @@ export type {
   StandardAccount,
   AccountFlag,
 } from "./types";
-export { htmlToText, normalizeDate, normalizeMoney, maskAccountNumber } from "./normalize";
+export {
+  htmlToText,
+  normalizeDate,
+  normalizeMoney,
+  maskAccountNumber,
+  reconstructPageLines,
+  repairKernedWords,
+  type PdfTextItemLike,
+} from "./normalize";
 export { detectBureaus, splitCombinedReport, bureauConflicts } from "./detect";
 export { classifyNegative, parsePaymentHistory } from "./parsers";
 
@@ -270,6 +278,7 @@ export function toCompatAccounts(
       lastReported: a.lastReported,
     };
     if (a.negativeType) compat.negativeType = a.negativeType;
+    if (a.furnisherAddress) compat.furnisherAddress = a.furnisherAddress;
     return compat;
   });
 }
@@ -288,7 +297,12 @@ export function parseCreditReport(
   // NOTE: corruptionRatio MUST run on the raw text — collapseWhitespace
   // strips NUL chars, which would hide binary corruption from preChecks.
   const rawRatio = corruptionRatio(rawText ?? "");
-  const text = collapseWhitespace(rawText ?? "");
+  // Some PDF generators bake stray spaces into words at the raw
+  // text-extraction level (a kerning/ligature artifact, e.g.
+  // "St at us" instead of "Status") — repair the known affected words
+  // before any structural parsing runs, so every label-based field
+  // extractor keeps working regardless of source PDF quirks.
+  const text = collapseWhitespace(repairKernedWords(rawText ?? ""));
   const reportFlags: ReportFlag[] = [];
   const warnings: string[] = [];
 

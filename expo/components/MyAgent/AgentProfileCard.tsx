@@ -45,6 +45,8 @@ export interface AgentProfileCardProps {
   onOpenDisputeTracker?: () => void;
   /** Open the AI Dispute Assistant (credit report analysis) modal */
   onOpenCreditAnalysis?: () => void;
+  /** Open the per-bureau negative accounts dashboard */
+  onOpenNegativeAccountsDashboard?: () => void;
   /** Whether the current user is an ACE-1 student (controls action button visibility) */
   isACE1?: boolean;
 }
@@ -60,6 +62,7 @@ export default function AgentProfileCard({
   onOpenCreditRepair,
   onOpenDisputeTracker,
   onOpenCreditAnalysis,
+  onOpenNegativeAccountsDashboard,
   isACE1 = true,
 }: AgentProfileCardProps) {
   const { tier } = useSubscription();
@@ -96,6 +99,14 @@ export default function AgentProfileCard({
       icon: FileSearch,
       color: Colors.success,
       onPress: onOpenCreditAnalysis,
+    },
+    {
+      id: "negative-accounts-dashboard",
+      label: "Negative Accounts by Bureau",
+      description: "See every negative account across all your saved reports",
+      icon: ClipboardList,
+      color: Colors.warning,
+      onPress: onOpenNegativeAccountsDashboard,
     },
     {
       id: "credit-repair",
