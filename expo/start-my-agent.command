@@ -5,7 +5,7 @@
 #    1. Opens Terminal window "My Agent — Backend"  → http://localhost:3000
 #    2. Opens Terminal window "My Agent — App"      → Metro on :8081
 #    3. Waits until both are up (health checks)
-#    4. Opens the My Agent page in your default browser
+#    4. Opens the app's Home page in your default browser
 #
 #  Safe to re-run any time — stops old copies first.
 #  Pair: stop-my-agent.command stops everything.
@@ -84,13 +84,13 @@ else
   printf "${Y}   Local Network → turn ON 'Terminal'.)${X}\n\n"
 fi
 
-# --- 5. Open the My Agent page ----------------------------------
+# --- 5. Open the Home page ---------------------------------------
 if [ -n "$METRO_OK" ]; then
-  printf "${D}Opening My Agent in your browser ...${X}\n"
-  if open "http://localhost:8081/my-agent"; then
-    printf "${G}✓ Opened http://localhost:8081/my-agent${X}\n\n"
+  printf "${D}Opening the app in your browser ...${X}\n"
+  if open "http://localhost:8081/"; then
+    printf "${G}✓ Opened http://localhost:8081/${X}\n\n"
   else
-    printf "${Y}! Could not open the browser — go to: http://localhost:8081/my-agent${X}\n\n"
+    printf "${Y}! Could not open the browser — go to: http://localhost:8081/${X}\n\n"
   fi
 fi
 

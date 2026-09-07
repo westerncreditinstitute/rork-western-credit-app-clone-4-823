@@ -6,14 +6,15 @@ Last updated: September 2026
 
 1. Open **Finder** → **Documents** → **rork-western-credit-app-clone-4-823** → **expo**.
 2. Double-click **start-my-agent.command**.
-3. Wait for "All set." (it opens two Terminal windows and the My Agent page in your browser).
+3. Wait for "All set." (it opens two Terminal windows and the app's Home page in your browser).
 
 That's it. Backend and app are running.
 
 ## While you work
 
 - Keep both Terminal windows open: **My Agent — Backend** and **My Agent — App**.
-- My Agent address: http://localhost:8081/my-agent
+- App address (Home page): http://localhost:8081/
+- My Agent page: http://localhost:8081/my-agent
 - Backend health: http://localhost:3000/api/system-status
 
 ## Stop everything (one double-click)
@@ -38,6 +39,7 @@ The first time you double-click start-my-agent.command, macOS may say "'start-my
 |---|---|
 | Start everything | Double-click `start-my-agent.command` |
 | Stop everything | Double-click `stop-my-agent.command` |
+| Home page (app opens here) | http://localhost:8081/ |
 | My Agent page | http://localhost:8081/my-agent |
 | Backend health | http://localhost:3000/api/system-status |
 | Folder | Documents/rork-western-credit-app-clone-4-823/expo |
