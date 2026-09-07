@@ -2026,6 +2026,6 @@ const styles = StyleSheet.create({
   newReportButtonText: {
     fontSize: 14,
     fontWeight: "600",
-    color: Colors.textPrimary,
+    color: Colors.text,
   },
 });

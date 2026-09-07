@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  CheckBox,
   Platform,
 } from "react-native";
 import {
@@ -13,8 +12,54 @@ import {
   ChevronDown,
   ChevronUp,
   AlertCircle,
+  Check,
 } from "lucide-react-native";
 import Colors from "@/constants/colors";
+
+/**
+ * Simple pressable checkbox — replaces the old `CheckBox` import from
+ * react-native, which was removed from RN core in newer versions
+ * (was silently `undefined` here, crashing at render time).
+ */
+const SimpleCheckbox: React.FC<{
+  value: boolean;
+  onValueChange: () => void;
+  disabled?: boolean;
+}> = ({ value, onValueChange, disabled }) => (
+  <TouchableOpacity
+    onPress={onValueChange}
+    disabled={disabled}
+    style={[
+      checkboxStyles.box,
+      value && checkboxStyles.boxChecked,
+      disabled && checkboxStyles.boxDisabled,
+    ]}
+    accessibilityRole="checkbox"
+    accessibilityState={{ checked: value, disabled: !!disabled }}
+  >
+    {value ? <Check size={14} color={Colors.white} /> : null}
+  </TouchableOpacity>
+);
+
+const checkboxStyles = StyleSheet.create({
+  box: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: Colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.surface,
+  },
+  boxChecked: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  boxDisabled: {
+    opacity: 0.5,
+  },
+});
 
 export interface ParsedAccount {
   creditor: string;
@@ -93,7 +138,7 @@ export const DisputeLetterPrompt: React.FC<DisputeLetterPromptProps> = ({
         activeOpacity={0.7}
       >
         <View style={styles.headerLeft}>
-          <AlertCircle size={24} color={Colors.danger} />
+          <AlertCircle size={24} color={Colors.error} />
           <View style={styles.headerTextContainer}>
             <Text style={styles.headerTitle}>Generate Dispute Letters</Text>
             <Text style={styles.headerSubtitle}>
@@ -103,9 +148,9 @@ export const DisputeLetterPrompt: React.FC<DisputeLetterPromptProps> = ({
           </View>
         </View>
         {expanded ? (
-          <ChevronUp size={24} color={Colors.danger} />
+          <ChevronUp size={24} color={Colors.error} />
         ) : (
-          <ChevronDown size={24} color={Colors.danger} />
+          <ChevronDown size={24} color={Colors.error} />
         )}
       </TouchableOpacity>
 
@@ -119,10 +164,9 @@ export const DisputeLetterPrompt: React.FC<DisputeLetterPromptProps> = ({
           {/* Account Selection */}
           <View style={styles.accountSelectionContainer}>
             <View style={styles.selectAllContainer}>
-              <CheckBox
+              <SimpleCheckbox
                 value={selectAll}
-                onValueChange={handleSelectAll}
-                style={styles.checkbox}
+                onValueChange={() => handleSelectAll(!selectAll)}
                 disabled={isLoading}
               />
               <Text style={styles.selectAllText}>Select All Accounts</Text>
@@ -130,14 +174,13 @@ export const DisputeLetterPrompt: React.FC<DisputeLetterPromptProps> = ({
 
             {negativeAccounts.map((account, index) => (
               <View key={`${account.creditor}-${account.accountNumber}`} style={styles.accountCheckItem}>
-                <CheckBox
+                <SimpleCheckbox
                   value={selectedAccounts.some(
                     (a) =>
                       a.creditor === account.creditor &&
                       a.accountNumber === account.accountNumber
                   )}
                   onValueChange={() => handleToggleAccount(account)}
-                  style={styles.checkbox}
                   disabled={isLoading}
                 />
                 <View style={styles.accountInfo}>
@@ -229,7 +272,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: Colors.danger,
+    color: Colors.error,
     marginBottom: 2,
   },
   headerSubtitle: {
@@ -246,7 +289,7 @@ const styles = StyleSheet.create({
   },
   promptText: {
     fontSize: 14,
-    color: Colors.textPrimary,
+    color: Colors.text,
     lineHeight: 20,
     marginBottom: 16,
     fontWeight: "500",
@@ -275,7 +318,7 @@ const styles = StyleSheet.create({
   selectAllText: {
     fontSize: 13,
     fontWeight: "700",
-    color: Colors.textPrimary,
+    color: Colors.text,
   },
   accountCheckItem: {
     flexDirection: "row",
@@ -292,7 +335,7 @@ const styles = StyleSheet.create({
   accountName: {
     fontSize: 13,
     fontWeight: "600",
-    color: Colors.textPrimary,
+    color: Colors.text,
     marginBottom: 2,
   },
   accountDetails: {

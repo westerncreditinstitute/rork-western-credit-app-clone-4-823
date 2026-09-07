@@ -34,6 +34,13 @@ interface AccountSummaryProps {
   accounts: ParsedAccount[];
   bureau: string;
   onSelectNegativeAccounts?: (selected: ParsedAccount[]) => void;
+  /**
+   * When true, renders as a plain View instead of its own ScrollView.
+   * Use this when AccountSummary is embedded inside a screen/modal that
+   * already provides its own outer ScrollView — nesting two flex-based
+   * ScrollViews causes the inner one to collapse to zero height.
+   */
+  nested?: boolean;
 }
 
 interface CategorizedAccounts {
@@ -187,6 +194,7 @@ export const AccountSummary: React.FC<AccountSummaryProps> = ({
   accounts,
   bureau,
   onSelectNegativeAccounts,
+  nested = false,
 }) => {
   const [expandedSection, setExpandedSection] = useState<
     "negative" | "positive" | "neutral" | null
@@ -238,8 +246,8 @@ export const AccountSummary: React.FC<AccountSummaryProps> = ({
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
 
-  return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+  const content = (
+    <>
       {/* Success Message */}
       <View style={styles.successBanner}>
         <CheckCircle size={24} color="#16a34a" />
@@ -258,7 +266,7 @@ export const AccountSummary: React.FC<AccountSummaryProps> = ({
           icon="⚠"
           label="Negative"
           count={categorized.negative.length}
-          color={Colors.danger}
+          color={Colors.error}
         />
         <StatCard
           icon="✓"
@@ -279,7 +287,7 @@ export const AccountSummary: React.FC<AccountSummaryProps> = ({
         <AccountSection
           title="Negative Accounts"
           icon="⚠"
-          color={Colors.danger}
+          color={Colors.error}
           count={categorized.negative.length}
           isExpanded={expandedSection === "negative"}
           onToggle={() =>
@@ -397,6 +405,16 @@ export const AccountSummary: React.FC<AccountSummaryProps> = ({
       </View>
 
       <View style={styles.spacer} />
+    </>
+  );
+
+  if (nested) {
+    return <View style={styles.container}>{content}</View>;
+  }
+
+  return (
+    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      {content}
     </ScrollView>
   );
 };
@@ -557,7 +575,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: Colors.textPrimary,
+    color: Colors.text,
     marginBottom: 2,
   },
   sectionCount: {
@@ -613,7 +631,7 @@ const styles = StyleSheet.create({
   creditorName: {
     fontSize: 14,
     fontWeight: "700",
-    color: Colors.textPrimary,
+    color: Colors.text,
     marginBottom: 2,
   },
   accountNumberText: {
@@ -662,7 +680,7 @@ const styles = StyleSheet.create({
   },
   detailValue: {
     fontSize: 12,
-    color: Colors.textPrimary,
+    color: Colors.text,
     flex: 0.65,
     textAlign: "right",
   },
