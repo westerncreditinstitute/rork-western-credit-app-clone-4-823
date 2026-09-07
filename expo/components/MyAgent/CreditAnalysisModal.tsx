@@ -24,6 +24,7 @@ import { useUser } from "@/contexts/UserContext";
 import CreditReportParser, {
   ParsedAccount,
 } from "@/components/CreditReportParser";
+import { AccountSummary } from "@/components/AccountSummary";
 
 // ============================================================
 // Types
@@ -78,6 +79,10 @@ export default function CreditAnalysisModal({
   const [analysis, setAnalysis] = useState<CreditAnalysisResult | null>(null);
   const [bureau, setBureau] = useState<string>("");
   const [saveWarning, setSaveWarning] = useState<string | null>(null);
+  // Raw parsed accounts (all accounts, not just negatives) — needed so we
+  // can render the full categorized Account Summary UI (negative/positive/
+  // neutral breakdown), not just the negative-only recommendation list.
+  const [parsedAccounts, setParsedAccounts] = useState<ParsedAccount[]>([]);
 
   const saveAnalysisMutation = trpc.aiAgents.saveCreditAnalysis.useMutation();
 
@@ -86,6 +91,7 @@ export default function CreditAnalysisModal({
     (accounts: ParsedAccount[], detectedBureau: string) => {
       setParseError(null);
       setBureau(detectedBureau);
+      setParsedAccounts(accounts || []);
 
       if (!accounts || accounts.length === 0) {
         setParseError(
@@ -143,6 +149,7 @@ export default function CreditAnalysisModal({
     setParseError(null);
     setSaveWarning(null);
     setBureau("");
+    setParsedAccounts([]);
   }, []);
 
   const handleClose = useCallback(() => {
@@ -258,6 +265,22 @@ export default function CreditAnalysisModal({
                 ) : null}
                 <Text style={styles.summaryText}>{analysis.summary}</Text>
               </View>
+
+              {/* Full Account Summary — categorized negative/positive/
+                  neutral breakdown with expandable account cards. This is
+                  the same component used on the standalone AI Dispute
+                  Assistant page, now shared here so both screens are
+                  consistent. */}
+              {parsedAccounts.length > 0 ? (
+                <View style={styles.accountSummaryWrap}>
+                  <Text style={styles.sectionTitle}>Summary of Accounts</Text>
+                  <AccountSummary
+                    accounts={parsedAccounts}
+                    bureau={bureau}
+                    nested
+                  />
+                </View>
+              ) : null}
 
               {/* Recommendations */}
               {analysis.recommendations.length > 0 ? (
@@ -430,6 +453,13 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 16,
     marginBottom: 20,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  accountSummaryWrap: {
+    marginBottom: 20,
+    borderRadius: 14,
+    overflow: "hidden",
     borderWidth: 1,
     borderColor: Colors.border,
   },
