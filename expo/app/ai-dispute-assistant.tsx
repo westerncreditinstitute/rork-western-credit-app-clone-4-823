@@ -164,30 +164,23 @@ export default function AIDisputeAssistantScreen() {
       return;
     }
 
-    // Show the account summary first
+    // Show the account summary - regardless of whether there are negatives
     setShowAccountSummary(true);
 
-    const newAccounts: NegativeAccount[] = accounts
-      .filter((acc) => acc.negativeType)
-      .map((acc, index) => ({
-        id: Date.now() + index,
-        name: acc.creditor.toUpperCase(),
-        accountNumber: acc.accountNumber,
-        status: acc.status,
-        negativeType: acc.negativeType || "Derogatory Status",
-        selected: false,
-        bureau: bureau,
-      }));
+    // Extract negative accounts for dispute flow
+    const negativeAccounts = accounts.filter((acc) => acc.negativeType);
+    
+    const newAccounts: NegativeAccount[] = negativeAccounts.map((acc, index) => ({
+      id: Date.now() + index,
+      name: acc.creditor.toUpperCase(),
+      accountNumber: acc.accountNumber,
+      status: acc.status,
+      negativeType: acc.negativeType || "Derogatory Status",
+      selected: false,
+      bureau: bureau,
+    }));
 
     setNegativeAccounts(newAccounts);
-    
-    if (newAccounts.length === 0) {
-      Alert.alert(
-        "No Negative Accounts Found",
-        "Your credit report shows no negative accounts. All your accounts are in good standing.",
-        [{ text: "OK", style: "cancel" }]
-      );
-    }
   }, []);
 
   const handleParserError = useCallback((error: string) => {
