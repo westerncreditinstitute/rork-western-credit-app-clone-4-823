@@ -1,6 +1,66 @@
 import * as z from "zod";
 import { createTRPCRouter, publicProcedure } from "../create-context";
-import { supabase } from "@/lib/supabase";
+// Use the service-role client (falls back to the anon client if
+// SUPABASE_SERVICE_ROLE_KEY isn't configured) so writes here aren't
+// silently blocked by RLS — mirrors the same fix already applied in
+// backend/trpc/routes/ai-agents.ts, where the anon client was
+// discovered to be the root cause of inserts being rejected.
+import { supabaseAdmin as supabase, isServiceRoleConfigured } from "@/lib/supabase-admin";
+import { isSupabaseConfigured } from "@/lib/supabase";
+
+interface SupabaseErrorLike {
+  code?: string;
+  message?: string;
+  details?: string;
+  hint?: string;
+}
+
+/**
+ * Turn a raw Postgres/PostgREST error into a message that actually tells the
+ * user (or developer) what to do, instead of a raw SQL error string. Mirrors
+ * the equivalent helper in backend/trpc/routes/ai-agents.ts — kept as a
+ * separate lightweight copy here rather than a shared import so this router
+ * has no dependency on the AI-agents feature.
+ */
+function explainDisputeError(err: SupabaseErrorLike | null | undefined): string {
+  if (!isSupabaseConfigured) {
+    return "Supabase is not configured. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY, then rebuild the app.";
+  }
+
+  const pgCode = err?.code || "";
+  const raw = `${err?.message || ""} ${err?.details || ""} ${err?.hint || ""}`;
+
+  // 22P02 = invalid_text_representation — a non-UUID user id (e.g. the
+  // app's local mock user id "1", or a "demo-<timestamp>" id created by
+  // AuthContext's offline fallback) being written into a UUID column.
+  if (pgCode === "22P02" || /invalid input syntax for type uuid/i.test(raw)) {
+    return "Your account isn't fully set up in the database yet (invalid user ID), so this dispute couldn't be saved. Try logging out and back in, or creating a real account instead of continuing in demo mode.";
+  }
+
+  // 23503 = foreign_key_violation — user_id doesn't match any row in users.
+  if (pgCode === "23503" || /violates foreign key constraint/i.test(raw)) {
+    return "Your account isn't fully set up in the database yet, so this dispute couldn't be linked to a user record. Try logging out and back in, or creating a real account instead of continuing in demo mode.";
+  }
+
+  // 42P01 = undefined_table, PGRST205 = table not found in schema cache.
+  if (pgCode === "42P01" || pgCode === "PGRST205" || /does not exist/i.test(raw)) {
+    return "The disputes table doesn't exist yet. Run the base schema migration (019_minimal_base_schema.sql) in the Supabase SQL editor.";
+  }
+
+  // 42501 = insufficient_privilege, PGRST301 = JWT/permission failure —
+  // the classic symptom of RLS enabled with no INSERT policy.
+  if (
+    pgCode === "42501" ||
+    pgCode === "PGRST301" ||
+    /row-level security|violates row-level|permission denied/i.test(raw)
+  ) {
+    return isServiceRoleConfigured
+      ? "The database blocked the write even though a service-role key is configured. Confirm SUPABASE_SERVICE_ROLE_KEY holds the 'service_role' key (not the 'anon' key) and that the server was restarted after setting it."
+      : "The database blocked the write because Row Level Security has no INSERT policy for the disputes table. Set SUPABASE_SERVICE_ROLE_KEY, or add a permissive INSERT policy for the disputes table in Supabase.";
+  }
+
+  return err?.message || "Unknown database error.";
+}
 
 const timelineItemSchema = z.object({
   date: z.string(),
@@ -123,7 +183,7 @@ export const disputesRouter = createTRPCRouter({
 
       if (error) {
         console.error("[Disputes] Error fetching disputes:", error);
-        throw new Error(`Failed to fetch disputes: ${error.message}`);
+        throw new Error(`Failed to fetch disputes: ${explainDisputeError(error)}`);
       }
 
       return (data || []).map(dbToDispute);
@@ -192,7 +252,7 @@ export const disputesRouter = createTRPCRouter({
 
       if (error) {
         console.error("[Disputes] Error creating dispute:", error);
-        throw new Error(`Failed to create dispute: ${error.message}`);
+        throw new Error(explainDisputeError(error));
       }
 
       console.log("[Disputes] Created dispute:", data.id);
@@ -228,7 +288,7 @@ export const disputesRouter = createTRPCRouter({
 
       if (error) {
         console.error("[Disputes] Error updating dispute:", error);
-        throw new Error(`Failed to update dispute: ${error.message}`);
+        throw new Error(`Failed to update dispute: ${explainDisputeError(error)}`);
       }
 
       return dbToDispute(data);
@@ -273,7 +333,7 @@ export const disputesRouter = createTRPCRouter({
         .single();
 
       if (error) {
-        throw new Error(`Failed to add timeline entry: ${error.message}`);
+        throw new Error(`Failed to add timeline entry: ${explainDisputeError(error)}`);
       }
 
       return dbToDispute(data);
@@ -308,7 +368,7 @@ export const disputesRouter = createTRPCRouter({
         .single();
 
       if (error) {
-        throw new Error(`Failed to add document: ${error.message}`);
+        throw new Error(`Failed to add document: ${explainDisputeError(error)}`);
       }
 
       return dbToDispute(data);
@@ -343,7 +403,7 @@ export const disputesRouter = createTRPCRouter({
         .single();
 
       if (error) {
-        throw new Error(`Failed to add reminder: ${error.message}`);
+        throw new Error(`Failed to add reminder: ${explainDisputeError(error)}`);
       }
 
       return dbToDispute(data);
@@ -360,7 +420,7 @@ export const disputesRouter = createTRPCRouter({
         .eq('id', input.id);
 
       if (error) {
-        throw new Error(`Failed to delete dispute: ${error.message}`);
+        throw new Error(`Failed to delete dispute: ${explainDisputeError(error)}`);
       }
 
       return { success: true };

@@ -61,19 +61,29 @@ const checkboxStyles = StyleSheet.create({
   },
 });
 
-export interface ParsedAccount {
-  creditor: string;
+/**
+ * This component receives the parent screen's `NegativeAccount[]` state
+ * (its `.name`/`.address` shape) — NOT a `ParsedAccount[]` (`.creditor`/
+ * `.furnisherAddress`). It previously declared (and used) the latter shape
+ * while actually being fed the former, so every reference to `.creditor`
+ * silently rendered `undefined` and `acc.creditor.toUpperCase()` in the
+ * caller's `onStartDispute` handler threw at runtime the moment a user
+ * tried to generate a letter here. This type now matches what's really
+ * passed in.
+ */
+export interface SelectableAccount {
+  name: string;
   accountNumber: string;
-  balance: string;
   status: string;
-  openDate: string;
-  lastReported: string;
   negativeType?: string;
+  /** Furnisher mailing address, when known — needed so the letter can be
+   *  addressed correctly instead of falling back to a placeholder. */
+  address?: string;
 }
 
 interface DisputeLetterPromptProps {
-  negativeAccounts: ParsedAccount[];
-  onStartDispute: (selectedAccounts: ParsedAccount[]) => void;
+  negativeAccounts: SelectableAccount[];
+  onStartDispute: (selectedAccounts: SelectableAccount[]) => void;
   isLoading?: boolean;
 }
 
@@ -83,14 +93,14 @@ export const DisputeLetterPrompt: React.FC<DisputeLetterPromptProps> = ({
   isLoading = false,
 }) => {
   const [expanded, setExpanded] = useState(true);
-  const [selectedAccounts, setSelectedAccounts] = useState<ParsedAccount[]>([]);
+  const [selectedAccounts, setSelectedAccounts] = useState<SelectableAccount[]>([]);
   const [selectAll, setSelectAll] = useState(false);
 
-  const handleToggleAccount = (account: ParsedAccount) => {
+  const handleToggleAccount = (account: SelectableAccount) => {
     setSelectedAccounts((prev) => {
       const isSelected = prev.some(
         (a) =>
-          a.creditor === account.creditor &&
+          a.name === account.name &&
           a.accountNumber === account.accountNumber
       );
 
@@ -98,7 +108,7 @@ export const DisputeLetterPrompt: React.FC<DisputeLetterPromptProps> = ({
         return prev.filter(
           (a) =>
             !(
-              a.creditor === account.creditor &&
+              a.name === account.name &&
               a.accountNumber === account.accountNumber
             )
         );
@@ -173,18 +183,18 @@ export const DisputeLetterPrompt: React.FC<DisputeLetterPromptProps> = ({
             </View>
 
             {negativeAccounts.map((account, index) => (
-              <View key={`${account.creditor}-${account.accountNumber}`} style={styles.accountCheckItem}>
+              <View key={`${account.name}-${account.accountNumber}`} style={styles.accountCheckItem}>
                 <SimpleCheckbox
                   value={selectedAccounts.some(
                     (a) =>
-                      a.creditor === account.creditor &&
+                      a.name === account.name &&
                       a.accountNumber === account.accountNumber
                   )}
                   onValueChange={() => handleToggleAccount(account)}
                   disabled={isLoading}
                 />
                 <View style={styles.accountInfo}>
-                  <Text style={styles.accountName}>{account.creditor}</Text>
+                  <Text style={styles.accountName}>{account.name}</Text>
                   <Text style={styles.accountDetails}>
                     {account.accountNumber} • {account.negativeType || "Derogatory"}
                   </Text>

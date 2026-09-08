@@ -95,6 +95,30 @@ function classifySupabaseError(err: SupabaseErrorLike | null | undefined): {
   const pgCode = err?.code || "";
   const raw = `${err?.message || ""} ${err?.details || ""} ${err?.hint || ""}`;
 
+  // 22P02 = invalid_text_representation — e.g. a non-UUID string (like the
+  // app's local mock/demo user id "1" or "demo-172..." from AuthContext's
+  // offline fallback) being written into a UUID column. This is the
+  // classic silent failure when Supabase is configured but the caller
+  // never went through the real users.register/users.create flow.
+  if (pgCode === "22P02" || /invalid input syntax for type uuid/i.test(raw)) {
+    return {
+      code: "UNKNOWN",
+      message:
+        "Your account isn't fully set up in the database yet (invalid user ID), so this couldn't be saved. Try logging out and back in, or creating a real account instead of continuing in demo mode.",
+    };
+  }
+
+  // 23503 = foreign_key_violation — user_id doesn't match any row in
+  // users. Same root cause as above (a demo/offline id), different
+  // Postgres error code.
+  if (pgCode === "23503" || /violates foreign key constraint/i.test(raw)) {
+    return {
+      code: "UNKNOWN",
+      message:
+        "Your account isn't fully set up in the database yet, so this couldn't be linked to a user record. Try logging out and back in, or creating a real account instead of continuing in demo mode.",
+    };
+  }
+
   // 42P01 = undefined_table, PGRST205 = table not found in schema cache
   if (pgCode === "42P01" || pgCode === "PGRST205" || /does not exist/i.test(raw)) {
     return {
@@ -670,6 +694,12 @@ function generateDisputeLetter(params: {
   cityStateZip: string;
   phoneNumber?: string;
   certifiedMailNumber?: string;
+  /**
+   * The furnisher/creditor's own mailing address, when known (e.g. pulled
+   * from the parsed credit report). Falls back to a placeholder only when
+   * genuinely unknown, so the letter is never silently wrong.
+   */
+  furnisherAddress?: string;
 }): { letterContent: string; letterType: string } {
   const template = LETTER_TEMPLATES[params.letterType] || LETTER_TEMPLATES["609 Letter"];
   const currentDate = new Date().toLocaleDateString("en-US", {
@@ -686,7 +716,7 @@ ${params.phoneNumber ? `Phone: ${params.phoneNumber}` : ""}
 ${currentDate}
 
 ${params.creditorName}
-[Creditor Address]
+${params.furnisherAddress?.trim() || "[Creditor Address]"}
 
 ${params.certifiedMailNumber ? `CERTIFIED MAIL #: ${params.certifiedMailNumber}\n\n` : ""}RE: Account #${params.accountNumber}
 
@@ -1644,12 +1674,24 @@ export const aiAgentsRouter = createTRPCRouter({
         letterType: z.string(),
         creditorName: z.string(),
         accountNumber: z.string(),
+        // The furnisher/creditor's own mailing address, when known (passed
+        // through from a parsed credit report). Optional so manual entry
+        // from the Credit Repair Tool's free-text fields still works.
+        furnisherAddress: z.string().optional(),
+        // The user's own return-address block for the letter header. The
+        // `users` table has no address columns, so this is supplied by the
+        // client (the Credit Repair Tool's "Your Info" fields) rather than
+        // fetched from the database. Optional — falls back to placeholders
+        // identical to the previous behaviour when omitted.
+        senderAddress: z.string().optional(),
+        senderCityStateZip: z.string().optional(),
       })
     )
     .mutation(async ({ input }) => {
       console.log("[AI Agents] Direct letter generation:", input.letterType);
 
-      // Fetch user info
+      // Fetch user info for the letter header (name/phone only — the
+      // `users` table has no mailing-address columns).
       const { data: userInfo } = await supabase
         .from("users")
         .select("name, email, phone")
@@ -1661,9 +1703,10 @@ export const aiAgentsRouter = createTRPCRouter({
         creditorName: input.creditorName,
         accountNumber: input.accountNumber,
         fullName: userInfo?.name || "Valued Client",
-        address: "[Your Address]",
-        cityStateZip: "[City, State ZIP]",
+        address: input.senderAddress?.trim() || "[Your Address]",
+        cityStateZip: input.senderCityStateZip?.trim() || "[City, State ZIP]",
         phoneNumber: userInfo?.phone || "",
+        furnisherAddress: input.furnisherAddress,
       });
 
       // Save as a dispute record
@@ -1697,12 +1740,27 @@ export const aiAgentsRouter = createTRPCRouter({
         .select("*")
         .single();
 
+      // Previously this only logged the error and always reported
+      // `success: true`, so a silently-failed insert (missing table, RLS
+      // block, invalid user_id) looked identical to a real save on the
+      // client. Classify the failure and surface it instead, while still
+      // returning the generated letter content so the user doesn't lose
+      // their work — they can copy it manually if the save is blocked.
       if (error) {
         console.error("[AI Agents] Letter save error:", error);
+        const { message: saveError } = classifySupabaseError(error);
+        return {
+          success: false,
+          saveError,
+          letterContent: letter.letterContent,
+          letterType: letter.letterType,
+          disputeId: undefined,
+        };
       }
 
       return {
         success: true,
+        saveError: undefined,
         letterContent: letter.letterContent,
         letterType: letter.letterType,
         disputeId: savedDispute?.id,

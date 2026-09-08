@@ -91,7 +91,15 @@ export const [DisputesProvider, useDisputes] = createContextHook(() => {
     letterContent?: string;
     notes?: string;
   }) => {
-    if (!user?.id) return null;
+    if (!user?.id) {
+      // Previously silently returned null here, so a caller with no
+      // signed-in user would think the dispute saved when nothing
+      // happened at all. Throw instead so the UI can show a real error
+      // (this mirrors why disputes/letters were reported as "not saving").
+      throw new Error(
+        'You need to be signed in to save a dispute. Try logging out and back in.'
+      );
+    }
 
     try {
       const newDispute = await createDisputeMutation.mutateAsync({

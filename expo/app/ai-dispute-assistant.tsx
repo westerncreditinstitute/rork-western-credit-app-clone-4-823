@@ -25,6 +25,7 @@ import {
   Copy,
   CloudUpload,
   CheckCircle2,
+  AlertTriangle,
 } from "lucide-react-native";
 import * as Clipboard from 'expo-clipboard';
 import * as Sharing from 'expo-sharing';
@@ -120,6 +121,7 @@ export default function AIDisputeAssistantScreen() {
   const [showManualEntry, setShowManualEntry] = useState(false);
   const [isSavingToCloud, setIsSavingToCloud] = useState(false);
   const [savedToCloud, setSavedToCloud] = useState(false);
+  const [cloudSaveError, setCloudSaveError] = useState<string | null>(null);
   const [showAccountSummary, setShowAccountSummary] = useState(false);
   const [manualAccount, setManualAccount] = useState({
     name: "",
@@ -389,6 +391,7 @@ export default function AIDisputeAssistantScreen() {
 
     setIsSavingToCloud(true);
     let savedCount = 0;
+    let lastError: string | null = null;
 
     for (const dispute of disputesToSave) {
       try {
@@ -407,16 +410,34 @@ export default function AIDisputeAssistantScreen() {
         console.log(`Saved dispute for ${dispute.creditor} to cloud`);
       } catch (error) {
         console.error(`Error saving dispute for ${dispute.creditor}:`, error);
+        lastError = error instanceof Error ? error.message : String(error);
       }
     }
 
     setIsSavingToCloud(false);
-    setSavedToCloud(true);
+    // Previously this was set to `true` unconditionally, so the UI claimed
+    // "Saved to Cloud Dispute Tracker" even when every single save failed
+    // (savedCount === 0). Only report success when at least one actually
+    // persisted, and surface the real failure otherwise.
+    setSavedToCloud(savedCount > 0);
+    setCloudSaveError(savedCount === 0 ? (lastError || "Unknown error") : null);
 
-    if (savedCount > 0) {
+    if (savedCount > 0 && savedCount === disputesToSave.length) {
       Alert.alert(
         "Saved to Cloud",
         `${savedCount} dispute(s) have been automatically saved to your Cloud Dispute Tracker. You can view and manage them from the Dispute Tracker screen.`,
+        [{ text: "OK" }]
+      );
+    } else if (savedCount > 0) {
+      Alert.alert(
+        "Partially Saved",
+        `${savedCount} of ${disputesToSave.length} dispute(s) were saved to your Cloud Dispute Tracker. ${lastError ? `Last error: ${lastError}` : ""}`,
+        [{ text: "OK" }]
+      );
+    } else {
+      Alert.alert(
+        "Not Saved to Cloud",
+        `Your letter(s) were generated, but none could be saved to the Dispute Tracker. ${lastError ? lastError : "Please try again."} Be sure to copy/save your letter text so you don't lose it.`,
         [{ text: "OK" }]
       );
     }
@@ -706,6 +727,12 @@ export default function AIDisputeAssistantScreen() {
                 accountNumber: acc.accountNumber,
                 status: acc.status,
                 negativeType: acc.negativeType || "Derogatory Status",
+                // Carry the furnisher address through here too — this
+                // callback re-derives selectedAccounts straight from the
+                // parser's ParsedAccount[] (which has furnisherAddress),
+                // so dropping it here would lose the address just as
+                // surely as the DisputeLetterPrompt path below did.
+                address: acc.furnisherAddress || undefined,
                 selected: true,
                 bureau: detectedBureau,
               }));
@@ -718,12 +745,20 @@ export default function AIDisputeAssistantScreen() {
               <DisputeLetterPrompt
                 negativeAccounts={negativeAccounts}
                 onStartDispute={(selected) => {
+                  // `selected` here are SelectableAccount[] — the exact
+                  // NegativeAccount objects from `negativeAccounts` state,
+                  // which already carry the correct `.name`/`.address`
+                  // (set once in handleAccountsParsed). Previously this
+                  // read `.creditor` (undefined on these objects), which
+                  // both produced a blank creditor name and threw at
+                  // `.toUpperCase()` the moment a user tried to continue.
                   const negAccounts = selected.map((acc, index) => ({
                     id: Date.now() + index,
-                    name: acc.creditor.toUpperCase(),
+                    name: (acc.name || "").toUpperCase(),
                     accountNumber: acc.accountNumber,
                     status: acc.status,
                     negativeType: acc.negativeType || "Derogatory Status",
+                    address: acc.address || undefined,
                     selected: true,
                     bureau: detectedBureau,
                   }));
@@ -1197,6 +1232,13 @@ export default function AIDisputeAssistantScreen() {
               <View style={styles.cloudSyncRow}>
                 <CheckCircle2 color={Colors.success} size={18} />
                 <Text style={[styles.cloudSyncText, { color: Colors.success }]}>Saved to Cloud Dispute Tracker</Text>
+              </View>
+            ) : cloudSaveError ? (
+              <View style={styles.cloudSyncRow}>
+                <AlertTriangle color={Colors.warning} size={18} />
+                <Text style={[styles.cloudSyncText, { color: Colors.warning }]}>
+                  Not saved to Dispute Tracker: {cloudSaveError}
+                </Text>
               </View>
             ) : null}
           </View>
