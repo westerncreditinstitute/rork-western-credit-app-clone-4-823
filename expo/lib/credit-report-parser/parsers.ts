@@ -63,7 +63,13 @@ function anchorSources(): string[] {
     // a) labeled creditor lines
     // NOTE: "TRADELINE" must not match TransUnion's "Tradeline Summary"
     // section header — require it NOT be followed by "Summary".
-    String.raw`Creditor\s*Name\s*[:\t]|Company\s*Name\s*[:\t]|Account\s*Name\s*[:\t]|Credit\s*Grantor\s*[:\t]|TRADELINE\b(?!\s*Summar)\s*[:\t]?`,
+    // NOTE: the separator after the label is [:\t] OR 2+ spaces — some
+    // PDF text extractors (observed on Experian's printable-report
+    // export, e.g. "Account name                    AMEX") render the
+    // label/value gap as pure whitespace with no colon or tab at all,
+    // so requiring [:\t] here caused this anchor style to never match
+    // on that export and silently fall through to a less reliable one.
+    String.raw`Creditor\s*Name\s*(?:[:\t]|\s{2,})|Company\s*Name\s*(?:[:\t]|\s{2,})|Account\s*Name\s*(?:[:\t]|\s{2,})|Credit\s*Grantor\s*(?:[:\t]|\s{2,})|TRADELINE\b(?!\s*Summar)\s*[:\t]?`,
     // b) account-number lines (labeled "Account Number:" or Equifax's
     //    column header "Account Numbers  XXXX-1234")
     String.raw`Account\s*Numbers?\b`,
@@ -133,7 +139,21 @@ export function splitAccountBlocks(text: string, bureau: Bureau): SplitResult {
   let anchorSource: string | undefined;
 
   for (const src of anchorSources()) {
-    const re = new RegExp(String.raw`(?:^|\n)(?=` + src + String.raw`)`, "i");
+    // NOTE: [ \t]* between the line start and the lookahead is required.
+    // Some PDF text extractors (observed on Experian's printable-report
+    // export) indent every field-label line with leading spaces
+    // ("\n Account name  AMEX  Balance  $16,329"), so anchoring on a
+    // BARE (?:^|\n) never matched a single account in that format and
+    // silently fell through to the much less reliable fallback
+    // heuristic below \u2014 which is what caused two concrete bugs on a
+    // real Experian report: (1) the account's own furnisher-city line
+    // ("SAN FRANCISCO,") got misread as a second creditor name, and
+    // (2) a closed, "potentially negative" auto loan with a 30-day-late
+    // payment-history mark was dropped from isNegative entirely because
+    // its payment-history grid text bled across the (mis-split) block
+    // boundary. Allowing leading spaces/tabs here fixes both by letting
+    // the primary, most-reliable anchor style match as intended.
+    const re = new RegExp(String.raw`(?:^|\n)[ \t]*(?=` + src + String.raw`)`, "i");
     if (re.test(working)) {
       parts = working.split(re);
       anchored = true;
@@ -482,13 +502,25 @@ function extractLastReported(block: string, _bureau: Bureau): FieldHit | null {
 // ------------------------------------------------------------
 
 /** A bare street-address line: starts with a house number and contains
- *  a common street-suffix word. E.g. "100 CENTER RD", "5333 Finsbury Ave". */
+ *  a common street-suffix word, OR starts with "PO Box"/"Lockbox" (no
+ *  leading house number). E.g. "100 CENTER RD", "5333 Finsbury Ave",
+ *  "PO BOX 901003 FORT". */
 const STREET_LINE_RE =
-  /^\d{1,6}\s+[A-Za-z0-9.'\-\s]{2,40}\b(?:St|Street|Ave|Avenue|Rd|Road|Blvd|Boulevard|Dr|Drive|Ct|Court|Ln|Lane|Way|Pl|Place|Pkwy|Parkway|Cir|Circle|Ter|Terrace|Hwy|Highway|Sq|Square|Trl|Trail|Center|Ctr|PO\s*Box)\b\.?,?\s*[A-Za-z0-9#.\-\s]*$/i;
+  /^(?:\d{1,6}\s+[A-Za-z0-9.'\-\s]{2,40}\b(?:St|Street|Ave|Avenue|Rd|Road|Blvd|Boulevard|Dr|Drive|Ct|Court|Ln|Lane|Way|Pl|Place|Pkwy|Parkway|Cir|Circle|Ter|Terrace|Hwy|Highway|Sq|Square|Trl|Trail|Center|Ctr)\b\.?,?\s*[A-Za-z0-9#.\-\s]*|(?:PO\s*Box|P\.?O\.?\s*Box|Lockbox)\b[A-Za-z0-9#.\-\s]*)$/i;
 
 /** A "CITY, ST ZIP" line, e.g. "BUFFALO, NY 10000" or "ANYTOWN CA 11111". */
 const CITY_STATE_ZIP_RE =
   /^[A-Za-z][A-Za-z.'\-\s]{1,30},?\s+[A-Z]{2}[\-\s]?\d{5}(?:-\d{4})?$/;
+
+/** A line that is ONLY a city name (optionally trailing a comma), with
+ *  no state/zip — the first half of a city split across two lines
+ *  (observed on Experian's export: "SAN FRANCISCO," / "FORT WORTH,"
+ *  each followed on the NEXT line by "CA 94108" / "TX 76101"). */
+const CITY_ONLY_RE = /^[A-Za-z][A-Za-z.'\-\s]{1,30},$/;
+
+/** A line that is ONLY "ST ZIP" (state code + zip, no city) — the
+ *  second half of a city/state/zip pair split across two lines. */
+const STATE_ZIP_ONLY_RE = /^[A-Z]{2}[\-\s]?\d{5}(?:-\d{4})?$/;
 
 /** A bare phone-number line, e.g. "(555) 555-5555" — commonly the 3rd
  *  address line; appended when immediately following a matched address. */
@@ -504,36 +536,69 @@ function looksLikeAddressLine(line: string | undefined): boolean {
   return STREET_LINE_RE.test(s) || CITY_STATE_ZIP_RE.test(s);
 }
 
-/** Furnisher (creditor) address: labeled "Address:" field first, then a
- *  positional scan of the lines immediately around the creditor name
- *  (prevLines tail, or the block's own early lines) for a street-line +
- *  optional city/state/zip line + optional phone line, joined into one
- *  human-readable address string. Returns undefined when nothing
- *  plausible is found — never guesses from unrelated text. */
+/** Furnisher (creditor) address: labeled "Address:" field first, then
+ *  a positional scan of the lines immediately around the creditor name
+ *  (prevLines tail, or the block's own early lines) for a street line
+ *  plus following city/state/zip line(s). Returns undefined when
+ *  nothing plausible is found — never guesses from unrelated text.
+ *
+ *  NOTE on multi-line addresses: some report exports (observed on
+ *  Experian's printable-report format) wrap a single continuous
+ *  address across 2-3 physical lines with NO field-boundary alignment
+ *  — the line break can fall mid-city-name, e.g.:
+ *    "PO BOX 901003 FORT" / "WORTH," / "TX 76101"
+ *  which is really just "PO BOX 901003 FORT WORTH, TX 76101" wrapped
+ *  by the PDF renderer's column width. Since the comma is already
+ *  embedded in the text at the correct spot, the correct repair is a
+ *  plain SPACE join of every captured line — not a smarter city/state
+ *  split — otherwise city names get corrupted (e.g. "FORT" and
+ *  "WORTH," ending up as separate tokens instead of one city). */
 function extractAddress(
   block: string,
   ctx: { prevLines: string[]; anchored: boolean },
 ): string | undefined {
-  // 1. Labeled field (rare in these formats, but cheap to check first).
-  const labeledHit = labeled(block, String.raw`(?:Address|Furnisher\s*Address)`, 60);
-  if (labeledHit && looksLikeAddressLine(labeledHit.raw)) return labeledHit.raw;
+  // 1. Labeled "Address" field — capture everything up to the next
+  //    blank line or the "Phone number" label, since this report
+  //    format wraps a single address across 2-3 physical lines with
+  //    no colon/comma glue between them.
+  const addrBlockRe = new RegExp(
+    String.raw`Address\s*(?:[:\t]|\s{2,})\s*\n?([\s\S]{3,150}?)(?=\n\s*\n|\n\s*Phone\s*number|$)`,
+    "i",
+  );
+  const abm = block.match(addrBlockRe);
+  if (abm && abm[1]) {
+    const rawLines = abm[1]
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean);
+    if (rawLines.length > 0) {
+      const joined = rawLines.join(" ").replace(/\s{2,}/g, " ").trim();
+      if (joined.length >= 5) return joined;
+    }
+  }
 
   // 2. Scan prevLines (nearest-to-block-start first) for a street line,
-  //    then greedily append a following city/state/zip and/or phone line.
+  //    then greedily append following address-continuation lines
+  //    (city/state/zip, possibly wrapped across 1-2 more lines) up to
+  //    a phone-number line or a line that no longer looks like address
+  //    text.
   const candidates: string[] = [...ctx.prevLines, ...block.split("\n").slice(0, 4)];
   for (let i = 0; i < candidates.length; i++) {
     const line = candidates[i]?.trim();
     if (line && STREET_LINE_RE.test(line)) {
       const parts = [line];
-      const next1 = candidates[i + 1]?.trim();
-      if (next1 && (CITY_STATE_ZIP_RE.test(next1) || PHONE_LINE_RE.test(next1))) {
-        parts.push(next1);
-        const next2 = candidates[i + 2]?.trim();
-        if (next2 && PHONE_LINE_RE.test(next2) && !PHONE_LINE_RE.test(next1)) {
-          parts.push(next2);
+      for (let k = i + 1; k < candidates.length && k < i + 3; k++) {
+        const next = candidates[k]?.trim();
+        if (!next) break;
+        if (PHONE_LINE_RE.test(next)) break;
+        if (CITY_STATE_ZIP_RE.test(next) || CITY_ONLY_RE.test(next) || STATE_ZIP_ONLY_RE.test(next)) {
+          parts.push(next);
+          if (CITY_STATE_ZIP_RE.test(next) || STATE_ZIP_ONLY_RE.test(next)) break;
+        } else {
+          break;
         }
       }
-      return parts.join(", ");
+      return parts.join(" ").replace(/\s{2,}/g, " ").trim();
     }
   }
   return undefined;
@@ -589,6 +654,59 @@ export function parsePaymentHistory(block: string): PaymentHistoryMark[] | undef
       if (zipped.length >= 3) return zipped;
     }
   }
+
+  // Style C: a header row of BARE month names with NO year attached
+  // ("Jan  Feb  Mar  Apr  May  Jun  Jul  Aug  Sep  Oct  Nov  Dec"),
+  // followed by one or more rows each led by a bare 4-digit year and
+  // containing marks aligned positionally under each month
+  // ("2020  30  <icon>  <icon>  <icon>  <icon>  CLS  -  -  -  -  -  -").
+  // Observed on Experian's printable-report export, where the year
+  // lives on the DATA row instead of being combined with the month.
+  for (let i = 0; i < lines.length - 1; i++) {
+    const headerTokens = lines[i].split(/\s+/).filter(Boolean);
+    const monthNums = headerTokens.map((t) =>
+      /\d/.test(t) ? null : monthFromName(t),
+    );
+    const validMonthCount = monthNums.filter(Boolean).length;
+    if (validMonthCount < 6) continue;
+
+    const zipped: PaymentHistoryMark[] = [];
+    for (let j = i + 1; j < lines.length; j++) {
+      const rowTokens = lines[j].split(/\s+/).filter(Boolean);
+      const yearMatch = rowTokens[0]?.match(/^(19|20)\d{2}$/);
+      if (!yearMatch) break;
+      const year = rowTokens[0];
+      for (let k = 1; k < rowTokens.length && k - 1 < monthNums.length; k++) {
+        const mn = monthNums[k - 1];
+        if (!mn) continue;
+        const tok = rowTokens[k];
+        // Icon-glyph "paid on time" marks (rendered as PUA/emoji
+        // codepoints by pdftotext, e.g. \uE902) and "-"/"ND" (no
+        // data) are legitimate non-derogatory marks too — record them
+        // as "OK" so the grid has enough coverage to be trusted, but
+        // only numeric/CO/KD/CLS tokens ever count as derogatory
+        // evidence downstream (see gridEvidence()).
+        if (/^(?:OK|CL|CLS|CO|KD|XX|30|60|90|120|150|180)$/i.test(tok)) {
+          zipped.push({ month: `${year}-${mn}`, mark: tok.toUpperCase() });
+        } else if (/^[^\x00-\x7F]+$/.test(tok)) {
+          // non-ASCII glyph = the bureau's "paid as agreed" icon
+          zipped.push({ month: `${year}-${mn}`, mark: "OK" });
+        }
+      }
+    }
+    // A grid with real month/year coverage is trustworthy even with
+    // just 1-2 explicit derogatory marks (e.g. a single "30" among
+    // otherwise-clean months) — the important signal is that we found
+    // at least one recognizable numeric/CO/KD mark, not a minimum count.
+    if (
+      zipped.length >= 3 &&
+      zipped.some((z) => /^(?:30|60|90|120|150|180|CO|KD)$/.test(z.mark))
+    ) {
+      return zipped;
+    }
+    if (zipped.length >= 6) return zipped;
+  }
+
   return marks.length >= 3 ? marks : undefined;
 }
 
