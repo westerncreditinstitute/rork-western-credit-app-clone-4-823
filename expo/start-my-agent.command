@@ -25,6 +25,16 @@ printf "\n${B}═══ My Agent — one-click startup ═══${X}\n\n"
 # Runs from the repo root (one level above this expo/ folder) so both
 # app code and this script itself stay current. Your .env file is
 # git-ignored, so it is never touched or overwritten by this step.
+#
+# NOTE: this always force-syncs to the latest origin/main (fetch +
+# reset --hard), instead of a plain "git pull". A plain pull can fail
+# silently (or refuse to fast-forward) if ANY local file was ever
+# modified — e.g. by npm updating package-lock.json, or Metro/Expo
+# writing a cache file into a tracked folder — which is exactly the
+# kind of thing that can leave someone stuck on an old version without
+# any obvious error. Since this folder is meant to run the app (not to
+# be hand-edited), it's always safe to discard local changes and sync
+# straight to whatever is on GitHub.
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 if [ -n "$REPO_ROOT" ]; then
   printf "${D}Checking for updates...${X}\n"
@@ -34,22 +44,35 @@ if [ -n "$REPO_ROOT" ]; then
     BEFORE_PKG_HASH="$(shasum "$REPO_ROOT/expo/package.json" 2>/dev/null | awk '{print $1}')"
   fi
   BEFORE_SELF_HASH="$(shasum "$0" 2>/dev/null | awk '{print $1}')"
+  BEFORE_HEAD="$(cd "$REPO_ROOT" && git rev-parse HEAD 2>/dev/null || true)"
 
-  PULL_OUTPUT="$(cd "$REPO_ROOT" && git pull --ff-only origin main 2>&1)"
-  PULL_STATUS=$?
+  FETCH_OUTPUT="$(cd "$REPO_ROOT" && git fetch origin main 2>&1)"
+  FETCH_STATUS=$?
 
-  if [ $PULL_STATUS -eq 0 ]; then
-    if echo "$PULL_OUTPUT" | grep -q "Already up to date"; then
-      printf "${G}✓ Already up to date${X}\n\n"
+  if [ $FETCH_STATUS -eq 0 ]; then
+    # Make sure we're actually ON main (a detached HEAD or a stray
+    # local branch would also block updates) before syncing to it.
+    (cd "$REPO_ROOT" && git checkout -q main 2>/dev/null) || true
+    RESET_OUTPUT="$(cd "$REPO_ROOT" && git reset --hard origin/main 2>&1)"
+    RESET_STATUS=$?
+    AFTER_HEAD="$(cd "$REPO_ROOT" && git rev-parse HEAD 2>/dev/null || true)"
+
+    if [ $RESET_STATUS -eq 0 ]; then
+      if [ -n "$BEFORE_HEAD" ] && [ "$BEFORE_HEAD" = "$AFTER_HEAD" ]; then
+        printf "${G}✓ Already up to date${X}\n\n"
+      else
+        printf "${G}✓ Updated to the latest version${X}\n\n"
+      fi
     else
-      printf "${G}✓ Updated to the latest version${X}\n\n"
+      printf "${Y}! Could not sync to the latest version (continuing with the current local copy):${X}\n"
+      printf "${Y}  %s${X}\n\n" "$(echo "$RESET_OUTPUT" | head -3 | tr '\n' ' ')"
     fi
   else
-    printf "${Y}! Could not auto-update (continuing with the current local copy):${X}\n"
-    printf "${Y}  %s${X}\n\n" "$(echo "$PULL_OUTPUT" | head -3 | tr '\n' ' ')"
+    printf "${Y}! Could not reach GitHub to check for updates (continuing with the current local copy):${X}\n"
+    printf "${Y}  %s${X}\n\n" "$(echo "$FETCH_OUTPUT" | head -3 | tr '\n' ' ')"
   fi
 
-  # If this script itself was updated by the pull, re-launch the new
+  # If this script itself was updated by the sync, re-launch the new
   # version now so we're always running the latest logic.
   AFTER_SELF_HASH="$(shasum "$0" 2>/dev/null | awk '{print $1}')"
   if [ -n "$BEFORE_SELF_HASH" ] && [ -n "$AFTER_SELF_HASH" ] && [ "$BEFORE_SELF_HASH" != "$AFTER_SELF_HASH" ]; then

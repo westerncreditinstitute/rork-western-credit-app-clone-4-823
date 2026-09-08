@@ -35,7 +35,6 @@ import AccountSummary from "@/components/AccountSummary";
 import DisputeLetterPrompt from "@/components/DisputeLetterPrompt";
 import { useDisputes } from "@/contexts/DisputesContext";
 import { useUser } from "@/contexts/UserContext";
-import { trpc } from "@/lib/trpc";
 
 const DARK_LOGO_URL = "https://static.wixstatic.com/media/ec0146_ce8d0d3506564ee1841686216fee5650~mv2.png";
 
@@ -141,34 +140,16 @@ export default function AIDisputeAssistantScreen() {
   });
   const [viewingLetter, setViewingLetter] = useState<Dispute | null>(null);
 
-  // Persist every parsed report to the backend so the per-bureau
-  // dashboard (My Agent tab -> NegativeAccountsDashboard) always shows
-  // the latest upload, regardless of which screen the user uploaded
-  // from. Without this call, reports parsed here only ever lived in
-  // local component state and never reached getBureauDashboard.
-  const saveAnalysisMutation = trpc.aiAgents.saveCreditAnalysis.useMutation();
-
+  // NOTE: The AI Dispute Assistant is an intentionally standalone,
+  // in-browser report parser + letter generator — it parses the
+  // uploaded report and extracts negative accounts entirely client-
+  // side and does NOT save the analysis to the backend. It does not
+  // feed (and is not fed by) the My Agent tab's per-bureau dashboard;
+  // the two are separate flows that can each be used independently.
   const handleAccountsParsed = useCallback((accounts: ParsedAccount[], bureau: string) => {
     console.log("Parsed accounts:", accounts.length, "from bureau:", bureau);
     setDetectedBureau(bureau);
     setParsedAccounts(accounts);
-
-    if (accounts.length > 0 && user?.id) {
-      saveAnalysisMutation.mutate({
-        userId: user.id,
-        bureau,
-        accounts: accounts.map((a) => ({
-          creditor: a.creditor || "Unknown Creditor",
-          furnisherAddress: a.furnisherAddress,
-          accountNumber: a.accountNumber || "",
-          balance: a.balance || "",
-          status: a.status || "",
-          openDate: a.openDate || "",
-          lastReported: a.lastReported || "",
-          negativeType: a.negativeType,
-        })),
-      });
-    }
 
     if (accounts.length === 0) {
       Alert.alert(
