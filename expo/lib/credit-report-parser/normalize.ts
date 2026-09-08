@@ -322,6 +322,22 @@ export function reconstructPageLines(
     let line = "";
     let lastEndX: number | null = null;
     for (const it of rowItems) {
+      // Some PDF exporters (observed on Experian's printable-report
+      // export) emit whitespace-only text items whose declared `width`
+      // is wildly inflated \u2014 e.g. a single " " character claiming a
+      // ~264pt width to visually pad a table column. Trusting that
+      // width to advance `lastEndX` swallows the REAL gap to the next
+      // item, so the large horizontal gap between a field label
+      // ("Account name") and its value ("AMEX") never gets recognized
+      // as a column boundary, and the "Account Name:" labeled-field
+      // regex (which requires a colon/tab OR 2+ spaces) fails to
+      // match \u2014 causing the parser to fall back to a much less
+      // reliable heuristic that can pick up an unrelated line (e.g. a
+      // furnisher's city) as the creditor name instead. Fix: ignore
+      // whitespace-only items entirely for line content + lastEndX
+      // tracking; column/word gaps are computed purely from the
+      // positions of real (non-whitespace) content items.
+      if (it.str.trim() === "") continue;
       const x = it.transform[4];
       if (lastEndX !== null) {
         const gap = x - lastEndX;

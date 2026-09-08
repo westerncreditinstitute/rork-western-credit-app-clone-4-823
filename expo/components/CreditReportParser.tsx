@@ -488,6 +488,11 @@ const PARSER_HTML = `
                 let lastEndX = null;
                 for (let k = 0; k < rowItems.length; k++) {
                     const it = rowItems[k];
+                    // Ignore whitespace-only items: some PDF exporters emit
+                    // a lone " " with a wildly inflated width to pad a
+                    // table column, which corrupts lastEndX and hides the
+                    // real gap between a field label and its value.
+                    if (it.str.trim() === '') continue;
                     const x = it.transform[4];
                     if (lastEndX !== null) {
                         const gap = x - lastEndX;
