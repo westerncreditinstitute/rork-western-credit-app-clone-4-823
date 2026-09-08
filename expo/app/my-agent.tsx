@@ -84,6 +84,7 @@ export default function MyAgentScreen({
     letterType?: string;
     creditorName?: string;
     accountNumber?: string;
+    furnisherAddress?: string;
   } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -267,6 +268,7 @@ export default function MyAgentScreen({
       letterType: string;
       creditorName: string;
       accountNumber: string;
+      furnisherAddress?: string;
     }) => {
       setCreditAnalysisVisible(false);
       setCreditRepairPrefill(data);
@@ -281,6 +283,7 @@ export default function MyAgentScreen({
       letterType: string;
       creditorName: string;
       accountNumber: string;
+      furnisherAddress?: string;
     }) => {
       setNegativeDashboardVisible(false);
       setCreditRepairPrefill(data);
@@ -321,8 +324,12 @@ export default function MyAgentScreen({
   }, [myAgentQuery, refetchDisputes]);
 
   const handleLetterGenerated = useCallback(
-    (_disputeId?: string) => {
-      // Refresh dispute data after a letter is generated
+    (_disputeId?: string, saved?: boolean) => {
+      // Refresh dispute data after a letter is generated. When the save
+      // failed, CreditRepairModal already shows the failure inline, so
+      // there's nothing further to do here beyond skipping a pointless
+      // refetch (there's nothing new to fetch if nothing was saved).
+      if (saved === false) return;
       refetchDisputes?.();
     },
     [refetchDisputes],

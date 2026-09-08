@@ -18,12 +18,22 @@ import {
   Copy,
   Check,
   AlertCircle,
+  AlertTriangle,
   ChevronDown,
 } from "lucide-react-native";
 import Colors from "@/constants/colors";
 import { trpc } from "@/lib/trpc";
 import { useUser } from "@/contexts/UserContext";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Clipboard from "expo-clipboard";
+
+/**
+ * The user's own return-address block is reused across every letter they
+ * generate. There's no `address` column on the `users` table, so instead
+ * of re-prompting (or silently leaving it as "[Your Address]") on every
+ * letter, it's captured once here and persisted locally per-user.
+ */
+const SENDER_INFO_KEY_PREFIX = "wci_sender_info_";
 
 // ============================================================
 // Letter types available for generation
@@ -80,9 +90,14 @@ export interface CreditRepairModalProps {
     letterType?: string;
     creditorName?: string;
     accountNumber?: string;
+    /** Furnisher/creditor mailing address, when known (e.g. parsed from
+     *  the credit report). Auto-populates the address field below. */
+    furnisherAddress?: string;
   } | null;
-  /** Called after a letter is generated and saved as a dispute */
-  onLetterGenerated?: (disputeId?: string) => void;
+  /** Called after a letter is generated and saved as a dispute. `disputeId`
+   *  is undefined when the letter generated successfully but the save to
+   *  the Dispute Tracker failed — check `saved` to distinguish the two. */
+  onLetterGenerated?: (disputeId?: string, saved?: boolean) => void;
 }
 
 // ============================================================
@@ -101,9 +116,41 @@ export default function CreditRepairModal({
   const [letterType, setLetterType] = useState<string>("609 Letter");
   const [creditorName, setCreditorName] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
+  const [furnisherAddress, setFurnisherAddress] = useState("");
+  const [senderAddress, setSenderAddress] = useState("");
+  const [senderCityStateZip, setSenderCityStateZip] = useState("");
   const [showTypePicker, setShowTypePicker] = useState(false);
   const [generatedLetter, setGeneratedLetter] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // ── Load the user's saved return address, once per user ──────
+  useEffect(() => {
+    if (!userId) return;
+    AsyncStorage.getItem(`${SENDER_INFO_KEY_PREFIX}${userId}`)
+      .then((raw) => {
+        if (!raw) return;
+        try {
+          const saved = JSON.parse(raw) as { address?: string; cityStateZip?: string };
+          if (saved.address) setSenderAddress(saved.address);
+          if (saved.cityStateZip) setSenderCityStateZip(saved.cityStateZip);
+        } catch {
+          // Ignore malformed storage; the fields just stay blank.
+        }
+      })
+      .catch(() => {});
+  }, [userId]);
+
+  // Persist the return address as the user edits it, so it's remembered
+  // the next time they generate a letter (for this account or another).
+  useEffect(() => {
+    if (!userId) return;
+    if (!senderAddress && !senderCityStateZip) return;
+    AsyncStorage.setItem(
+      `${SENDER_INFO_KEY_PREFIX}${userId}`,
+      JSON.stringify({ address: senderAddress, cityStateZip: senderCityStateZip })
+    ).catch(() => {});
+  }, [userId, senderAddress, senderCityStateZip]);
 
   // ── Prefill from chat trigger ─────────────────────────────────
   useEffect(() => {
@@ -111,10 +158,15 @@ export default function CreditRepairModal({
       if (prefillData.letterType) setLetterType(prefillData.letterType);
       if (prefillData.creditorName) setCreditorName(prefillData.creditorName);
       if (prefillData.accountNumber) setAccountNumber(prefillData.accountNumber);
+      // Always sync furnisherAddress (including clearing it to "" when the
+      // source account has none) so a stale address from a previously
+      // generated letter never carries over onto an unrelated creditor.
+      setFurnisherAddress(prefillData.furnisherAddress || "");
     }
     if (!visible) {
       setGeneratedLetter(null);
       setCopied(false);
+      setSaveError(null);
     }
   }, [visible, prefillData]);
 
@@ -122,7 +174,17 @@ export default function CreditRepairModal({
   const generateLetterMutation = trpc.aiAgents.generateLetter.useMutation({
     onSuccess: (data) => {
       setGeneratedLetter(data.letterContent);
-      onLetterGenerated?.(data.disputeId);
+      // The backend now reports save failures explicitly instead of
+      // always claiming success — surface that instead of hiding it.
+      if (!data.success) {
+        setSaveError(
+          data.saveError ||
+            "The letter was generated but could not be saved to your Dispute Tracker."
+        );
+      } else {
+        setSaveError(null);
+      }
+      onLetterGenerated?.(data.disputeId, data.success);
     },
     onError: (error) => {
       Alert.alert(
@@ -141,11 +203,15 @@ export default function CreditRepairModal({
       Alert.alert("Missing Information", "Please enter the account or reference number.");
       return;
     }
+    setSaveError(null);
     generateLetterMutation.mutate({
       userId,
       letterType,
       creditorName: creditorName.trim(),
       accountNumber: accountNumber.trim(),
+      furnisherAddress: furnisherAddress.trim() || undefined,
+      senderAddress: senderAddress.trim() || undefined,
+      senderCityStateZip: senderCityStateZip.trim() || undefined,
     });
   };
 
@@ -192,8 +258,10 @@ export default function CreditRepairModal({
         >
           {/* ── Intro ─────────────────────────────────────────── */}
           <Text style={styles.intro}>
-            Generate a legally-formatted dispute letter. The letter will be
-            saved to your dispute tracker automatically after generation.
+            Generate a legally-formatted dispute letter. It will be saved to
+            your Dispute Tracker automatically after generation, and the
+            creditor's address will be filled in when it's known from your
+            credit report.
           </Text>
 
           {/* ── Letter type selector ───────────────────────────── */}
@@ -270,6 +338,47 @@ export default function CreditRepairModal({
             accessibilityLabel="Account or reference number"
           />
 
+          {/* Furnisher address */}
+          <Text style={styles.fieldLabel}>Creditor / Furnisher Address</Text>
+          <TextInput
+            style={[styles.input, styles.inputMultiline]}
+            value={furnisherAddress}
+            onChangeText={setFurnisherAddress}
+            placeholder="e.g., PO Box 901003, Fort Worth, TX 76101"
+            placeholderTextColor={Colors.textLight}
+            multiline
+            numberOfLines={2}
+            accessibilityLabel="Creditor or furnisher mailing address"
+            accessibilityHint="Auto-filled when available from your credit report. Edit if it's missing or incorrect."
+          />
+          {!furnisherAddress ? (
+            <Text style={styles.fieldHint}>
+              No address on file for this creditor. The letter will use a placeholder unless you enter one above.
+            </Text>
+          ) : null}
+
+          {/* Your return address */}
+          <Text style={styles.fieldLabel}>Your Mailing Address</Text>
+          <TextInput
+            style={styles.input}
+            value={senderAddress}
+            onChangeText={setSenderAddress}
+            placeholder="Street address"
+            placeholderTextColor={Colors.textLight}
+            accessibilityLabel="Your street address"
+          />
+          <TextInput
+            style={[styles.input, { marginTop: 8 }]}
+            value={senderCityStateZip}
+            onChangeText={setSenderCityStateZip}
+            placeholder="City, State ZIP"
+            placeholderTextColor={Colors.textLight}
+            accessibilityLabel="Your city, state, and ZIP code"
+          />
+          <Text style={styles.fieldHint}>
+            Saved on this device so you only need to enter it once.
+          </Text>
+
           {/* ── Generate button ────────────────────────────────── */}
           <TouchableOpacity
             style={[
@@ -319,12 +428,21 @@ export default function CreditRepairModal({
                   <Text style={styles.letterContent}>{generatedLetter}</Text>
                 </ScrollView>
               </View>
-              <View style={styles.savedNote}>
-                <Check size={14} color={Colors.success} />
-                <Text style={styles.savedNoteText}>
-                  Letter saved to your Dispute Tracker. You can track its status there.
-                </Text>
-              </View>
+              {saveError ? (
+                <View style={styles.saveErrorNote}>
+                  <AlertTriangle size={14} color={Colors.warning} />
+                  <Text style={styles.saveErrorNoteText}>
+                    Letter generated, but it was NOT saved to your Dispute Tracker: {saveError} Copy the letter above so you don't lose it.
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.savedNote}>
+                  <Check size={14} color={Colors.success} />
+                  <Text style={styles.savedNoteText}>
+                    Letter saved to your Dispute Tracker. You can track its status there.
+                  </Text>
+                </View>
+              )}
             </View>
           ) : null}
 
@@ -452,6 +570,15 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Colors.text,
   },
+  inputMultiline: {
+    minHeight: 56,
+    textAlignVertical: "top",
+  },
+  fieldHint: {
+    fontSize: 12,
+    color: Colors.textLight,
+    marginTop: 6,
+  },
   generateButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -521,6 +648,22 @@ const styles = StyleSheet.create({
     color: Colors.success,
     fontWeight: "500",
     flex: 1,
+  },
+  saveErrorNote: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    marginTop: 12,
+    backgroundColor: Colors.warningLight + "30",
+    borderRadius: 10,
+    padding: 12,
+  },
+  saveErrorNoteText: {
+    fontSize: 13,
+    color: Colors.text,
+    fontWeight: "500",
+    flex: 1,
+    lineHeight: 18,
   },
   disclaimer: {
     flexDirection: "row",

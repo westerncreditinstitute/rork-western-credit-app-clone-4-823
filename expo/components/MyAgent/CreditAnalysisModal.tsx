@@ -56,6 +56,7 @@ export interface CreditAnalysisModalProps {
     letterType: string;
     creditorName: string;
     accountNumber: string;
+    furnisherAddress?: string;
   }) => void;
   /** Continue the conversation about this analysis in chat. */
   onDiscussInChat?: (analysis: CreditAnalysisResult) => void;
@@ -328,6 +329,7 @@ export default function CreditAnalysisModal({
                               letterType: rec.letterType,
                               creditorName: rec.creditor,
                               accountNumber: rec.accountNumber,
+                              furnisherAddress: rec.furnisherAddress,
                             })
                           }
                           accessibilityRole="button"
