@@ -6,7 +6,7 @@
 import SwiftUI
 
 struct HomeView: View {
-    /// HeyGen embed shown in the Featured Offers section.
+    /// HeyGen embed shown in the Videos section.
     private static let featuredHeyGenEmbedId = "92770d6dd5164282bbeabb6a890f3f41"
 
     @Environment(ThemeManager.self) private var theme
@@ -429,7 +429,7 @@ struct HomeView: View {
 
     private var featuredSection: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
-            SectionHeader(title: "Featured Offers", symbol: "sparkles") {
+            SectionHeader(title: "Videos", symbol: "sparkles") {
                 BadgeView(text: "NEW", variant: .success)
             }
 

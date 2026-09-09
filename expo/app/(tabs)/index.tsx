@@ -338,7 +338,7 @@ export default function HomeScreen() {
           <View style={styles.sectionHeader}>
             <View style={styles.sectionTitleRow}>
               <Sparkles color={colors.secondary} size={20} />
-              <Text style={styles.sectionTitle}>Featured Offers</Text>
+              <Text style={styles.sectionTitle}>Videos</Text>
             </View>
             <Badge text="NEW" variant="success" size="sm" />
           </View>
