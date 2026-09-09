@@ -35,6 +35,8 @@ import {
   Video,
   Gamepad2,
   Clock,
+  Gavel,
+  BadgeCheck,
 } from "lucide-react-native";
 
 import { useTheme } from "@/contexts/ThemeContext";
@@ -603,6 +605,32 @@ export default function HomeScreen() {
                 <View style={[styles.premiumBadgeSmall, { backgroundColor: '#F59E0B20' }]}>
                   <Clock color={colors.warning} size={10} />
                   <Text style={[styles.premiumBadgeTextSmall, { color: colors.warning }]}>SOON</Text>
+                </View>
+              </LinearGradient>
+            </TouchableOpacity>
+
+            {/* What Can You Sue For */}
+            <TouchableOpacity
+              activeOpacity={0.9}
+              style={styles.toolCardWrapper}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                router.push("/what-can-you-sue-for" as any);
+              }}
+            >
+              <LinearGradient
+                colors={['#2A1A2E', '#3E1626'] as [string, string]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.toolCardCompact}
+              >
+                <View style={[styles.toolIconWrapCompact, { backgroundColor: 'rgba(244, 63, 94, 0.15)' }]}>
+                  <Gavel color="#F43F5E" size={24} />
+                </View>
+                <Text style={styles.toolTitleCompact} numberOfLines={2}>What Can You Sue For</Text>
+                <View style={[styles.premiumBadgeSmall, { backgroundColor: '#10B98120' }]}>
+                  <BadgeCheck color={colors.success} size={10} />
+                  <Text style={[styles.premiumBadgeTextSmall, { color: colors.success }]}>FREE</Text>
                 </View>
               </LinearGradient>
             </TouchableOpacity>

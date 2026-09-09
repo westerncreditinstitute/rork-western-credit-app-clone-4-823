@@ -927,7 +927,7 @@ export function classifyNegative(
   //    a Collection Account), but NOT an explicit never-late status.
   const typeLine = auth.find((l) => l.isType);
   const typeHit = typeLine ? testDerog(typeLine.value) : null;
-  if (typeHit) {
+  if (typeHit && typeLine) {
     record(`account type: "${typeLine.value.slice(0, 40)}"`);
     if (grid.worst) record(`payment grid: worst mark ${grid.worst}`);
     if (hardClean) return conflict("a derogatory account type");

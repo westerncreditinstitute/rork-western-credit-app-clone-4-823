@@ -19,6 +19,7 @@ struct HomeView: View {
     @State private var playingVideo: FeaturedVideo?
     @State private var expandedTip: CreditTip?
     @State private var showComingSoonAlert = false
+    @State private var showSueFor = false
 
     private var quickActions: [QuickAction] {
         let colors = theme.colors
@@ -44,7 +45,7 @@ struct HomeView: View {
         ScrollView {
             VStack(spacing: Spacing.lg) {
                 header
-                gameLauncherCard
+                launcherRow
                 quickActionGrid
                 featuredSection
                 if !store.enrolledCourses.isEmpty { continueLearningSection }
@@ -64,6 +65,9 @@ struct HomeView: View {
         }
         .sheet(item: $expandedTip) { tip in
             CreditTipDetailView(tip: tip)
+        }
+        .fullScreenCover(isPresented: $showSueFor) {
+            SueForView()
         }
         .task {
             guard !appeared else { return }
@@ -259,7 +263,17 @@ struct HomeView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    // MARK: - Game launcher
+    // MARK: - Launcher cards (game + What Can You Sue For)
+
+    private var launcherRow: some View {
+        HStack(spacing: Spacing.sm) {
+            gameLauncherCard
+            sueForLauncherCard
+        }
+        .padding(.horizontal, Spacing.md)
+        .opacity(appeared ? 1 : 0)
+        .offset(y: appeared ? 0 : 20)
+    }
 
     private var gameLauncherCard: some View {
         Button {
@@ -270,43 +284,22 @@ struct HomeView: View {
                 showComingSoonAlert = true
             }
         } label: {
-            HStack(spacing: Spacing.md) {
+            VStack(spacing: Spacing.sm) {
                 Image(systemName: "gamecontroller.fill")
-                    .font(.system(size: 24, weight: .semibold))
+                    .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(.white)
-                    .frame(width: 52, height: 52)
-                    .background(Color.white.opacity(0.2))
+                    .frame(width: 46, height: 46)
+                    .background(Color.white.opacity(0.16))
                     .clipShape(.rect(cornerRadius: Radius.md))
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Credit Life Simulator")
-                        .font(.system(size: 17, weight: .heavy))
-                        .foregroundStyle(.white)
-                    Text("Coming soon • Admin early access")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.75))
-                }
+                Text("Credit Life Simulator")
+                    .font(.system(size: 14, weight: .heavy))
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .minimumScaleFactor(0.8)
 
-                Spacer(minLength: 0)
-
-                Image(systemName: store.isAdminUnlocked ? "play.fill" : "clock.fill")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(store.isAdminUnlocked ? Color(hex: "#001F42") : .white)
-                    .frame(width: 36, height: 36)
-                    .background(store.isAdminUnlocked ? .white : Color.white.opacity(0.2))
-                    .clipShape(.circle)
-            }
-            .padding(Spacing.md)
-            .background(
-                LinearGradient(
-                    colors: [Color(hex: "#002B5C"), Color(hex: "#10B981")],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-            )
-            .clipShape(.rect(cornerRadius: Radius.lg))
-            .overlay(alignment: .topTrailing) {
-                Text("COMING SOON")
+                Text(store.isAdminUnlocked ? "EARLY ACCESS" : "COMING SOON")
                     .font(.system(size: 9, weight: .heavy))
                     .kerning(0.5)
                     .foregroundStyle(Color(hex: "#F59E0B"))
@@ -314,7 +307,21 @@ struct HomeView: View {
                     .padding(.vertical, 4)
                     .background(Color(hex: "#F59E0B").opacity(0.18))
                     .clipShape(.capsule(style: .continuous))
-                    .padding(Spacing.sm)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, Spacing.md)
+            .padding(.horizontal, Spacing.sm)
+            .background(
+                LinearGradient(
+                    colors: [Color(hex: "#1A2E3E"), Color(hex: "#162E16")],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .clipShape(.rect(cornerRadius: Radius.lg))
+            .overlay {
+                RoundedRectangle(cornerRadius: Radius.lg)
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
             }
             .shadow(color: Color(hex: "#002B5C").opacity(0.3), radius: 12, y: 5)
         }
@@ -324,9 +331,56 @@ struct HomeView: View {
         } message: {
             Text("The Credit Life Simulator is currently in early access and available to administrators only. It will open to everyone in a future update.")
         }
-        .padding(.horizontal, Spacing.md)
-        .opacity(appeared ? 1 : 0)
-        .offset(y: appeared ? 0 : 20)
+    }
+
+    private var sueForLauncherCard: some View {
+        Button {
+            Haptics.medium()
+            showSueFor = true
+        } label: {
+            VStack(spacing: Spacing.sm) {
+                Image(systemName: "gavel")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(Color(hex: "#F43F5E"))
+                    .frame(width: 46, height: 46)
+                    .background(Color(hex: "#F43F5E").opacity(0.16))
+                    .clipShape(.rect(cornerRadius: Radius.md))
+
+                Text("What Can You Sue For")
+                    .font(.system(size: 14, weight: .heavy))
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .minimumScaleFactor(0.8)
+
+                Text("FREE")
+                    .font(.system(size: 9, weight: .heavy))
+                    .kerning(0.5)
+                    .foregroundStyle(Color(hex: "#34D399"))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color(hex: "#34D399").opacity(0.18))
+                    .clipShape(.capsule(style: .continuous))
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, Spacing.md)
+            .padding(.horizontal, Spacing.sm)
+            .background(
+                LinearGradient(
+                    colors: [Color(hex: "#2A1A2E"), Color(hex: "#3E1626")],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .clipShape(.rect(cornerRadius: Radius.lg))
+            .overlay {
+                RoundedRectangle(cornerRadius: Radius.lg)
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            }
+            .shadow(color: Color(hex: "#3E1626").opacity(0.3), radius: 12, y: 5)
+        }
+        .buttonStyle(PressableButtonStyle())
+        .accessibilityLabel("What Can You Sue For")
     }
 
     // MARK: - Quick actions

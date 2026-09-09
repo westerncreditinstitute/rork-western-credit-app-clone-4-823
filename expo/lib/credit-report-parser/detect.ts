@@ -159,8 +159,8 @@ export function bureauConflicts(
   detected: Bureau[],
 ): boolean {
   if (!userSelection || userSelection === "auto") return false;
-  const u = userSelection.toLowerCase() as Bureau;
+  const u = userSelection.toLowerCase();
   if (u === "auto" || u === "generic") return false;
   if (detected.length === 0) return false;
-  return !detected.includes(u);
+  return !detected.includes(u as Bureau);
 }
