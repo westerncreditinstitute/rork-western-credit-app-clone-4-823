@@ -239,6 +239,19 @@ export default function FloatingTabBar({ state, descriptors, navigation }: Botto
             {state.routes.map((route, index) => {
               const descriptor = descriptors[route.key];
               const options = descriptor?.options;
+
+              // Expo-router's convention for hiding a tab is `href: null` in
+              // its screen options. The default tab bar honors that itself;
+              // this custom bar must filter the same way or hidden screens
+              // (Wallet, Earnings, Hire Pro, Admin — all under "More") leak
+              // back into the bar. `href` is an expo-router extension not in
+              // the base BottomTabNavigationOptions type, hence the narrow cast.
+              if (
+                (options as { href?: unknown } | undefined)?.href === null
+              ) {
+                return null;
+              }
+
               const config = TAB_CONFIG[route.name] ?? {
                 ...FALLBACK,
                 label: options?.title ?? route.name,
