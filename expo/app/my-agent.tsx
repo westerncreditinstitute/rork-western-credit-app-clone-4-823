@@ -30,7 +30,7 @@ import Colors from "@/constants/colors";
 import { useUser } from "@/contexts/UserContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useDisputes } from "@/contexts/DisputesContext";
-import { trpc } from "@/lib/trpc";
+import { trpc, isTransportErrorMessage } from "@/lib/trpc";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { useAgentChat, type TriggeredLetter } from "@/hooks/useAgentChat";
 
@@ -104,6 +104,14 @@ export default function MyAgentScreen({
     onError: (error) => {
       // No Alert here: the render branch below shows a specific, actionable
       // explanation of the failure. A popup on top of it would just be noise.
+      //
+      // A server that is unreachable or still waking is a transient blip, not a
+      // fault in the app - console.error would surface it as a full-screen
+      // "Runtime error" over a screen that already handles the case gracefully.
+      if (isTransportErrorMessage(error.message)) {
+        console.warn("[MyAgent] Assignment deferred:", error.message);
+        return;
+      }
       console.error("[MyAgent] Assignment error:", error.message);
     },
   });
@@ -130,7 +138,18 @@ export default function MyAgentScreen({
     // every setup failure (missing tables, RLS, empty pool) is permanent
     // until someone runs a migration, so retrying would just spin.
     // The Try Again button drives any further attempts.
-    if (assignAgentMutation.isError) return;
+    //
+    // Transport failures are the exception: the server being briefly
+    // unreachable says nothing about whether assignment can succeed, and the
+    // tRPC client already backs those off behind a circuit breaker. Blocking
+    // here would strand the user on an error screen until they tapped retry,
+    // even after the server came back.
+    if (
+      assignAgentMutation.isError &&
+      !isTransportErrorMessage(assignAgentMutation.error?.message)
+    ) {
+      return;
+    }
 
     // The backend reported a real problem (missing tables, RLS, bad
     // credentials). Assigning would hit the same wall, so surface it instead.
@@ -153,6 +172,7 @@ export default function MyAgentScreen({
     myAgentQuery.data?.agent,
     myAgentQuery.data?.setupError,
     assignAgentMutation,
+    assignAgentMutation.error?.message,
   ]);
 
   // ── Derived agent state ───────────────────────────────────────

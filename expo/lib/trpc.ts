@@ -18,6 +18,20 @@ export const SERVER_WAKING_MESSAGE =
   "The server is starting up and didn't respond in time. Please try again in a few seconds.";
 
 /**
+ * True when a failure is the transport giving up (server unreachable, cold
+ * starting, rate limited) rather than the application rejecting the request.
+ *
+ * These are transient and self-healing: the same call usually succeeds a
+ * moment later. Callers use this to keep a network blip out of `console.error`
+ * - which the preview surfaces as a full-screen "Runtime error" - and to show
+ * a quiet retry affordance instead of a permanent setup failure.
+ */
+export function isTransportErrorMessage(message?: string | null): boolean {
+  if (!message) return false;
+  return message === OFFLINE_MESSAGE || message === SERVER_WAKING_MESSAGE;
+}
+
+/**
  * Last base URL logged, so the value is announced once instead of per request.
  * Starts as a sentinel no env value can equal, so the first call always logs -
  * including when the variable is missing entirely.

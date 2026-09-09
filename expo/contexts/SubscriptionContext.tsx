@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import createContextHook from '@nkzw/create-context-hook';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { trpc } from '@/lib/trpc';
+import { trpc, isTransportErrorMessage } from '@/lib/trpc';
 import { useAuth } from '@/contexts/AuthContext';
 
 export type SubscriptionTier = 'free' | 'ace1_student' | 'cso_affiliate';
@@ -393,6 +393,13 @@ export const [SubscriptionProvider, useSubscription] = createContextHook(() => {
                   console.log('[Subscription] AI agent assigned:', data.agent?.agent_name);
                 },
                 onError: (err) => {
+                  // Background assignment: the My Agent tab retries on open, so a
+                  // brief network blip here is not an app fault and must not be
+                  // escalated into a runtime error the user sees.
+                  if (isTransportErrorMessage(err.message)) {
+                    console.warn('[Subscription] AI agent assignment deferred:', err.message);
+                    return;
+                  }
                   console.error('[Subscription] AI agent assignment failed:', err.message);
                 },
               }
