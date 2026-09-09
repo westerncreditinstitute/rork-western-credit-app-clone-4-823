@@ -6,17 +6,18 @@
 import SwiftUI
 
 struct HomeView: View {
+    /// HeyGen embed shown in the Featured Offers section.
+    private static let featuredHeyGenEmbedId = "92770d6dd5164282bbeabb6a890f3f41"
+
     @Environment(ThemeManager.self) private var theme
     @Environment(AppStore.self) private var store
 
     @Binding var selectedTab: AppTab
     @Binding var showGame: Bool
 
-    @State private var selectedVideoIndex: Int = 0
     @State private var showNotifications = false
     @State private var showPlans = false
     @State private var appeared = false
-    @State private var playingVideo: FeaturedVideo?
     @State private var expandedTip: CreditTip?
     @State private var showComingSoonAlert = false
     @State private var showSueFor = false
@@ -60,9 +61,6 @@ struct HomeView: View {
         .ignoresSafeArea(edges: .top)
         .sheet(isPresented: $showNotifications) { NotificationsView() }
         .sheet(isPresented: $showPlans) { SubscriptionPlansView() }
-        .sheet(item: $playingVideo) { video in
-            YouTubeSheet(video: video)
-        }
         .sheet(item: $expandedTip) { tip in
             CreditTipDetailView(tip: tip)
         }
@@ -435,104 +433,7 @@ struct HomeView: View {
                 BadgeView(text: "NEW", variant: .success)
             }
 
-            let selected = MockData.featuredVideos[min(selectedVideoIndex, MockData.featuredVideos.count - 1)]
-
-            Button {
-                Haptics.light()
-                playingVideo = selected
-            } label: {
-                RemoteImage(urlString: "https://img.youtube.com/vi/\(selected.youtubeId)/maxresdefault.jpg", height: 200, cornerRadius: Radius.lg)
-                    .overlay {
-                        LinearGradient(
-                            colors: [.clear, .black.opacity(0.55)],
-                            startPoint: .center,
-                            endPoint: .bottom
-                        )
-                        .clipShape(.rect(cornerRadius: Radius.lg))
-                        .allowsHitTesting(false)
-                    }
-                    .overlay {
-                        Image(systemName: "play.fill")
-                            .font(.system(size: 22, weight: .bold))
-                            .foregroundStyle(Color(hex: "#001F42"))
-                            .frame(width: 62, height: 62)
-                            .background(.white.opacity(0.94))
-                            .clipShape(.circle)
-                            .shadow(radius: 12, y: 4)
-                            .allowsHitTesting(false)
-                    }
-                    .overlay(alignment: .bottomLeading) {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(selected.title)
-                                .font(.system(size: 15, weight: .bold))
-                                .foregroundStyle(.white)
-                                .lineLimit(2)
-                                .multilineTextAlignment(.leading)
-                            Text(selected.duration)
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(.white.opacity(0.8))
-                        }
-                        .padding(Spacing.md)
-                        .allowsHitTesting(false)
-                    }
-            }
-            .buttonStyle(PressableButtonStyle())
-            .padding(.horizontal, Spacing.md)
-
-            ScrollView(.horizontal) {
-                HStack(spacing: Spacing.sm) {
-                    ForEach(Array(MockData.featuredVideos.enumerated()), id: \.element.id) { index, video in
-                        Button {
-                            Haptics.light()
-                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                selectedVideoIndex = index
-                            }
-                        } label: {
-                            VStack(alignment: .leading, spacing: 6) {
-                                RemoteImage(urlString: video.thumbnailURL, height: 68, cornerRadius: Radius.sm)
-                                    .frame(width: 120)
-                                    .overlay(alignment: .bottomTrailing) {
-                                        Text(video.duration)
-                                            .font(.system(size: 9, weight: .bold))
-                                            .foregroundStyle(.white)
-                                            .padding(.horizontal, 5)
-                                            .padding(.vertical, 2)
-                                            .background(.black.opacity(0.72))
-                                            .clipShape(.rect(cornerRadius: 4))
-                                            .padding(4)
-                                    }
-                                    .overlay(alignment: .topLeading) {
-                                        if selectedVideoIndex == index {
-                                            HStack(spacing: 3) {
-                                                Circle().fill(Color(hex: "#10B981")).frame(width: 5, height: 5)
-                                                Text("Playing").font(.system(size: 8, weight: .heavy))
-                                            }
-                                            .foregroundStyle(.white)
-                                            .padding(.horizontal, 5)
-                                            .padding(.vertical, 3)
-                                            .background(.black.opacity(0.7))
-                                            .clipShape(.capsule)
-                                            .padding(4)
-                                        }
-                                    }
-
-                                Text(video.title)
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundStyle(selectedVideoIndex == index ? theme.colors.primary : theme.colors.textSecondary)
-                                    .lineLimit(2)
-                                    .multilineTextAlignment(.leading)
-                                    .frame(width: 120, alignment: .leading)
-                            }
-                            .padding(6)
-                            .background(selectedVideoIndex == index ? theme.colors.primary.opacity(0.08) : .clear)
-                            .clipShape(.rect(cornerRadius: Radius.md))
-                        }
-                        .buttonStyle(PressableButtonStyle())
-                    }
-                }
-            }
-            .scrollIndicators(.hidden)
-            .contentMargins(.horizontal, Spacing.md, for: .scrollContent)
+            HeyGenPlayerView(embedId: Self.featuredHeyGenEmbedId)
         }
     }
 

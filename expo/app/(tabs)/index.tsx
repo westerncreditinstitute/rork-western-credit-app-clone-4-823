@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useEffect, useState, useCallback } from "react";
+import React, { useMemo, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -48,16 +48,12 @@ import { getTipOfTheWeek, getRecentTips, TipCategory } from "@/mocks/creditTips"
 import { trpc } from "@/lib/trpc";
 import { BlogPost } from "@/types";
 import { Card, Badge, Avatar, ProgressBar } from "@/components/ui";
-import YouTubePlayer from "@/components/YouTubePlayer";
+import HeyGenPlayer from "@/components/HeyGenPlayer";
 
 const { width } = Dimensions.get("window");
 
-const DEFAULT_FEATURED_VIDEOS = [
-  { id: "1", youtubeId: "dQw4w9WgXcQ", title: "Getting Started with Credit Repair", duration: "5:32" },
-  { id: "2", youtubeId: "9bZkp7q19f0", title: "Understanding Credit Scores", duration: "8:15" },
-  { id: "3", youtubeId: "kJQP7kiw5Fk", title: "Dispute Letter Basics", duration: "6:48" },
-  { id: "4", youtubeId: "RgKAFK5djSk", title: "Building Business Credit", duration: "10:22" },
-];
+/** HeyGen embed shown in the Featured Offers section on Home. */
+const FEATURED_HEYGEN_EMBED_ID = "92770d6dd5164282bbeabb6a890f3f41";
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -72,29 +68,6 @@ export default function HomeScreen() {
   const slideAnim = useRef(new Animated.Value(30)).current;
   const logoAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.9)).current;
-  
-  const [selectedVideoIndex, setSelectedVideoIndex] = useState(0);
-  
-  const featuredVideosQuery = trpc.featuredVideos.getAll.useQuery({ activeOnly: true });
-  
-  const featuredVideos = useMemo(() => {
-    if (featuredVideosQuery.data && featuredVideosQuery.data.length > 0) {
-      return featuredVideosQuery.data.map((video: any) => ({
-        id: video.id,
-        youtubeId: video.youtubeId,
-        title: video.title,
-        duration: video.duration || "",
-      }));
-    }
-    return DEFAULT_FEATURED_VIDEOS;
-  }, [featuredVideosQuery.data]);
-  
-  const selectedVideo = featuredVideos[selectedVideoIndex] || featuredVideos[0];
-
-  const handleVideoSelect = useCallback((index: number) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setSelectedVideoIndex(index);
-  }, []);
   
   // Sync mock enrolled courses on mount
   useEffect(() => {
@@ -370,55 +343,8 @@ export default function HomeScreen() {
             <Badge text="NEW" variant="success" size="sm" />
           </View>
           <View style={styles.promoVideoContainer}>
-            <YouTubePlayer
-              videoId={selectedVideo?.youtubeId || "dQw4w9WgXcQ"}
-              title={selectedVideo?.title || "Featured Video"}
-            />
+            <HeyGenPlayer embedId={FEATURED_HEYGEN_EMBED_ID} />
           </View>
-          <ScrollView 
-            horizontal 
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.videoSelectorContainer}
-          >
-            {featuredVideos.map((video, index) => (
-              <TouchableOpacity
-                key={video.id}
-                style={[
-                  styles.videoSelectorItem,
-                  selectedVideoIndex === index && styles.videoSelectorItemActive,
-                ]}
-                onPress={() => handleVideoSelect(index)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.videoThumbnailContainer}>
-                  <Image
-                    source={{ uri: `https://img.youtube.com/vi/${video.youtubeId}/mqdefault.jpg` }}
-                    style={styles.videoThumbnail}
-                  />
-                  {selectedVideoIndex === index && (
-                    <View style={styles.playingIndicator}>
-                      <View style={styles.playingDot} />
-                      <Text style={styles.playingText}>Playing</Text>
-                    </View>
-                  )}
-                  {video.duration ? (
-                    <View style={styles.videoDurationBadge}>
-                      <Text style={styles.videoDurationText}>{video.duration}</Text>
-                    </View>
-                  ) : null}
-                </View>
-                <Text 
-                  style={[
-                    styles.videoSelectorTitle,
-                    selectedVideoIndex === index && styles.videoSelectorTitleActive,
-                  ]} 
-                  numberOfLines={2}
-                >
-                  {video.title}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
         </View>
 
         <View style={styles.section}>
@@ -1298,77 +1224,6 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     borderRadius: 16,
     overflow: "hidden",
     backgroundColor: colors.surface,
-  },
-  videoSelectorContainer: {
-    paddingTop: 14,
-    paddingBottom: 4,
-    gap: 12,
-  },
-  videoSelectorItem: {
-    width: 140,
-    opacity: 0.7,
-  },
-  videoSelectorItemActive: {
-    opacity: 1,
-  },
-  videoThumbnailContainer: {
-    position: "relative" as const,
-    borderRadius: 10,
-    overflow: "hidden",
-    marginBottom: 8,
-  },
-  videoThumbnail: {
-    width: 140,
-    height: 80,
-    borderRadius: 10,
-    backgroundColor: colors.surfaceAlt,
-  },
-  playingIndicator: {
-    position: "absolute" as const,
-    top: 6,
-    left: 6,
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    backgroundColor: "rgba(0,0,0,0.7)",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    gap: 5,
-  },
-  playingDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#EF4444",
-  },
-  playingText: {
-    fontSize: 10,
-    fontWeight: "600" as const,
-    color: "#FFFFFF",
-  },
-  videoDurationBadge: {
-    position: "absolute" as const,
-    bottom: 6,
-    right: 6,
-    backgroundColor: "rgba(0,0,0,0.75)",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  videoDurationText: {
-    fontSize: 10,
-    fontWeight: "600" as const,
-    color: "#FFFFFF",
-  },
-  videoSelectorTitle: {
-    fontSize: 12,
-    fontWeight: "500" as const,
-    color: colors.textSecondary,
-    lineHeight: 16,
-  },
-  videoSelectorTitleActive: {
-    color: colors.text,
-    fontWeight: "600" as const,
   },
   toolsGrid: {
     flexDirection: "row" as const,
