@@ -82,7 +82,7 @@ export const advancedCreditEducationPromoScript: PromoScript = {
       visual: {
         type: 'screenshot',
         source:
-          'Attachment: “Credit Repair Tools” grid (AI Credit Repair Agent, Dispute Tracker, Lawsuit Assistant, Interactive Coach).',
+          'Attachment: “Credit Repair Tools” grid (AI Dispute Assistant, Dispute Tracker, Lawsuit Assistant, Interactive Coach).',
         notes:
           'Animate a subtle glow around each tile as it’s mentioned.',
       },

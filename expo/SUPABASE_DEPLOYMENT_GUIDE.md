@@ -1,6 +1,6 @@
 # Supabase Deployment Guide — My Agent Feature
 
-This is the complete, step-by-step guide for deploying the **My Agent** (AI Credit Repair Agent) feature to your Supabase project. Follow each phase in order. Every step includes the exact SQL, screenshots to expect, and verification queries so you can confirm success before moving on.
+This is the complete, step-by-step guide for deploying the **My Agent** (AI Dispute Assistant) feature to your Supabase project. Follow each phase in order. Every step includes the exact SQL, screenshots to expect, and verification queries so you can confirm success before moving on.
 
 ---
 

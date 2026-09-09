@@ -5,7 +5,7 @@
 
 import Foundation
 
-/// AI Credit Repair Agent endpoints (`aiAgents.*`) plus the dispute counts the
+/// AI Dispute Assistant endpoints (`aiAgents.*`) plus the dispute counts the
 /// agent dashboard shows. Mirrors the Expo My Agent data layer.
 ///
 /// The assigned agent is cached in UserDefaults so the screen paints the agent's

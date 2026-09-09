@@ -430,7 +430,7 @@ export default function HomeScreen() {
           </View>
 
           <View style={styles.toolsGrid}>
-            {/* AI Credit Repair Agent */}
+            {/* AI Dispute Assistant */}
             <TouchableOpacity
               activeOpacity={0.9}
               style={styles.toolCardWrapper}
@@ -456,7 +456,7 @@ export default function HomeScreen() {
                     <Lock color={colors.textLight} size={24} />
                   )}
                 </View>
-                <Text style={[styles.toolTitleCompact, !canAccessAIDispute && styles.toolTitleLocked]} numberOfLines={2}>AI Credit Repair Agent</Text>
+                <Text style={[styles.toolTitleCompact, !canAccessAIDispute && styles.toolTitleLocked]} numberOfLines={2}>AI Dispute Assistant</Text>
                 {!canAccessAIDispute && (
                   <View style={styles.premiumBadgeSmall}>
                     <Crown color={colors.warning} size={10} />

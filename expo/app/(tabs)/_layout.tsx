@@ -49,7 +49,7 @@ export default function TabLayout() {
       />
       <Tabs.Screen name="courses" options={{ title: "Courses" }} />
 
-      {/* "My Agent" — the AI Credit Repair Agent, a primary destination. */}
+      {/* "My Agent" — the AI Dispute Assistant, a primary destination. */}
       <Tabs.Screen
         name="my-agent"
         options={{ title: "My Agent", headerShown: false }}

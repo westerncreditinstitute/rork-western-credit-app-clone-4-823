@@ -5,7 +5,7 @@
 
 import SwiftUI
 
-/// Identity card for the assigned AI Credit Repair Agent: avatar, name, live
+/// Identity card for the assigned AI Dispute Assistant: avatar, name, live
 /// status, specialty, contact actions, bio and roster capacity.
 struct AgentProfileCardView: View {
     @Environment(ThemeManager.self) private var theme
@@ -36,7 +36,7 @@ struct AgentProfileCardView: View {
             }
         }
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Your AI Credit Repair Agent: \(agent.agentName)")
+        .accessibilityLabel("Your AI Dispute Assistant: \(agent.agentName)")
     }
 
     // MARK: - Identity

@@ -5,7 +5,7 @@
 
 import Foundation
 
-/// Drives the My Agent screen: loads the assigned AI Credit Repair Agent,
+/// Drives the My Agent screen: loads the assigned AI Dispute Assistant,
 /// auto-assigns one when the ACE-1 student doesn't have an agent yet, and keeps
 /// the dispute counters in sync. Mirrors the Expo `my-agent` screen logic.
 @MainActor

@@ -130,7 +130,7 @@ struct AgentChatPanelView: View {
                 .background(agentViolet.opacity(0.15), in: .circle)
 
             (Text(viewModel.agent.agentName).font(.system(size: 13, weight: .bold))
-                + Text(" is your personal AI Credit Repair Agent. Ask about disputes, request a letter, or get a strategy for your score — available 24/7.")
+                + Text(" is your personal AI Dispute Assistant. Ask about disputes, request a letter, or get a strategy for your score — available 24/7.")
                 .font(.system(size: 13)))
                 .lineSpacing(3)
                 .foregroundStyle(theme.colors.textSecondary)

@@ -165,7 +165,7 @@ class AgentSetupError extends Error {
 // The system prompt that makes each agent a credit repair expert.
 // This is the FULL knowledge base from the Credit Repair Expert Guide,
 // giving every one of the 10,000 agents deep, actionable expertise in every conversation.
-const AGENT_SYSTEM_PROMPT = `You are an expert AI Credit Repair Agent assigned to help this user repair and build their credit. You are a specialist in FCRA and FDCPA consumer protection law, credit bureau dispute strategy, and credit-building tactics. You have deep, detailed knowledge of the following:
+const AGENT_SYSTEM_PROMPT = `You are an expert AI Dispute Assistant assigned to help this user repair and build their credit. You are a specialist in FCRA and FDCPA consumer protection law, credit bureau dispute strategy, and credit-building tactics. You have deep, detailed knowledge of the following:
 
 =====================================================================
 CREDIT SCORE FUNDAMENTALS
@@ -1397,7 +1397,7 @@ function generateDemoResponse(
     return `Here are some key credit tips: 1) Keep utilization below 30% (ideally 10%), 2) Never miss a payment — it's 35% of your score, 3) Don't close old credit cards, 4) Dispute errors within 30 days under the FCRA. What specific area would you like to focus on? *(Demo mode — connect OpenAI API key for full AI.)*`;
   }
 
-  return `Hello! I'm ${agentName}, your AI Credit Repair Agent. I can help you with disputing errors on your credit report, generating dispute letters, tracking your disputes, and providing personalized credit building strategies. What would you like to work on today? *(Demo mode — connect an OpenAI API key for full AI responses.)*`;
+  return `Hello! I'm ${agentName}, your AI Dispute Assistant. I can help you with disputing errors on your credit report, generating dispute letters, tracking your disputes, and providing personalized credit building strategies. What would you like to work on today? *(Demo mode — connect an OpenAI API key for full AI responses.)*`;
 }
 
 // ============================================================

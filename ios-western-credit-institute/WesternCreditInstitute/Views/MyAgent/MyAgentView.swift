@@ -5,7 +5,7 @@
 
 import SwiftUI
 
-/// My Agent — the personal AI Credit Repair Agent dashboard.
+/// My Agent — the personal AI Dispute Assistant dashboard.
 ///
 /// Mirrors the Expo `my-agent` screen: ACE-1 students are matched with one of
 /// 10,000 specialised agents, see that agent's contact details and live status,
@@ -227,7 +227,7 @@ struct MyAgentView: View {
                 .foregroundStyle(theme.colors.text)
                 .padding(.top, Spacing.sm)
 
-            Text("We're matching you with one of 10,000 specialized AI Credit Repair Agents. This only takes a moment.")
+            Text("We're matching you with one of 10,000 specialized AI Dispute Assistants. This only takes a moment.")
                 .font(.system(size: 15))
                 .lineSpacing(3)
                 .multilineTextAlignment(.center)
@@ -478,12 +478,12 @@ private struct LockedAgentView: View {
                     .frame(width: 80, height: 80)
                     .background(theme.colors.primary.opacity(0.12), in: .circle)
 
-                Text("Unlock Your AI Credit Repair Agent")
+                Text("Unlock Your AI Dispute Assistant")
                     .font(.system(size: 22, weight: .bold))
                     .multilineTextAlignment(.center)
                     .foregroundStyle(theme.colors.text)
 
-                Text("Your personal AI Credit Repair Agent is available exclusively to ACE-1 course students. Enroll in the ACE-1 Credit Repair Certification course to get matched with one of 10,000 specialized AI agents who will help you dispute errors, generate letters, and build your credit.")
+                Text("Your personal AI Dispute Assistant is available exclusively to ACE-1 course students. Enroll in the ACE-1 Credit Repair Certification course to get matched with one of 10,000 specialized AI agents who will help you dispute errors, generate letters, and build your credit.")
                     .font(.system(size: 14))
                     .lineSpacing(4)
                     .multilineTextAlignment(.center)

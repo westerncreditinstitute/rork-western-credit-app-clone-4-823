@@ -2,7 +2,7 @@
  * My Agent — bottom tab entry point.
  *
  * Reuses the same screen component as the standalone `/my-agent` route so
- * there is a single source of truth for the AI Credit Repair Agent UI.
+ * there is a single source of truth for the AI Dispute Assistant UI.
  * `embedded` hides the back button and lets the tab navigator own the
  * safe-area inset.
  */

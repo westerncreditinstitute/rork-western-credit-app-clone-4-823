@@ -381,7 +381,7 @@ export const [SubscriptionProvider, useSubscription] = createContextHook(() => {
             }
           );
 
-          // Auto-assign an AI Credit Repair Agent for ACE-1 students.
+          // Auto-assign an AI Dispute Assistant for ACE-1 students.
           // This is non-blocking — the My Agent page will also auto-assign
           // on mount if the user visits before this completes.
           if (isACE1Course) {

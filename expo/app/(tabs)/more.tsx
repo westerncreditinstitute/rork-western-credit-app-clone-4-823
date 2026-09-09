@@ -240,7 +240,7 @@ export default function MoreScreen() {
           <Crown color={Colors.accent} size={28} />
           <View style={styles.upgradeText}>
             <Text style={styles.upgradeTitle}>
-              Unlock AI Credit Repair Agent
+              Unlock AI Dispute Assistant
             </Text>
             <Text style={styles.upgradeDescription}>
               Enroll in ACE-1 to get your personal AI agent, dispute letter

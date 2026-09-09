@@ -539,7 +539,7 @@ export default function MyAgentScreen({
                 {agent?.agent_name ?? "My Agent"}
               </Text>
               <Text style={styles.identityStatus} numberOfLines={1}>
-                {agent ? statusLabel : "AI Credit Repair Agent"}
+                {agent ? statusLabel : "AI Dispute Assistant"}
               </Text>
             </View>
           </View>
@@ -860,10 +860,10 @@ function LockedView({
             <Lock size={48} color={Colors.primary} />
           </View>
           <Text style={styles.lockedTitle}>
-            Unlock Your AI Credit Repair Agent
+            Unlock Your AI Dispute Assistant
           </Text>
           <Text style={styles.lockedDesc}>
-            Your personal AI Credit Repair Agent is available exclusively to
+            Your personal AI Dispute Assistant is available exclusively to
             ACE-1 course students. Enroll in the ACE-1 Credit Repair
             Certification course to get matched with one of 10,000 specialized
             AI agents who will help you dispute errors, generate letters, and

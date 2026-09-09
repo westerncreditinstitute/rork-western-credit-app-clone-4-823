@@ -2,7 +2,7 @@
 -- 023_credit_report_analysis.sql
 -- -----------------------------------------------------------------
 -- Stores credit report analyses produced by the AI Dispute Assistant
--- so the user's assigned AI Credit Repair Agent can reference the
+-- so the user's assigned AI Dispute Assistant can reference the
 -- parsed negative accounts during chat and recommend disputes.
 --
 -- Run AFTER 020_ai_agent_pool_and_assignments.sql.

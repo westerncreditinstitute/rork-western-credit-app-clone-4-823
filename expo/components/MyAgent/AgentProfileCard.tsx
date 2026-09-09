@@ -130,7 +130,7 @@ export default function AgentProfileCard({
     <View
       style={styles.card}
       accessibilityRole="summary"
-      accessibilityLabel={`Your AI Credit Repair Agent: ${agent.agent_name}`}
+      accessibilityLabel={`Your AI Dispute Assistant: ${agent.agent_name}`}
     >
       {/* ── Agent identity header ──────────────────────────────── */}
       <View style={styles.header}>

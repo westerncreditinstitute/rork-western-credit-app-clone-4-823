@@ -5,7 +5,7 @@
 
 import Foundation
 
-/// One of the 10,000 AI Credit Repair Agents in the pool, as returned by the
+/// One of the 10,000 AI Dispute Assistants in the pool, as returned by the
 /// backend `aiAgents.getMyAgent` / `aiAgents.assign` endpoints.
 nonisolated struct AIAgent: Identifiable, Codable, Hashable, Sendable {
     let id: Int

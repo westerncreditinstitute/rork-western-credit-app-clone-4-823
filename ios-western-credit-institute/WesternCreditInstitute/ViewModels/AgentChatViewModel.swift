@@ -5,7 +5,7 @@
 
 import Foundation
 
-/// Drives the live conversation with the assigned AI Credit Repair Agent.
+/// Drives the live conversation with the assigned AI Dispute Assistant.
 ///
 /// Delivery model, mirroring the Expo My Agent chat:
 ///  1. The cached transcript paints instantly, then `getChatHistory` refreshes it.
