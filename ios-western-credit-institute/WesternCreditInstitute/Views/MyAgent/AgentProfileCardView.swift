@@ -5,8 +5,10 @@
 
 import SwiftUI
 
-/// Identity card for the assigned AI Dispute Assistant: avatar, name, live
-/// status, specialty, contact actions, bio and roster capacity.
+/// The "agent console" on the Overview tab: a dark, futuristic command-deck
+/// surface with the realistic AI character portrait under a violet HUD glow,
+/// monospace system readouts, and glowing action rows. Deliberately dark in
+/// both themes so it reads as a separate, always-on instrument panel.
 struct AgentProfileCardView: View {
     @Environment(ThemeManager.self) private var theme
 
@@ -18,189 +20,231 @@ struct AgentProfileCardView: View {
     var onOpenCreditRepair: () -> Void
     var onOpenDisputeTracker: () -> Void
 
+    // Console palette — fixed so the panel looks identical day and night.
+    private let consoleBG = Color(hex: "#0B1220")
+    private let consoleText = Color(hex: "#E2E8F0")
+    private let consoleMuted = Color(hex: "#7C8BA1")
+    private let violet = Color(hex: "#A78BFA")
+    private let teal = Color(hex: "#67E8F9")
+
+    private var loadColor: Color {
+        if agent.capacityFraction >= 1 { return Color(hex: "#F87171") }
+        if agent.capacityFraction >= 0.8 { return Color(hex: "#FBBF24") }
+        return teal
+    }
+
     var body: some View {
-        CardView(padding: Spacing.lg, cornerRadius: Radius.xl) {
-            VStack(alignment: .leading, spacing: Spacing.md) {
-                identityHeader
-                statusRow
-
-                if let bio = agent.bio, !bio.isEmpty {
-                    bioSection(bio)
-                }
-
-                capacitySection
-
-                if showsActions {
-                    actionsSection
-                }
+        VStack(spacing: 0) {
+            hero
+            readouts
+            if showsActions {
+                actionsSection
             }
+            footer
         }
+        .background(consoleBG)
+        .clipShape(.rect(cornerRadius: 22, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .strokeBorder(violet.opacity(0.28), lineWidth: 1)
+        }
+        .shadow(color: violet.opacity(0.25), radius: 20, x: 0, y: 8)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Your AI Dispute Assistant: \(agent.agentName)")
     }
 
-    // MARK: - Identity
+    // MARK: - Hero
 
-    private var identityHeader: some View {
-        HStack(alignment: .top, spacing: Spacing.md) {
-            avatar
-
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: Spacing.sm) {
-                    Text(agent.agentName)
-                        .font(.system(size: 22, weight: .bold))
-                        .foregroundStyle(theme.colors.text)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    HStack(spacing: 3) {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 10, weight: .bold))
-                        Text("AI Agent")
-                            .font(.system(size: 11, weight: .semibold))
-                    }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, Spacing.sm)
-                    .padding(.vertical, 3)
-                    .background(theme.colors.primary, in: .capsule)
-                }
-
-                if let specialty = agent.specialty, !specialty.isEmpty {
-                    Text(specialty)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(theme.colors.accent)
-                }
-
-                if let assignedDateText {
-                    Text("Assigned to you on \(assignedDateText)")
-                        .font(.system(size: 13))
-                        .foregroundStyle(theme.colors.textSecondary)
-                }
+    /// The AI character portrait dissolving into the console body, framed by
+    /// HUD corner brackets and a live-link chip.
+    private var hero: some View {
+        consoleBG
+            .frame(height: 300)
+            .overlay {
+                portrait
+                    .allowsHitTesting(false)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
+            .overlay(alignment: .bottom) {
+                // Fade the portrait into the console body.
+                LinearGradient(
+                    colors: [.clear, consoleBG.opacity(0.55), consoleBG],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .allowsHitTesting(false)
+            }
+            .overlay(alignment: .bottom) {
+                // Violet aura rising from the bottom edge.
+                LinearGradient(
+                    colors: [.clear, violet.opacity(0.22)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 180)
+                .offset(y: 40)
+                .allowsHitTesting(false)
+            }
+            .overlay(alignment: .topLeading) { hudCorner(leading: true) }
+            .overlay(alignment: .topTrailing) { hudCorner(leading: false) }
+            .overlay(alignment: .topLeading) {
+                HStack(spacing: 5) {
+                    Image(systemName: "dot.radiowaves.left.and.right")
+                        .font(.system(size: 10, weight: .bold))
+                    Text("LINK ACTIVE")
+                        .font(.system(size: 9, weight: .heavy))
+                        .kerning(1.5)
+                }
+                .foregroundStyle(teal)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 4)
+                .background(
+                    consoleBG.opacity(0.72),
+                    in: .capsule
+                )
+                .overlay {
+                    Capsule().strokeBorder(teal.opacity(0.5), lineWidth: 1)
+                }
+                .padding(.leading, 48)
+                .padding(.top, 14)
+            }
+            .overlay(alignment: .bottomLeading) { identityPlate }
     }
 
-    private var avatar: some View {
+    /// Portrait anchor following the Color+overlay pattern so `.fill` sizing
+    /// never leaks outside the hero frame.
+    private var portrait: some View {
         Group {
-            if let urlString = agent.avatarURL, !urlString.isEmpty {
-                Color(theme.colors.surfaceAlt)
-                    .frame(width: 72, height: 72)
-                    .overlay {
-                        AsyncImage(url: URL(string: urlString)) { phase in
-                            switch phase {
-                            case .success(let image):
-                                image.resizable().aspectRatio(contentMode: .fill)
-                            case .failure:
-                                avatarFallback
-                            case .empty:
-                                ProgressView().tint(theme.colors.textLight)
-                            @unknown default:
-                                avatarFallback
-                            }
-                        }
-                        .allowsHitTesting(false)
+            if let urlString = agent.avatarURL, !urlString.isEmpty, let url = URL(string: urlString) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().aspectRatio(contentMode: .fill)
+                    default:
+                        heroImage
                     }
-                    .clipShape(.circle)
+                }
             } else {
-                avatarFallback
-                    .frame(width: 72, height: 72)
-                    .background(theme.colors.primary, in: .circle)
+                heroImage
             }
         }
-        .overlay(alignment: .bottomTrailing) {
-            Circle()
-                .fill(statusColor)
-                .frame(width: 18, height: 18)
-                .overlay(Circle().stroke(theme.colors.surface, lineWidth: 3))
-        }
     }
 
-    private var avatarFallback: some View {
-        VStack(spacing: 1) {
-            Image(systemName: "bubbles.and.sparkles.fill")
-                .font(.system(size: 22, weight: .semibold))
-            Text(agent.initials)
-                .font(.system(size: 13, weight: .bold))
-        }
-        .foregroundStyle(.white)
+    /// The bundled AI character portrait.
+    private var heroImage: some View {
+        Image("android_assistant_portrait")
+            .resizable()
+            .aspectRatio(contentMode: .fill)
     }
 
-    // MARK: - Status
-
-    private var statusColor: Color {
-        switch agent.status {
-        case .available: return theme.colors.success
-        case .busy: return theme.colors.warning
-        case .full: return theme.colors.error
-        case .offline: return theme.colors.textLight
-        }
+    private func hudCorner(leading: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 6, style: .continuous)
+            .trim(from: 0, to: 0.25)
+            .stroke(violet.opacity(0.65), style: StrokeStyle(lineWidth: 2, lineCap: .round))
+            .frame(width: 26, height: 26)
+            .rotationEffect(.degrees(leading ? 0 : 90))
+            .padding(.top, 12)
+            .padding(leading ? .leading : .trailing, 12)
     }
 
-    private var statusRow: some View {
-        HStack(spacing: Spacing.sm) {
-            Circle()
-                .fill(statusColor)
-                .frame(width: 8, height: 8)
+    private var identityPlate: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: Spacing.sm) {
+                Text(agent.agentName)
+                    .font(.system(size: 24, weight: .heavy))
+                    .kerning(0.3)
+                    .foregroundStyle(consoleText)
+                    .lineLimit(1)
 
-            Text(agent.status.label)
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(statusColor)
-
-            Text(agent.status.detail)
-                .font(.system(size: 13))
-                .foregroundStyle(theme.colors.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(Spacing.sm)
-        .background(statusColor.opacity(0.1), in: .rect(cornerRadius: Radius.md, style: .continuous))
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Status: \(agent.status.label). \(agent.status.detail)")
-    }
-
-    // MARK: - Bio
-
-    private func bioSection(_ bio: String) -> some View {
-        VStack(alignment: .leading, spacing: Spacing.xs) {
-            Text("ABOUT YOUR AGENT")
-                .font(.system(size: 12, weight: .bold))
-                .kerning(0.5)
-                .foregroundStyle(theme.colors.textLight)
-
-            Text(bio)
-                .font(.system(size: 14))
-                .lineSpacing(4)
-                .foregroundStyle(theme.colors.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(Spacing.md)
-        .background(theme.colors.surfaceAlt, in: .rect(cornerRadius: Radius.lg, style: .continuous))
-    }
-
-    // MARK: - Capacity
-
-    private var capacitySection: some View {
-        VStack(alignment: .leading, spacing: Spacing.xs) {
-            HStack {
-                Text("Agent workload")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(theme.colors.textSecondary)
-                Spacer()
-                Text("\(agent.currentUserCount) / \(agent.maxUsers) clients")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(theme.colors.text)
-                    .monospacedDigit()
+                HStack(spacing: 3) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 9, weight: .bold))
+                    Text("AI AGENT")
+                        .font(.system(size: 9, weight: .heavy))
+                        .kerning(1)
+                }
+                .foregroundStyle(consoleBG)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(violet, in: .capsule)
             }
 
-            ProgressBarView(
-                progress: Int((agent.capacityFraction * 100).rounded()),
-                height: 8,
-                tint: statusColor
-            )
+            if let specialty = agent.specialty, !specialty.isEmpty {
+                Text(specialty.uppercased())
+                    .font(.system(size: 11, weight: .bold))
+                    .kerning(1.6)
+                    .foregroundStyle(teal)
+                    .lineLimit(1)
+            }
+
+            if let assignedDateText {
+                Text("ASSIGNED // \(assignedDateText.uppercased())")
+                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(consoleMuted)
+            }
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Workload: \(agent.currentUserCount) of \(agent.maxUsers) clients")
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(18)
+        .padding(.top, 26)
+    }
+
+    // MARK: - Readouts
+
+    private var readouts: some View {
+        VStack(alignment: .leading, spacing: Spacing.sm + 2) {
+            // Workload gauge
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                HStack {
+                    Text("AGENT WORKLOAD")
+                        .font(.system(size: 10, weight: .heavy, design: .monospaced))
+                        .kerning(1.6)
+                        .foregroundStyle(consoleMuted)
+                    Spacer()
+                    Text("\(agent.currentUserCount)/\(agent.maxUsers) CLIENTS")
+                        .font(.system(size: 10, weight: .heavy, design: .monospaced))
+                        .foregroundStyle(consoleText)
+                }
+
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(consoleMuted.opacity(0.18))
+                        Capsule()
+                            .fill(loadColor)
+                            .frame(width: max(geo.size.width * 0.04, geo.size.width * agent.capacityFraction))
+                    }
+                }
+                .frame(height: 6)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Workload: \(agent.currentUserCount) of \(agent.maxUsers) clients")
+            }
+
+            // Mission briefing (bio)
+            if let bio = agent.bio, !bio.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("MISSION BRIEFING")
+                        .font(.system(size: 10, weight: .heavy, design: .monospaced))
+                        .kerning(1.6)
+                        .foregroundStyle(violet)
+
+                    Text(bio)
+                        .font(.system(size: 13))
+                        .lineSpacing(4)
+                        .foregroundStyle(Color(hex: "#B9C4D6"))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(14)
+                .background(
+                    violet.opacity(0.07),
+                    in: .rect(cornerRadius: Radius.md, style: .continuous)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
+                        .strokeBorder(violet.opacity(0.22), lineWidth: 1)
+                }
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 16)
     }
 
     // MARK: - Actions
@@ -221,66 +265,85 @@ struct AgentProfileCardView: View {
                 symbol: "message.fill",
                 label: "Chat with Agent",
                 detail: "Ask questions, get advice, generate letters",
-                tint: theme.colors.primary,
+                tint: violet,
+                action: onOpenChat
+            ),
+            AgentAction(
+                id: "credit-analysis",
+                symbol: "doc.text.magnifyingglass",
+                label: "Analyze My Credit Report",
+                detail: "Your agent finds what to dispute",
+                tint: teal,
                 action: onOpenChat
             ),
             AgentAction(
                 id: "credit-repair",
                 symbol: "doc.text.fill",
                 label: "Credit Repair Tool",
-                detail: "Generate FCRA & FDCPA dispute letters",
-                tint: theme.colors.accent,
+                detail: "Generate FCRA & FDCPA letters",
+                tint: Color(hex: "#F472B6"),
                 action: onOpenCreditRepair
             ),
             AgentAction(
                 id: "dispute-tracker",
                 symbol: "list.clipboard.fill",
                 label: "Dispute Tracker",
-                detail: "View and manage your dispute status",
-                tint: theme.colors.secondary,
+                detail: "Status of every dispute you filed",
+                tint: Color(hex: "#5EEAD4"),
                 action: onOpenDisputeTracker
             ),
         ]
     }
 
     private var actionsSection: some View {
-        VStack(alignment: .leading, spacing: Spacing.sm) {
-            Text("QUICK ACTIONS")
-                .font(.system(size: 12, weight: .bold))
-                .kerning(0.5)
-                .foregroundStyle(theme.colors.textLight)
+        VStack(alignment: .leading, spacing: Spacing.sm + 2) {
+            Text("MISSION MODULES")
+                .font(.system(size: 10, weight: .heavy, design: .monospaced))
+                .kerning(1.6)
+                .foregroundStyle(consoleMuted)
+                .padding(.top, Spacing.lg)
 
             ForEach(actions) { action in
                 Button {
                     Haptics.light()
                     action.action()
                 } label: {
-                    HStack(spacing: Spacing.md) {
+                    HStack(spacing: Spacing.md - 2) {
                         Image(systemName: action.symbol)
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(width: 44, height: 44)
-                            .background(action.tint, in: .rect(cornerRadius: Radius.md, style: .continuous))
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(action.tint)
+                            .frame(width: 40, height: 40)
+                            .background(action.tint.opacity(0.12), in: .rect(cornerRadius: Radius.md, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
+                                    .strokeBorder(action.tint.opacity(0.4), lineWidth: 1)
+                            }
 
                         VStack(alignment: .leading, spacing: 2) {
                             Text(action.label)
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundStyle(theme.colors.text)
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(consoleText)
                                 .multilineTextAlignment(.leading)
                             Text(action.detail)
-                                .font(.system(size: 12))
-                                .foregroundStyle(theme.colors.textSecondary)
-                                .multilineTextAlignment(.leading)
-                                .fixedSize(horizontal: false, vertical: true)
+                                .font(.system(size: 11))
+                                .foregroundStyle(consoleMuted)
+                                .lineLimit(1)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
 
                         Image(systemName: "chevron.right")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(theme.colors.textLight)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(consoleMuted)
                     }
-                    .padding(Spacing.md)
-                    .background(theme.colors.surfaceAlt, in: .rect(cornerRadius: Radius.lg, style: .continuous))
+                    .padding(13)
+                    .background(
+                        Color(hex: "#94A3B8").opacity(0.07),
+                        in: .rect(cornerRadius: Radius.lg, style: .continuous)
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: Radius.lg, style: .continuous)
+                            .strokeBorder(Color(hex: "#94A3B8").opacity(0.14), lineWidth: 1)
+                    }
                     .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
@@ -288,5 +351,22 @@ struct AgentProfileCardView: View {
                 .accessibilityHint(action.detail)
             }
         }
+        .padding(.horizontal, 18)
+    }
+
+    // MARK: - Footer
+
+    private var footer: some View {
+        HStack(spacing: 5) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 10, weight: .bold))
+            Text("SECURE CHANNEL // AGENT #\(String(format: "%04d", agent.id))")
+                .font(.system(size: 9, weight: .heavy, design: .monospaced))
+                .kerning(1.6)
+        }
+        .foregroundStyle(consoleMuted)
+        .frame(maxWidth: .infinity)
+        .padding(.top, 18)
+        .padding(.bottom, 16)
     }
 }

@@ -1,0 +1,12 @@
+{
+  "images": [
+    {
+      "filename": "android_assistant_portrait.png",
+      "idiom": "universal"
+    }
+  ],
+  "info": {
+    "author": "xcode",
+    "version": 1
+  }
+}

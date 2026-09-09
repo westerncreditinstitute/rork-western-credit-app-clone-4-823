@@ -43,6 +43,9 @@ struct MyAgentView: View {
     @State private var showDisputeTracker = false
     @State private var showPlans = false
 
+    /// Warp intro plays on the first open of the tab each app session.
+    @State private var showWarp = !WarpIntroView.shownThisSession
+
     /// The My Agent identity colour, shared with the tab bar.
     private let agentViolet = Color(hex: "#A78BFA")
 
@@ -56,11 +59,21 @@ struct MyAgentView: View {
     }
 
     var body: some View {
-        Group {
-            if !hasAgentAccess {
-                LockedAgentView { showPlans = true }
-            } else {
-                content
+        ZStack {
+            Group {
+                if !hasAgentAccess {
+                    LockedAgentView { showPlans = true }
+                } else {
+                    content
+                }
+            }
+
+            if showWarp {
+                WarpIntroView(onDone: {
+                    withAnimation(.easeOut(duration: 0.3)) { showWarp = false }
+                })
+                .transition(.opacity)
+                .zIndex(10)
             }
         }
         .background(theme.colors.background)
@@ -161,7 +174,12 @@ struct MyAgentView: View {
                     initialsAvatar
                 }
             } else {
-                initialsAvatar
+                // The bundled AI character portrait stands in whenever the
+                // agent record has no photo of its own.
+                Image("android_assistant_portrait")
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .allowsHitTesting(false)
             }
         }
         .frame(width: 38, height: 38)

@@ -36,7 +36,9 @@ import { useAgentChat, type TriggeredLetter } from "@/hooks/useAgentChat";
 
 import AgentProfileCard, {
   AgentInfo,
+  AGENT_HERO_IMAGE,
 } from "@/components/MyAgent/AgentProfileCard";
+import WarpTunnel from "@/components/MyAgent/WarpTunnel";
 import AgentChatPanel from "@/components/MyAgent/AgentChatPanel";
 import CreditRepairModal from "@/components/MyAgent/CreditRepairModal";
 import DisputeTrackerModal from "@/components/MyAgent/DisputeTrackerModal";
@@ -49,6 +51,13 @@ import NegativeAccountsDashboard from "@/components/MyAgent/NegativeAccountsDash
 
 /** The My Agent identity colour, shared with the tab bar. */
 const AGENT_VIOLET = "#A78BFA";
+
+/**
+ * Warp intro plays on the first open of the tab each app session, then
+ * never again until a cold start — the spectacle would wear thin on every
+ * visit. Module-level so it survives screen remounts within the session.
+ */
+let warpShownThisSession = false;
 
 /** Which surface of the tab is on screen. */
 type AgentView = "chat" | "overview";
@@ -63,7 +72,29 @@ export interface MyAgentScreenProps {
   embedded?: boolean;
 }
 
-export default function MyAgentScreen({
+/**
+ * My Agent tab entry point. Wraps the screen with the warp-speed intro,
+ * which plays once per app session and sits above every internal state
+ * (assigning, error, chat, overview) so the transition into the console
+ * is always the same cinematic jump.
+ */
+export default function MyAgentScreen(props: MyAgentScreenProps) {
+  const [showWarp, setShowWarp] = useState(() => !warpShownThisSession);
+
+  const handleWarpDone = useCallback(() => {
+    warpShownThisSession = true;
+    setShowWarp(false);
+  }, []);
+
+  return (
+    <View style={styles.flex}>
+      <MyAgentScreenInner {...props} />
+      {showWarp ? <WarpTunnel onDone={handleWarpDone} /> : null}
+    </View>
+  );
+}
+
+function MyAgentScreenInner({
   embedded = false,
 }: MyAgentScreenProps) {
   const router = useRouter();
@@ -498,6 +529,11 @@ export default function MyAgentScreen({
   // ============================================================
 
   const isLive = chat.connection === "live";
+
+  // The generated hero portrait stands in whenever the agent record has
+  // no photo of its own, so the console never shows a bare icon.
+  const displayAvatar = agent?.avatar_url || AGENT_HERO_IMAGE;
+
   const statusLabel =
     chat.connection === "live"
       ? "Online now"
@@ -528,9 +564,9 @@ export default function MyAgentScreen({
 
           <View style={styles.identity}>
             <View style={styles.identityAvatarWrap}>
-              {agent?.avatar_url ? (
+              {agent ? (
                 <Image
-                  source={{ uri: agent.avatar_url }}
+                  source={{ uri: displayAvatar }}
                   style={styles.identityAvatar}
                 />
               ) : (
@@ -603,7 +639,7 @@ export default function MyAgentScreen({
             {agent ? (
               <AgentChatPanel
                 agentName={agent.agent_name}
-                agentAvatarUrl={agent.avatar_url}
+                agentAvatarUrl={displayAvatar}
                 messages={chat.messages}
                 connection={chat.connection}
                 isAgentTyping={chat.isAgentTyping}
