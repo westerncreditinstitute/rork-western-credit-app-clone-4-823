@@ -6,9 +6,6 @@
 import SwiftUI
 
 struct HomeView: View {
-    /// HeyGen embed shown in the Videos section.
-    private static let featuredHeyGenEmbedId = "92770d6dd5164282bbeabb6a890f3f41"
-
     @Environment(ThemeManager.self) private var theme
     @Environment(AppStore.self) private var store
 
@@ -21,6 +18,10 @@ struct HomeView: View {
     @State private var expandedTip: CreditTip?
     @State private var showComingSoonAlert = false
     @State private var showSueFor = false
+
+    /// Admin-managed home video (Admin -> Promo). Starts from the cached embed
+    /// so the player renders instantly, then refreshes in the background.
+    @State private var featuredEmbedId: String = FeaturedVideoService.shared.cachedEmbedId
 
     private var quickActions: [QuickAction] {
         let colors = theme.colors
@@ -68,8 +69,13 @@ struct HomeView: View {
             SueForView()
         }
         .task {
-            guard !appeared else { return }
-            withAnimation(.spring(response: 0.7, dampingFraction: 0.82)) { appeared = true }
+            if !appeared {
+                withAnimation(.spring(response: 0.7, dampingFraction: 0.82)) { appeared = true }
+            }
+            if let video = await FeaturedVideoService.shared.fetchHomeVideo(),
+               video.heygenEmbedId != featuredEmbedId {
+                featuredEmbedId = video.heygenEmbedId
+            }
         }
     }
 
@@ -433,7 +439,8 @@ struct HomeView: View {
                 BadgeView(text: "NEW", variant: .success)
             }
 
-            HeyGenPlayerView(embedId: Self.featuredHeyGenEmbedId)
+            HeyGenPlayerView(embedId: featuredEmbedId)
+                .id(featuredEmbedId)
         }
     }
 

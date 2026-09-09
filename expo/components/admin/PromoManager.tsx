@@ -9,10 +9,14 @@ import {
   ActivityIndicator,
   Switch,
 } from "react-native";
-import { Trash2, Edit2, Plus, Save, X, Youtube, Info } from "lucide-react-native";
+import { Trash2, Edit2, Plus, Save, X, Youtube, Info, Sparkles, CircleCheck } from "lucide-react-native";
 import Colors from "@/constants/colors";
-import { FeaturedVideoForm, initialFeaturedVideoForm } from "@/types/admin";
+import { FeaturedVideoForm, FeaturedVideoType, initialFeaturedVideoForm } from "@/types/admin";
 import { trpc } from "@/lib/trpc";
+import { parseHeyGenEmbedId } from "@/utils/heygen";
+
+const HEYGEN_COLOR = "#2DD4BF";
+const YOUTUBE_COLOR = "#FF0000";
 
 interface PromoManagerProps {
   editingId: string | null;
@@ -32,10 +36,19 @@ export default function PromoManager({
   onShowAddFormChange,
 }: PromoManagerProps) {
   const featuredVideosQuery = trpc.featuredVideos.getAll.useQuery({ activeOnly: false });
+  const homeVideoQuery = trpc.featuredVideos.getHomeVideo.useQuery();
+
+  const accentColor = form.videoType === "heygen" ? HEYGEN_COLOR : YOUTUBE_COLOR;
+
+  /** The home page re-reads its embed as soon as a record changes. */
+  const refreshAll = () => {
+    featuredVideosQuery.refetch();
+    homeVideoQuery.refetch();
+  };
 
   const createMutation = trpc.featuredVideos.create.useMutation({
     onSuccess: () => {
-      featuredVideosQuery.refetch();
+      refreshAll();
       onFormChange(initialFeaturedVideoForm);
       onShowAddFormChange(false);
       Alert.alert("Success", "Featured video added successfully");
@@ -47,7 +60,7 @@ export default function PromoManager({
 
   const updateMutation = trpc.featuredVideos.update.useMutation({
     onSuccess: () => {
-      featuredVideosQuery.refetch();
+      refreshAll();
       onEditingIdChange(null);
       onFormChange(initialFeaturedVideoForm);
       Alert.alert("Success", "Featured video updated successfully");
@@ -59,7 +72,7 @@ export default function PromoManager({
 
   const deleteMutation = trpc.featuredVideos.delete.useMutation({
     onSuccess: () => {
-      featuredVideosQuery.refetch();
+      refreshAll();
       Alert.alert("Success", "Featured video deleted successfully");
     },
     onError: (error) => {
@@ -68,7 +81,16 @@ export default function PromoManager({
   });
 
   const handleSave = () => {
-    if (!form.youtubeId) {
+    const heygenEmbedId = parseHeyGenEmbedId(form.heygenEmbedId);
+
+    if (form.videoType === "heygen" && !heygenEmbedId) {
+      Alert.alert(
+        "Invalid HeyGen video",
+        "Paste the share URL (https://app.heygen.com/embeds/...) or just the embed ID."
+      );
+      return;
+    }
+    if (form.videoType === "youtube" && !form.youtubeId) {
       Alert.alert("Error", "YouTube Video ID is required");
       return;
     }
@@ -80,7 +102,9 @@ export default function PromoManager({
     if (editingId) {
       updateMutation.mutate({
         id: editingId,
+        videoType: form.videoType,
         youtubeId: form.youtubeId,
+        heygenEmbedId,
         title: form.title,
         duration: form.duration,
         description: form.description,
@@ -89,7 +113,9 @@ export default function PromoManager({
     } else {
       const videoCount = featuredVideosQuery.data?.length || 0;
       createMutation.mutate({
+        videoType: form.videoType,
         youtubeId: form.youtubeId,
+        heygenEmbedId,
         title: form.title,
         duration: form.duration,
         description: form.description,
@@ -102,7 +128,9 @@ export default function PromoManager({
   const handleEdit = (video: any) => {
     onEditingIdChange(video.id);
     onFormChange({
+      videoType: (video.videoType as FeaturedVideoType) ?? "youtube",
       youtubeId: video.youtubeId || "",
+      heygenEmbedId: video.heygenEmbedId || "",
       title: video.title || "",
       duration: video.duration || "",
       description: video.description || "",
@@ -132,17 +160,34 @@ export default function PromoManager({
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
         <View style={styles.sectionTitleRow}>
-          <Youtube color="#FF0000" size={22} />
-          <Text style={styles.sectionTitle}>Featured Videos</Text>
+          <Sparkles color={HEYGEN_COLOR} size={22} />
+          <Text style={styles.sectionTitle}>Home Page Video</Text>
         </View>
       </View>
       <Text style={[styles.sectionHint, { marginBottom: 16, marginLeft: 0 }]}>
-        Manage YouTube videos displayed in the Featured Offers section on the homepage. Users can switch between these videos.
+        The homepage &quot;Videos&quot; section plays the first active HeyGen video in this list. Edit it here to swap the video — no app update needed.
       </Text>
+
+      <View style={styles.liveCard}>
+        <View style={styles.liveHeader}>
+          <CircleCheck color={HEYGEN_COLOR} size={16} />
+          <Text style={styles.liveLabel}>LIVE ON HOME</Text>
+        </View>
+        {homeVideoQuery.isLoading ? (
+          <ActivityIndicator color={HEYGEN_COLOR} />
+        ) : (
+          <>
+            <Text style={styles.liveTitle}>{homeVideoQuery.data?.title ?? "Default video"}</Text>
+            <Text style={styles.liveEmbedId} numberOfLines={1}>
+              {homeVideoQuery.data?.heygenEmbedId ?? ""}
+            </Text>
+          </>
+        )}
+      </View>
 
       {!editingId && !showAddForm && (
         <TouchableOpacity
-          style={[styles.addButton, { backgroundColor: "#FF0000", marginHorizontal: 0, marginBottom: 16 }]}
+          style={[styles.addButton, { backgroundColor: HEYGEN_COLOR, marginHorizontal: 0, marginBottom: 16 }]}
           onPress={() => onShowAddFormChange(true)}
         >
           <Plus color={Colors.white} size={20} />
@@ -162,20 +207,100 @@ export default function PromoManager({
           </View>
 
           <View style={styles.formGroup}>
-            <Text style={styles.label}>YouTube Video ID *</Text>
-            <TextInput
-              style={styles.input}
-              value={form.youtubeId}
-              onChangeText={(text) => onFormChange({ ...form, youtubeId: text })}
-              placeholder="e.g., dQw4w9WgXcQ"
-              placeholderTextColor={Colors.textLight}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
+            <Text style={styles.label}>Video Source</Text>
+            <View style={styles.typeToggleRow}>
+              <TouchableOpacity
+                style={[
+                  styles.typeOption,
+                  form.videoType === "heygen" && {
+                    borderColor: HEYGEN_COLOR,
+                    backgroundColor: HEYGEN_COLOR + "14",
+                  },
+                ]}
+                onPress={() => onFormChange({ ...form, videoType: "heygen" })}
+              >
+                <Sparkles
+                  color={form.videoType === "heygen" ? HEYGEN_COLOR : Colors.textLight}
+                  size={18}
+                />
+                <Text
+                  style={[
+                    styles.typeOptionText,
+                    form.videoType === "heygen" && { color: HEYGEN_COLOR },
+                  ]}
+                >
+                  HeyGen
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.typeOption,
+                  form.videoType === "youtube" && {
+                    borderColor: YOUTUBE_COLOR,
+                    backgroundColor: YOUTUBE_COLOR + "14",
+                  },
+                ]}
+                onPress={() => onFormChange({ ...form, videoType: "youtube" })}
+              >
+                <Youtube
+                  color={form.videoType === "youtube" ? YOUTUBE_COLOR : Colors.textLight}
+                  size={18}
+                />
+                <Text
+                  style={[
+                    styles.typeOptionText,
+                    form.videoType === "youtube" && { color: YOUTUBE_COLOR },
+                  ]}
+                >
+                  YouTube
+                </Text>
+              </TouchableOpacity>
+            </View>
             <Text style={styles.helperText}>
-              The video ID from the YouTube URL (youtube.com/watch?v=VIDEO_ID)
+              Only HeyGen videos appear in the homepage Videos section.
             </Text>
           </View>
+
+          {form.videoType === "heygen" ? (
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>HeyGen Share URL or Embed ID *</Text>
+              <TextInput
+                style={styles.input}
+                value={form.heygenEmbedId}
+                onChangeText={(text) => onFormChange({ ...form, heygenEmbedId: text })}
+                placeholder="https://app.heygen.com/embeds/92770d6d..."
+                placeholderTextColor={Colors.textLight}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              {parseHeyGenEmbedId(form.heygenEmbedId) ? (
+                <Text style={[styles.helperText, { color: HEYGEN_COLOR }]}>
+                  Embed ID: {parseHeyGenEmbedId(form.heygenEmbedId)}
+                </Text>
+              ) : (
+                <Text style={styles.helperText}>
+                  Paste the full share URL — the embed ID is pulled out automatically.
+                </Text>
+              )}
+            </View>
+          ) : (
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>YouTube Video ID *</Text>
+              <TextInput
+                style={styles.input}
+                value={form.youtubeId}
+                onChangeText={(text) => onFormChange({ ...form, youtubeId: text })}
+                placeholder="e.g., dQw4w9WgXcQ"
+                placeholderTextColor={Colors.textLight}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <Text style={styles.helperText}>
+                The video ID from the YouTube URL (youtube.com/watch?v=VIDEO_ID)
+              </Text>
+            </View>
+          )}
 
           <View style={styles.formGroup}>
             <Text style={styles.label}>Video Title *</Text>
@@ -228,7 +353,7 @@ export default function PromoManager({
           </View>
 
           <TouchableOpacity
-            style={[styles.saveButton, { backgroundColor: "#FF0000" }]}
+            style={[styles.saveButton, { backgroundColor: accentColor }]}
             onPress={handleSave}
             disabled={createMutation.isPending || updateMutation.isPending}
           >
@@ -249,11 +374,11 @@ export default function PromoManager({
       <View style={styles.promoHelpSection}>
         <Info color={Colors.primary} size={18} />
         <View style={styles.promoHelpContent}>
-          <Text style={styles.promoHelpTitle}>How to get a YouTube Video ID</Text>
+          <Text style={styles.promoHelpTitle}>How to swap the homepage video</Text>
           <Text style={styles.promoHelpText}>
-            {"1. Go to the YouTube video you want to use\n"}
-            {"2. Copy the URL (e.g., https://youtube.com/watch?v=dQw4w9WgXcQ)\n"}
-            {"3. The video ID is the part after \"v=\" (dQw4w9WgXcQ)"}
+            {"1. In HeyGen, open the video and choose Share → Embed\n"}
+            {"2. Copy the link (https://app.heygen.com/embeds/VIDEO_ID)\n"}
+            {"3. Edit the HeyGen entry below and paste it in — the homepage picks it up on next open"}
           </Text>
         </View>
       </View>
@@ -264,7 +389,7 @@ export default function PromoManager({
 
       {featuredVideosQuery.isLoading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#FF0000" />
+          <ActivityIndicator size="large" color={HEYGEN_COLOR} />
         </View>
       ) : featuredVideosQuery.data && featuredVideosQuery.data.length > 0 ? (
         featuredVideosQuery.data.map((video: any, index: number) => (
@@ -272,6 +397,11 @@ export default function PromoManager({
             <View style={styles.videoInfo}>
               <View style={styles.featuredVideoHeader}>
                 <Text style={styles.featuredVideoOrder}>#{index + 1}</Text>
+                {homeVideoQuery.data?.id === video.id && (
+                  <View style={styles.onHomeBadge}>
+                    <Text style={styles.onHomeBadgeText}>ON HOME</Text>
+                  </View>
+                )}
                 {!video.isActive && (
                   <View style={styles.inactiveBadge}>
                     <Text style={styles.inactiveBadgeText}>INACTIVE</Text>
@@ -280,8 +410,14 @@ export default function PromoManager({
               </View>
               <Text style={styles.videoTitle}>{video.title}</Text>
               <View style={styles.featuredVideoMeta}>
-                <Youtube color="#FF0000" size={14} />
-                <Text style={styles.featuredVideoId}>{video.youtubeId}</Text>
+                {video.videoType === "heygen" ? (
+                  <Sparkles color={HEYGEN_COLOR} size={14} />
+                ) : (
+                  <Youtube color={YOUTUBE_COLOR} size={14} />
+                )}
+                <Text style={styles.featuredVideoId} numberOfLines={1}>
+                  {video.videoType === "heygen" ? video.heygenEmbedId : video.youtubeId}
+                </Text>
                 {video.duration && (
                   <Text style={styles.videoDuration}>• {video.duration}</Text>
                 )}
@@ -498,11 +634,75 @@ const styles = StyleSheet.create({
   featuredVideoOrder: {
     fontSize: 12,
     fontWeight: "700" as const,
-    color: "#FF0000",
-    backgroundColor: "#FF000015",
+    color: Colors.textLight,
+    backgroundColor: Colors.border + "60",
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 4,
+  },
+  onHomeBadge: {
+    backgroundColor: HEYGEN_COLOR,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  onHomeBadgeText: {
+    fontSize: 10,
+    fontWeight: "700" as const,
+    color: Colors.white,
+    letterSpacing: 0.4,
+  },
+  liveCard: {
+    backgroundColor: HEYGEN_COLOR + "0F",
+    borderWidth: 1,
+    borderColor: HEYGEN_COLOR + "33",
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+  },
+  liveHeader: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 6,
+    marginBottom: 8,
+  },
+  liveLabel: {
+    fontSize: 11,
+    fontWeight: "700" as const,
+    color: HEYGEN_COLOR,
+    letterSpacing: 0.6,
+  },
+  liveTitle: {
+    fontSize: 15,
+    fontWeight: "600" as const,
+    color: Colors.text,
+    marginBottom: 2,
+  },
+  liveEmbedId: {
+    fontSize: 12,
+    color: Colors.textLight,
+    fontFamily: "monospace",
+  },
+  typeToggleRow: {
+    flexDirection: "row" as const,
+    gap: 10,
+  },
+  typeOption: {
+    flex: 1,
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    backgroundColor: Colors.background,
+  },
+  typeOptionText: {
+    fontSize: 14,
+    fontWeight: "600" as const,
+    color: Colors.textLight,
   },
   inactiveBadge: {
     backgroundColor: Colors.textLight,

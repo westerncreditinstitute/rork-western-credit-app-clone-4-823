@@ -28,9 +28,13 @@ export interface AvatarForm {
   description: string;
 }
 
+export type FeaturedVideoType = "youtube" | "heygen";
+
 export interface FeaturedVideoForm {
   id?: string;
+  videoType: FeaturedVideoType;
   youtubeId: string;
+  heygenEmbedId: string;
   title: string;
   duration: string;
   description: string;
@@ -94,7 +98,9 @@ export const initialAvatarForm: AvatarForm = {
 };
 
 export const initialFeaturedVideoForm: FeaturedVideoForm = {
+  videoType: "heygen",
   youtubeId: "",
+  heygenEmbedId: "",
   title: "",
   duration: "",
   description: "",

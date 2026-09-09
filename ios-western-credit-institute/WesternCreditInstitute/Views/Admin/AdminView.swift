@@ -398,6 +398,8 @@ private struct AdminDashboardView: View {
         VStack(alignment: .leading, spacing: Spacing.md) {
             SectionHeader(title: "Featured videos", symbol: "megaphone.fill", symbolTint: theme.colors.warning)
 
+            PromoLiveVideoCard()
+
             VStack(spacing: Spacing.sm) {
                 ForEach(MockData.featuredVideos) { video in
                     CardView(padding: Spacing.sm) {

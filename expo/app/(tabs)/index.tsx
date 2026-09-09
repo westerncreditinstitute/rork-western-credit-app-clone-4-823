@@ -49,11 +49,9 @@ import { trpc } from "@/lib/trpc";
 import { BlogPost } from "@/types";
 import { Card, Badge, Avatar, ProgressBar } from "@/components/ui";
 import HeyGenPlayer from "@/components/HeyGenPlayer";
+import { DEFAULT_HEYGEN_EMBED_ID } from "@/utils/heygen";
 
 const { width } = Dimensions.get("window");
-
-/** HeyGen embed shown in the Featured Offers section on Home. */
-const FEATURED_HEYGEN_EMBED_ID = "92770d6dd5164282bbeabb6a890f3f41";
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -82,6 +80,12 @@ export default function HomeScreen() {
 
   const blogPostsQuery = trpc.blog.getPosts.useQuery({ limit: 5 });
   const tipOfTheWeekQuery = trpc.blog.getTipOfTheWeek.useQuery();
+
+  // Admin-managed home video (Admin -> Promo). Falls back to the bundled embed.
+  const homeVideoQuery = trpc.featuredVideos.getHomeVideo.useQuery(undefined, {
+    staleTime: 5 * 60 * 1000,
+  });
+  const featuredEmbedId = homeVideoQuery.data?.heygenEmbedId || DEFAULT_HEYGEN_EMBED_ID;
 
   const localTipOfTheWeek = getTipOfTheWeek();
   const localRecentTips = getRecentTips(3);
@@ -343,7 +347,7 @@ export default function HomeScreen() {
             <Badge text="NEW" variant="success" size="sm" />
           </View>
           <View style={styles.promoVideoContainer}>
-            <HeyGenPlayer embedId={FEATURED_HEYGEN_EMBED_ID} />
+            <HeyGenPlayer key={featuredEmbedId} embedId={featuredEmbedId} />
           </View>
         </View>
 
