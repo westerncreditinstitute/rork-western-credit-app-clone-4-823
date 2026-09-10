@@ -1,6 +1,7 @@
 import * as z from "zod";
 import { createTRPCRouter, publicProcedure } from "../create-context";
 import { isSupabaseConfigured } from "@/lib/supabase";
+import { EquifaxAnalytics } from "@/lib/analytics/equifax-analytics";
 // Server-only client: bypasses RLS when SUPABASE_SERVICE_ROLE_KEY is set,
 // and transparently falls back to the anon client when it isn't. Aliased to
 // `supabase` so every query below reads naturally.
@@ -165,7 +166,7 @@ class AgentSetupError extends Error {
 // The system prompt that makes each agent a credit repair expert.
 // This is the FULL knowledge base from the Credit Repair Expert Guide,
 // giving every one of the 10,000 agents deep, actionable expertise in every conversation.
-const AGENT_SYSTEM_PROMPT = `You are an expert AI Dispute Assistant assigned to help this user repair and build their credit. You are a specialist in FCRA and FDCPA consumer protection law, credit bureau dispute strategy, and credit-building tactics. You have deep, detailed knowledge of the following:
+const AGENT_SYSTEM_PROMPT = `You are an expert AI Credit Repair Agent assigned to help this user repair and build their credit. You are a specialist in FCRA and FDCPA consumer protection law, credit bureau dispute strategy, and credit-building tactics. You have deep, detailed knowledge of the following:
 
 =====================================================================
 CREDIT SCORE FUNDAMENTALS
@@ -1002,13 +1003,70 @@ async function callAIBackend(params: {
   messages: { role: string; content: string }[];
   agentName: string;
   agentBio: string;
+  equifaxReport?: {
+    fetchedAt: string;
+    totalAccounts: number;
+    negativeAccountCount: number;
+    negativeAccounts: Array<{
+      accountNumber: string;
+      creditorName: string;
+      creditorAddress?: string;
+      accountType: string;
+      status: string;
+      delinquency?: string;
+      balance?: number;
+      dateReported?: string;
+    }>;
+    creditScore?: number;
+  };
+  userId?: string;
 }): Promise<{ response: string; toolCalls: ToolCall[] }> {
+  const startTime = Date.now();
+  const analytics = EquifaxAnalytics.getInstance();
   const apiKey = process.env.OPENAI_API_KEY || process.env.EXPO_PUBLIC_OPENAI_API_KEY || "";
   const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
   const baseUrl = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
 
-  // Build the full message array with system prompt
-  const systemMessage = `${AGENT_SYSTEM_PROMPT}\n\nYour name is ${params.agentName}. ${params.agentBio}\n\nYou are speaking with a user who is enrolled in the ACE-1 credit repair course. Be their personal guide.`;
+  // Build system prompt with Equifax context if available
+  let systemMessage = `${AGENT_SYSTEM_PROMPT}\n\nYour name is ${params.agentName}. ${params.agentBio}\n\nYou are speaking with a user who is enrolled in the ACE-1 credit repair course. Be their personal guide.`;
+
+  // If Equifax report data is provided, add it to the system context
+  if (params.equifaxReport && params.equifaxReport.negativeAccountCount > 0) {
+    const reportContext = `
+
+CREDIT REPORT ANALYSIS (Session Data):
+- Report Fetched: ${new Date(params.equifaxReport.fetchedAt).toLocaleString()}
+- Total Accounts: ${params.equifaxReport.totalAccounts}
+- Negative Accounts: ${params.equifaxReport.negativeAccountCount}
+${params.equifaxReport.creditScore ? `- Credit Score: ${params.equifaxReport.creditScore}` : ""}
+
+Negative Accounts to Dispute:
+${params.equifaxReport.negativeAccounts
+  .map(
+    (acc, i) => `${i + 1}. [${acc.accountType.toUpperCase()}] ${acc.creditorName}
+   Account #: ${acc.accountNumber}
+   Status: ${acc.status}
+   ${acc.balance ? `Balance: $${acc.balance}` : ""}
+   ${acc.delinquency ? `Delinquency: ${acc.delinquency}` : ""}`
+  )
+  .join("\n")}
+
+IMPORTANT: You have access to the user's negative accounts above. When appropriate:
+1. Reference specific accounts from this report
+2. Ask the user which accounts they want to dispute first
+3. Guide them through the Next Step Generator questions (account type, last payment status, etc.)
+4. Generate appropriate dispute letters (609 Letter for unverifiable accounts, 623 for disputes, 809 for fraud, etc.)
+5. All letters should be saved to the Dispute Tracker for the user's records`;
+
+    systemMessage += reportContext;
+    
+    // Track successful injection
+    analytics.trackInject(
+      Date.now() - startTime,
+      params.equifaxReport.totalAccounts,
+      params.userId
+    );
+  }
 
   // Cap each history message so an entire credit-report analysis in an old
   // chat message can't balloon every future request toward the token-per-
@@ -1249,6 +1307,7 @@ async function executeTool(
     }
 
     case "generate_dispute_letter": {
+      const startTime = Date.now();
       const { letterType, creditorName, accountNumber } = toolCall.arguments;
       // Fetch user info for the letter header
       const { data: userInfo } = await supabase
@@ -1266,6 +1325,16 @@ async function executeTool(
         cityStateZip: "[City, State ZIP]",
         phoneNumber: userInfo?.phone || "",
       });
+
+      // Track successful letter generation
+      analytics.trackLetterGeneration(
+        letterType,
+        "Combined",
+        Date.now() - startTime,
+        true,
+        userId,
+        agentId
+      );
 
       // Also save this as a dispute record so it appears in the tracker
       const today = new Date().toISOString().split("T")[0];
@@ -1397,7 +1466,7 @@ function generateDemoResponse(
     return `Here are some key credit tips: 1) Keep utilization below 30% (ideally 10%), 2) Never miss a payment — it's 35% of your score, 3) Don't close old credit cards, 4) Dispute errors within 30 days under the FCRA. What specific area would you like to focus on? *(Demo mode — connect OpenAI API key for full AI.)*`;
   }
 
-  return `Hello! I'm ${agentName}, your AI Dispute Assistant. I can help you with disputing errors on your credit report, generating dispute letters, tracking your disputes, and providing personalized credit building strategies. What would you like to work on today? *(Demo mode — connect an OpenAI API key for full AI responses.)*`;
+  return `Hello! I'm ${agentName}, your AI Credit Repair Agent. I can help you with disputing errors on your credit report, generating dispute letters, tracking your disputes, and providing personalized credit building strategies. What would you like to work on today? *(Demo mode — connect an OpenAI API key for full AI responses.)*`;
 }
 
 // ============================================================
@@ -1547,6 +1616,27 @@ export const aiAgentsRouter = createTRPCRouter({
           .max(30)
           .optional()
           .default([]),
+        // Equifax credit report data for AI analysis (session-only, not persisted)
+        equifaxReport: z
+          .object({
+            fetchedAt: z.string(),
+            totalAccounts: z.number(),
+            negativeAccountCount: z.number(),
+            negativeAccounts: z.array(
+              z.object({
+                accountNumber: z.string(),
+                creditorName: z.string(),
+                creditorAddress: z.string().optional(),
+                accountType: z.enum(["charge-off", "collection", "late-payment", "delinquent", "unknown"]),
+                status: z.string(),
+                delinquency: z.string().optional(),
+                balance: z.number().optional(),
+                dateReported: z.string().optional(),
+              })
+            ),
+            creditScore: z.number().optional(),
+          })
+          .optional(),
       })
     )
     .mutation(async ({ input }) => {
@@ -1587,6 +1677,8 @@ export const aiAgentsRouter = createTRPCRouter({
         messages,
         agentName,
         agentBio,
+        equifaxReport: input.equifaxReport,
+        userId: ctx.userId,
       });
 
       // 5. Execute any tool calls
