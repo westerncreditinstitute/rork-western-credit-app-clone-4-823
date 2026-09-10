@@ -343,16 +343,20 @@ const fetchWithRetry = async (
 const getAuthHeaders = async (): Promise<Record<string, string>> => {
   try {
     const stored = await AsyncStorage.getItem(AUTH_STORAGE_KEY);
+    console.log('[tRPC] getAuthHeaders called. Stored data:', stored ? stored.substring(0, 50) + '...' : 'NULL');
     if (stored) {
       const user = JSON.parse(stored);
+      console.log('[tRPC] Parsed user:', user);
       if (user && user.id && user.email) {
         const token = btoa(JSON.stringify({ id: user.id, email: user.email }));
+        console.log('[tRPC] Auth header created successfully');
         return { Authorization: `Bearer ${token}` };
       }
     }
   } catch (error) {
     console.log("[tRPC] Failed to get auth headers:", error);
   }
+  console.log('[tRPC] No auth headers, returning empty object');
   return {};
 };
 

@@ -246,7 +246,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!isSupabaseConfigured) {
         console.log('[Auth] Using demo login mode (Supabase not configured)');
         const demoUser = createDemoUser(email);
+        console.log('[Auth] About to save demo user to AsyncStorage:', demoUser);
         await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(demoUser));
+        console.log('[Auth] Demo user saved, verifying:', await AsyncStorage.getItem(AUTH_STORAGE_KEY));
         setUser(demoUser);
         setIsAuthenticated(true);
         console.log('[Auth] Demo user logged in:', demoUser.email);
