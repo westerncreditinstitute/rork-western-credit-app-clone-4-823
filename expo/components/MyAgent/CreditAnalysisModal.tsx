@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -17,6 +17,8 @@ import {
   FileText,
   TrendingDown,
   MessageCircle,
+  Download,
+  BarChart3,
 } from "lucide-react-native";
 import Colors from "@/constants/colors";
 import { trpc } from "@/lib/trpc";
@@ -25,6 +27,12 @@ import CreditReportParser, {
   ParsedAccount,
 } from "@/components/CreditReportParser";
 import { AccountSummary } from "@/components/AccountSummary";
+import { useEquifaxReport } from "@/contexts/EquifaxReportContext";
+import type {
+  ParsedCreditReport,
+  ParsedNegativeAccount,
+} from "@/backend/equifax/equifax-client";
+import { generateEquifaxReportPDF } from "@/lib/pdf/equifax-report-pdf";
 
 // ============================================================
 // Types
@@ -76,19 +84,27 @@ export default function CreditAnalysisModal({
   const { user } = useUser();
   const userId = user?.id || "";
 
+  // Get multi-bureau report from Equifax context
+  const { report: equifaxReport, negativeAccountsByBureau } = useEquifaxReport();
+
   const [parsing, setParsing] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<CreditAnalysisResult | null>(null);
   const [bureau, setBureau] = useState<string>("");
   const [saveWarning, setSaveWarning] = useState<string | null>(null);
-  // Raw parsed accounts (all accounts, not just negatives) — needed so we
-  // can render the full categorized Account Summary UI (negative/positive/
-  // neutral breakdown), not just the negative-only recommendation list.
   const [parsedAccounts, setParsedAccounts] = useState<ParsedAccount[]>([]);
+
+  // Track which view is active: "upload" for manual upload, "equifax" for multi-bureau Equifax report
+  const [activeView, setActiveView] = useState<"upload" | "equifax">("upload");
 
   const saveAnalysisMutation = trpc.aiAgents.saveCreditAnalysis.useMutation();
 
-  // ── Handle parsed accounts from the WebView parser ─────────
+  // Determine if we should show the Equifax multi-bureau view
+  const hasEquifaxReport = useMemo(() => {
+    return equifaxReport && equifaxReport.bureaus && Object.keys(equifaxReport.bureaus).length > 0;
+  }, [equifaxReport]);
+
+  // Handle parsed accounts from the WebView parser
   const handleAccountsParsed = useCallback(
     (accounts: ParsedAccount[], detectedBureau: string) => {
       setParseError(null);
@@ -126,8 +142,6 @@ export default function CreditAnalysisModal({
               recommendations:
                 (data.recommendations as AnalysisRecommendation[]) || [],
             });
-            // Persistence can fail if migration 022 hasn't been run.
-            // The analysis is still valid — warn rather than hide it.
             if (!data.success) {
               setSaveWarning(
                 "Analysis complete, but it couldn't be saved for later. Your agent may not remember it in a new chat session.",
@@ -159,9 +173,139 @@ export default function CreditAnalysisModal({
     onClose();
   }, [onClose]);
 
+  // Handle PDF export for Equifax multi-bureau report
+  const handleExportPDF = useCallback(() => {
+    if (!equifaxReport) return;
+
+    try {
+      const html = generateEquifaxReportPDF(equifaxReport);
+      
+      // For web platform, use html2pdf library if available
+      if (Platform.OS === "web") {
+        const element = document.createElement("div");
+        element.innerHTML = html;
+        
+        // Use html2pdf library (must be available in project)
+        if ((window as any).html2pdf) {
+          (window as any).html2pdf().set({
+            margin: 10,
+            filename: "credit-report.pdf",
+            image: { type: "jpeg", quality: 0.98 },
+            html2canvas: { scale: 2 },
+            jsPDF: { orientation: "portrait", unit: "mm", format: "a4" },
+          }).save();
+        } else {
+          // Fallback: alert user to enable html2pdf
+          alert("PDF export requires html2pdf library. Please add it to your project.");
+        }
+      } else {
+        // For native platforms, would need different PDF generation approach
+        alert("PDF export is currently available on web. On native, use your system's print-to-PDF feature.");
+      }
+    } catch (error) {
+      console.error("PDF export error:", error);
+      alert("Failed to export PDF. Please try again.");
+    }
+  }, [equifaxReport]);
+
   const isBusy = parsing || saveAnalysisMutation.isPending;
 
-  // ── Render ─────────────────────────────────────────────────
+  // Render multi-bureau Equifax report section
+  const renderEquifaxReport = () => {
+    if (!equifaxReport) return null;
+
+    const bureauList = [
+      { key: "equifax", label: "Equifax", accounts: negativeAccountsByBureau.equifax },
+      { key: "experian", label: "Experian", accounts: negativeAccountsByBureau.experian },
+      { key: "transunion", label: "TransUnion", accounts: negativeAccountsByBureau.transunion },
+    ];
+
+    const totalNegative = Object.values(negativeAccountsByBureau).reduce((sum, accounts) => sum + accounts.length, 0);
+    const averageScore = equifaxReport.combined.averageCreditScore;
+
+    return (
+      <>
+        {/* Summary card */}
+        <View style={styles.summaryCard}>
+          <View style={styles.summaryHeader}>
+            {totalNegative === 0 ? (
+              <CheckCircle2 size={22} color={Colors.success} />
+            ) : (
+              <TrendingDown size={22} color={Colors.warning} />
+            )}
+            <Text style={styles.summaryTitle}>
+              {totalNegative === 0
+                ? "No Negative Items Found"
+                : `${totalNegative} Negative Item${totalNegative === 1 ? "" : "s"} Found`}
+            </Text>
+          </View>
+          <Text style={styles.summarySubtitle}>Multi-Bureau Report</Text>
+          <Text style={styles.summaryText}>
+            Checked {equifaxReport.combined.totalBureaus} bureaus. Average credit score:{" "}
+            {averageScore ? averageScore.toFixed(0) : "N/A"}
+          </Text>
+        </View>
+
+        {/* Bureau tabs/sections */}
+        <View style={styles.bureauTabs}>
+          {bureauList.map(({ key, label, accounts }) => (
+            <View key={key} style={styles.bureauSection}>
+              <View style={styles.bureauHeader}>
+                <View style={styles.bureauBadge}>
+                  <Text style={styles.bureauBadgeText}>{label}</Text>
+                </View>
+                <Text style={styles.bureauCount}>
+                  {accounts.length} negative {accounts.length === 1 ? "item" : "items"}
+                </Text>
+              </View>
+
+              {accounts.length === 0 ? (
+                <View style={styles.noBureauItems}>
+                  <CheckCircle2 size={16} color={Colors.success} />
+                  <Text style={styles.noBureauText}>No negative items</Text>
+                </View>
+              ) : (
+                <View style={styles.bureauAccountsList}>
+                  {accounts.map((account, idx) => (
+                    <View key={`${account.accountNumber}-${idx}`} style={styles.accountCard}>
+                      <View style={styles.accountCardHeader}>
+                        <Text style={styles.accountCreditor}>{account.creditorName}</Text>
+                        <Text style={styles.accountType}>{account.accountType}</Text>
+                      </View>
+                      <Text style={styles.accountNumber}>
+                        {account.accountNumber}
+                      </Text>
+                      {account.balance && (
+                        <Text style={styles.accountBalance}>
+                          Balance: ${account.balance.toLocaleString()}
+                        </Text>
+                      )}
+                      {account.status && (
+                        <Text style={styles.accountStatus}>Status: {account.status}</Text>
+                      )}
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          ))}
+        </View>
+
+        {/* PDF Export Button */}
+        <TouchableOpacity
+          style={styles.exportButton}
+          onPress={handleExportPDF}
+          accessibilityRole="button"
+          accessibilityLabel="Export report as PDF"
+        >
+          <Download size={18} color={Colors.white} />
+          <Text style={styles.exportButtonText}>Export as PDF</Text>
+        </TouchableOpacity>
+      </>
+    );
+  };
+
+  // Render main content
   return (
     <Modal
       visible={visible}
@@ -186,12 +330,57 @@ export default function CreditAnalysisModal({
           </TouchableOpacity>
         </View>
 
+        {/* View selector (if both manual and Equifax reports available) */}
+        {hasEquifaxReport && (
+          <View style={styles.viewSelector}>
+            <TouchableOpacity
+              style={[
+                styles.viewTab,
+                activeView === "equifax" && styles.viewTabActive,
+              ]}
+              onPress={() => setActiveView("equifax")}
+              accessibilityRole="button"
+              accessibilityLabel="View Equifax report"
+            >
+              <BarChart3 size={16} color={activeView === "equifax" ? Colors.primary : Colors.textLight} />
+              <Text
+                style={[
+                  styles.viewTabText,
+                  activeView === "equifax" && styles.viewTabTextActive,
+                ]}
+              >
+                Equifax Report
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.viewTab,
+                activeView === "upload" && styles.viewTabActive,
+              ]}
+              onPress={() => setActiveView("upload")}
+              accessibilityRole="button"
+              accessibilityLabel="Upload new report"
+            >
+              <FileSearch size={16} color={activeView === "upload" ? Colors.primary : Colors.textLight} />
+              <Text
+                style={[
+                  styles.viewTabText,
+                  activeView === "upload" && styles.viewTabTextActive,
+                ]}
+              >
+                Upload Report
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         <ScrollView
           style={styles.scroll}
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
-          {/* ── Busy state ───────────────────────────────── */}
+          {/* Busy state */}
           {isBusy ? (
             <View style={styles.busyBox}>
               <ActivityIndicator size="large" color={Colors.primary} />
@@ -201,7 +390,7 @@ export default function CreditAnalysisModal({
             </View>
           ) : null}
 
-          {/* ── Error ────────────────────────────────────── */}
+          {/* Error */}
           {parseError && !isBusy ? (
             <View style={styles.errorBox}>
               <AlertTriangle size={18} color={Colors.warning} />
@@ -209,8 +398,13 @@ export default function CreditAnalysisModal({
             </View>
           ) : null}
 
-          {/* ── Upload / parse view ──────────────────────── */}
-          {!analysis && !isBusy ? (
+          {/* Equifax multi-bureau report view */}
+          {activeView === "equifax" && hasEquifaxReport ? (
+            renderEquifaxReport()
+          ) : null}
+
+          {/* Upload / parse view */}
+          {activeView === "upload" && !analysis && !isBusy ? (
             <>
               <Text style={styles.introTitle}>
                 Let your agent read your credit report
@@ -239,8 +433,8 @@ export default function CreditAnalysisModal({
             </>
           ) : null}
 
-          {/* ── Results ──────────────────────────────────── */}
-          {analysis && !isBusy ? (
+          {/* Results */}
+          {activeView === "upload" && analysis && !isBusy ? (
             <>
               {saveWarning ? (
                 <View style={styles.warnBox}>
@@ -269,11 +463,7 @@ export default function CreditAnalysisModal({
                 <Text style={styles.summaryText}>{analysis.summary}</Text>
               </View>
 
-              {/* Full Account Summary — categorized negative/positive/
-                  neutral breakdown with expandable account cards. This is
-                  the same component used on the standalone AI Dispute
-                  Assistant page, now shared here so both screens are
-                  consistent. */}
+              {/* Full Account Summary */}
               {parsedAccounts.length > 0 ? (
                 <View style={styles.accountSummaryWrap}>
                   <Text style={styles.sectionTitle}>Summary of Accounts</Text>
@@ -398,6 +588,34 @@ const styles = StyleSheet.create({
   headerLeft: { flexDirection: "row", alignItems: "center", gap: 8 },
   headerTitle: { fontSize: 17, fontWeight: "700", color: Colors.text },
   closeButton: { padding: 4 },
+
+  // View selector tabs
+  viewSelector: {
+    flexDirection: "row",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+    gap: 12,
+  },
+  viewTab: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  viewTabActive: {
+    borderColor: Colors.primary,
+    backgroundColor: Colors.primary + "10",
+  },
+  viewTabText: { fontSize: 13, fontWeight: "600", color: Colors.textLight },
+  viewTabTextActive: { color: Colors.primary },
+
   scroll: { flex: 1 },
   scrollContent: { padding: 16, paddingBottom: 40 },
 
@@ -479,8 +697,123 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: Colors.text,
   },
+  summarySubtitle: {
+    fontSize: 12,
+    color: Colors.textLight,
+    marginBottom: 8,
+  },
   bureauTag: { fontSize: 12, color: Colors.textLight, marginBottom: 8 },
   summaryText: { fontSize: 14, color: Colors.textLight, lineHeight: 21 },
+
+  // Bureau sections
+  bureauTabs: {
+    marginBottom: 20,
+  },
+  bureauSection: {
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  bureauHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  bureauBadge: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  bureauBadgeText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Colors.white,
+  },
+  bureauCount: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: Colors.textLight,
+  },
+  noBureauItems: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 12,
+    justifyContent: "center",
+  },
+  noBureauText: {
+    fontSize: 13,
+    color: Colors.textLight,
+  },
+  bureauAccountsList: {
+    gap: 10,
+  },
+  accountCard: {
+    backgroundColor: Colors.background,
+    borderRadius: 8,
+    padding: 10,
+    borderLeftWidth: 3,
+    borderLeftColor: Colors.warning,
+  },
+  accountCardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 6,
+  },
+  accountCreditor: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "600",
+    color: Colors.text,
+  },
+  accountType: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Colors.warning,
+    backgroundColor: Colors.warning + "15",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  accountNumber: {
+    fontSize: 12,
+    color: Colors.textLight,
+    fontFamily: "monospace",
+    marginBottom: 4,
+  },
+  accountBalance: {
+    fontSize: 12,
+    color: Colors.warning,
+    fontWeight: "600",
+    marginBottom: 2,
+  },
+  accountStatus: {
+    fontSize: 11,
+    color: Colors.textLight,
+  },
+
+  // Export button
+  exportButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: Colors.primary,
+    borderRadius: 12,
+    paddingVertical: 12,
+    marginBottom: 20,
+  },
+  exportButtonText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: Colors.white,
+  },
 
   sectionTitle: {
     fontSize: 16,
