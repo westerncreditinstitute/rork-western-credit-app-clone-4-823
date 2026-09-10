@@ -96,13 +96,44 @@ export default function CreditAnalysisModal({
 
   // Track which view is active: "upload" for manual upload, "equifax" for multi-bureau Equifax report
   const [activeView, setActiveView] = useState<"upload" | "equifax">("upload");
+  const [fetchingEquifax, setFetchingEquifax] = useState(false);
+  const [equifaxError, setEquifaxError] = useState<string | null>(null);
 
   const saveAnalysisMutation = trpc.aiAgents.saveCreditAnalysis.useMutation();
+  const fetchEquifaxMutation = trpc.equifax.fetchCreditReport.useMutation();
 
   // Determine if we should show the Equifax multi-bureau view
   const hasEquifaxReport = useMemo(() => {
     return equifaxReport && equifaxReport.bureaus && Object.keys(equifaxReport.bureaus).length > 0;
   }, [equifaxReport]);
+
+  // Fetch Equifax report
+  const handleFetchEquifaxReport = useCallback(async () => {
+    if (!userId) {
+      setEquifaxError("User not authenticated");
+      return;
+    }
+
+    setFetchingEquifax(true);
+    setEquifaxError(null);
+
+    try {
+      const result = await fetchEquifaxMutation.mutateAsync({
+        multiBureau: true,
+        userId,
+      });
+
+      if (result.combined.totalAccounts === 0) {
+        setEquifaxError("No credit data found. Please ensure your Equifax connection is active.");
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "Failed to fetch Equifax report";
+      setEquifaxError(errorMsg);
+      console.error("Equifax fetch error:", error);
+    } finally {
+      setFetchingEquifax(false);
+    }
+  }, [userId, fetchEquifaxMutation]);
 
   // Handle parsed accounts from the WebView parser
   const handleAccountsParsed = useCallback(
@@ -401,6 +432,40 @@ export default function CreditAnalysisModal({
           {/* Equifax multi-bureau report view */}
           {activeView === "equifax" && hasEquifaxReport ? (
             renderEquifaxReport()
+          ) : activeView === "equifax" && !hasEquifaxReport ? (
+            <View style={styles.emptyStateContainer}>
+              <BarChart3 size={64} color={Colors.primary} />
+              <Text style={styles.emptyStateTitle}>Connect to Equifax</Text>
+              <Text style={styles.emptyStateDesc}>
+                Fetch your multi-bureau credit report directly from Equifax to see Equifax, Experian, and TransUnion data in one place.
+              </Text>
+              
+              {equifaxError && (
+                <View style={styles.errorBox}>
+                  <AlertTriangle size={18} color={Colors.error} />
+                  <Text style={styles.errorText}>{equifaxError}</Text>
+                </View>
+              )}
+
+              <TouchableOpacity
+                style={[styles.fetchButton, fetchingEquifax && { opacity: 0.6 }]}
+                onPress={handleFetchEquifaxReport}
+                disabled={fetchingEquifax}
+              >
+                {fetchingEquifax ? (
+                  <ActivityIndicator color={Colors.white} size="small" />
+                ) : (
+                  <>
+                    <Download size={20} color={Colors.white} />
+                    <Text style={styles.fetchButtonText}>Fetch My Equifax Report</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              <Text style={styles.privacyNote}>
+                ✓ Your data is secure and never stored on our servers. We only use it to help you understand your credit.
+              </Text>
+            </View>
           ) : null}
 
           {/* Upload / parse view */}
@@ -811,6 +876,45 @@ const styles = StyleSheet.create({
   },
   exportButtonText: {
     fontSize: 14,
+    fontWeight: "700",
+    color: Colors.white,
+  },
+
+  // Equifax empty state
+  emptyStateContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    paddingVertical: 40,
+    gap: 16,
+  },
+  emptyStateTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: Colors.text,
+    textAlign: "center",
+  },
+  emptyStateDesc: {
+    fontSize: 14,
+    color: Colors.textLight,
+    textAlign: "center",
+    lineHeight: 20,
+  },
+  fetchButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    backgroundColor: Colors.primary,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    marginVertical: 12,
+    minHeight: 48,
+  },
+  fetchButtonText: {
+    fontSize: 16,
     fontWeight: "700",
     color: Colors.white,
   },
