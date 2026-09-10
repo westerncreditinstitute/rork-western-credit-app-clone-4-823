@@ -362,49 +362,47 @@ export default function CreditAnalysisModal({
         </View>
 
         {/* View selector (if both manual and Equifax reports available) */}
-        {hasEquifaxReport && (
-          <View style={styles.viewSelector}>
-            <TouchableOpacity
+        <View style={styles.viewSelector}>
+          <TouchableOpacity
+            style={[
+              styles.viewTab,
+              activeView === "equifax" && styles.viewTabActive,
+            ]}
+            onPress={() => setActiveView("equifax")}
+            accessibilityRole="button"
+            accessibilityLabel="View Equifax report"
+          >
+            <BarChart3 size={16} color={activeView === "equifax" ? Colors.primary : Colors.textLight} />
+            <Text
               style={[
-                styles.viewTab,
-                activeView === "equifax" && styles.viewTabActive,
+                styles.viewTabText,
+                activeView === "equifax" && styles.viewTabTextActive,
               ]}
-              onPress={() => setActiveView("equifax")}
-              accessibilityRole="button"
-              accessibilityLabel="View Equifax report"
             >
-              <BarChart3 size={16} color={activeView === "equifax" ? Colors.primary : Colors.textLight} />
-              <Text
-                style={[
-                  styles.viewTabText,
-                  activeView === "equifax" && styles.viewTabTextActive,
-                ]}
-              >
-                Equifax Report
-              </Text>
-            </TouchableOpacity>
+              Equifax Report
+            </Text>
+          </TouchableOpacity>
 
-            <TouchableOpacity
+          <TouchableOpacity
+            style={[
+              styles.viewTab,
+              activeView === "upload" && styles.viewTabActive,
+            ]}
+            onPress={() => setActiveView("upload")}
+            accessibilityRole="button"
+            accessibilityLabel="Upload new report"
+          >
+            <FileSearch size={16} color={activeView === "upload" ? Colors.primary : Colors.textLight} />
+            <Text
               style={[
-                styles.viewTab,
-                activeView === "upload" && styles.viewTabActive,
+                styles.viewTabText,
+                activeView === "upload" && styles.viewTabTextActive,
               ]}
-              onPress={() => setActiveView("upload")}
-              accessibilityRole="button"
-              accessibilityLabel="Upload new report"
             >
-              <FileSearch size={16} color={activeView === "upload" ? Colors.primary : Colors.textLight} />
-              <Text
-                style={[
-                  styles.viewTabText,
-                  activeView === "upload" && styles.viewTabTextActive,
-                ]}
-              >
-                Upload Report
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
+              Upload Report
+            </Text>
+          </TouchableOpacity>
+        </View>
 
         <ScrollView
           style={styles.scroll}
