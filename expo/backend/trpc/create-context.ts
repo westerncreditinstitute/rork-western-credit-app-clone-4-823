@@ -12,6 +12,7 @@ interface AuthUser {
 
 export const createContext = async (opts: FetchCreateContextFnOptions) => {
   const authHeader = opts.req.headers.get("authorization");
+  console.log("[Context] Auth header present:", !!authHeader, "header:", authHeader ? authHeader.substring(0, 20) + "..." : "NONE");
   let user: AuthUser | null = null;
 
   if (authHeader) {
