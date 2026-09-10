@@ -8,6 +8,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Platform,
+  TextInput,
 } from "react-native";
 import {
   X,
@@ -98,6 +99,17 @@ export default function CreditAnalysisModal({
   const [activeView, setActiveView] = useState<"upload" | "equifax">("upload");
   const [fetchingEquifax, setFetchingEquifax] = useState(false);
   const [equifaxError, setEquifaxError] = useState<string | null>(null);
+  
+  // Consumer info for Equifax fetch
+  const [consumerInfo, setConsumerInfo] = useState({
+    firstName: "",
+    lastName: "",
+    ssn: "",
+    address: "",
+    city: "",
+    state: "",
+    zip: "",
+  });
 
   const saveAnalysisMutation = trpc.aiAgents.saveCreditAnalysis.useMutation();
   const fetchEquifaxMutation = trpc.equifax.fetchCreditReport.useMutation();
@@ -114,12 +126,19 @@ export default function CreditAnalysisModal({
       return;
     }
 
+    // Validate at least some consumer info is provided
+    if (!consumerInfo.firstName && !consumerInfo.lastName && !consumerInfo.ssn) {
+      setEquifaxError("Please enter at least your name or SSN to fetch your report.");
+      return;
+    }
+
     setFetchingEquifax(true);
     setEquifaxError(null);
 
     try {
       const result = await fetchEquifaxMutation.mutateAsync({
         multiBureau: true,
+        consumerInfo: consumerInfo,
       });
 
       if (!result.success) {
@@ -137,7 +156,7 @@ export default function CreditAnalysisModal({
     } finally {
       setFetchingEquifax(false);
     }
-  }, [userId, fetchEquifaxMutation]);
+  }, [userId, fetchEquifaxMutation, consumerInfo]);
 
   // Handle parsed accounts from the WebView parser
   const handleAccountsParsed = useCallback(
@@ -448,6 +467,100 @@ export default function CreditAnalysisModal({
                   <Text style={styles.errorText}>{equifaxError}</Text>
                 </View>
               )}
+
+              {/* Consumer Info Form */}
+              <View style={styles.consumerForm}>
+                <Text style={styles.formLabel}>Your Information</Text>
+                
+                <View style={styles.formRow}>
+                  <View style={[styles.formField, { flex: 1, marginRight: 8 }]}>
+                    <Text style={styles.inputLabel}>First Name</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="First Name"
+                      placeholderTextColor={Colors.textLight}
+                      value={consumerInfo.firstName}
+                      onChangeText={(text) => setConsumerInfo({...consumerInfo, firstName: text})}
+                      editable={!fetchingEquifax}
+                    />
+                  </View>
+                  <View style={[styles.formField, { flex: 1 }]}>
+                    <Text style={styles.inputLabel}>Last Name</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Last Name"
+                      placeholderTextColor={Colors.textLight}
+                      value={consumerInfo.lastName}
+                      onChangeText={(text) => setConsumerInfo({...consumerInfo, lastName: text})}
+                      editable={!fetchingEquifax}
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.formField}>
+                  <Text style={styles.inputLabel}>Social Security Number</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="XXX-XX-XXXX"
+                    placeholderTextColor={Colors.textLight}
+                    value={consumerInfo.ssn}
+                    onChangeText={(text) => setConsumerInfo({...consumerInfo, ssn: text})}
+                    editable={!fetchingEquifax}
+                    keyboardType="number-pad"
+                    secureTextEntry
+                  />
+                </View>
+
+                <View style={styles.formField}>
+                  <Text style={styles.inputLabel}>Address (Optional)</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Street Address"
+                    placeholderTextColor={Colors.textLight}
+                    value={consumerInfo.address}
+                    onChangeText={(text) => setConsumerInfo({...consumerInfo, address: text})}
+                    editable={!fetchingEquifax}
+                  />
+                </View>
+
+                <View style={styles.formRow}>
+                  <View style={[styles.formField, { flex: 1, marginRight: 8 }]}>
+                    <Text style={styles.inputLabel}>City</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="City"
+                      placeholderTextColor={Colors.textLight}
+                      value={consumerInfo.city}
+                      onChangeText={(text) => setConsumerInfo({...consumerInfo, city: text})}
+                      editable={!fetchingEquifax}
+                    />
+                  </View>
+                  <View style={[styles.formField, { flex: 0.5, marginRight: 8 }]}>
+                    <Text style={styles.inputLabel}>State</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="CA"
+                      placeholderTextColor={Colors.textLight}
+                      value={consumerInfo.state}
+                      onChangeText={(text) => setConsumerInfo({...consumerInfo, state: text.toUpperCase()})}
+                      editable={!fetchingEquifax}
+                      maxLength={2}
+                    />
+                  </View>
+                  <View style={[styles.formField, { flex: 0.7 }]}>
+                    <Text style={styles.inputLabel}>ZIP</Text>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="12345"
+                      placeholderTextColor={Colors.textLight}
+                      value={consumerInfo.zip}
+                      onChangeText={(text) => setConsumerInfo({...consumerInfo, zip: text})}
+                      editable={!fetchingEquifax}
+                      keyboardType="number-pad"
+                    />
+                  </View>
+                </View>
+              </View>
 
               <TouchableOpacity
                 style={[styles.fetchButton, fetchingEquifax && { opacity: 0.6 }]}
@@ -919,6 +1032,45 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
     color: Colors.white,
+  },
+
+  consumerForm: {
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    padding: 16,
+    marginVertical: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  formLabel: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: Colors.text,
+    marginBottom: 12,
+  },
+  formRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 12,
+  },
+  formField: {
+    marginBottom: 12,
+  },
+  inputLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Colors.text,
+    marginBottom: 6,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: Colors.text,
+    backgroundColor: Colors.background,
   },
 
   sectionTitle: {

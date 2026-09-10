@@ -149,6 +149,9 @@ export const equifaxRouter = createTRPCRouter({
             ssn: z.string().optional(),
             dateOfBirth: z.string().optional(),
             address: z.string().optional(),
+            city: z.string().optional(),
+            state: z.string().optional(),
+            zip: z.string().optional(),
           })
           .optional(),
       })

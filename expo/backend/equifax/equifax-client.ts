@@ -120,21 +120,24 @@ class EquifaxClient {
   
   private clientId: string;
   private clientSecret: string;
-  private sandboxToken: string;
+  private staticAccessToken: string;
+  private environment: "sandbox" | "uat" | "production";
   private cachedToken: EquifaxOAuthToken | null = null;
   
-  private readonly EQUIFAX_API_BASE = "https://api.equifax.com/business/oneview/consumer-credit/v1";
-  private readonly EQUIFAX_OAUTH_BASE = "https://api.equifax.com/oauth";
+  private readonly EQUIFAX_SANDBOX_API = "https://api.sandbox.equifax.com/business/oneview/consumer-credit/v1";
+  private readonly EQUIFAX_UAT_API = "https://api.uat.equifax.com/business/oneview/consumer-credit/v1";
+  private readonly EQUIFAX_PROD_API = "https://api.equifax.com/business/oneview/consumer-credit/v1";
+  private readonly EQUIFAX_OAUTH_URL = "https://api.equifax.com/oauth/v2/token";
   
   private constructor() {
-    // In Scenario A (company-level API account), credentials come from environment
-    this.clientId = process.env.EQUIFAX_CLIENT_ID || "";
-    this.clientSecret = process.env.EQUIFAX_CLIENT_SECRET || "";
-    this.sandboxToken = process.env.EQUIFAX_SANDBOX_TOKEN || "";
+    // Equifax OAuth2 credentials from environment
+    this.clientId = process.env.EQUIFAX_CLIENT_ID || "p26PzMCAJN7WOeUqmqE2Fr1AVAzsDpzd";
+    this.clientSecret = process.env.EQUIFAX_CLIENT_SECRET || "LNzhev1dqyvLsvHV";
+    this.staticAccessToken = process.env.EQUIFAX_STATIC_ACCESS_TOKEN || "kuK2cWmeZ8lAGpqw55XmSbGjBsUi";
+    this.environment = (process.env.EQUIFAX_ENVIRONMENT as any) || "sandbox";
     
-    if (!this.sandboxToken) {
-      console.warn("[Equifax] No EQUIFAX_SANDBOX_TOKEN configured");
-    }
+    console.log("[Equifax] Initialized with environment:", this.environment);
+    console.log("[Equifax] Using Client ID:", this.clientId.substring(0, 8) + "...");
   }
   
   /**
@@ -148,22 +151,36 @@ class EquifaxClient {
   }
   
   /**
+   * Get the appropriate API base URL based on environment
+   */
+  private getApiBase(): string {
+    switch (this.environment) {
+      case "uat":
+        return this.EQUIFAX_UAT_API;
+      case "production":
+        return this.EQUIFAX_PROD_API;
+      case "sandbox":
+      default:
+        return this.EQUIFAX_SANDBOX_API;
+    }
+  }
+  
+  /**
    * Get valid OAuth2 access token, using cache if available
    */
   async getAccessToken(): Promise<string> {
-    // Check if cached token is still valid
-    if (this.cachedToken && this.cachedToken.expiry && this.cachedToken.expiry > Date.now()) {
-      console.log("[Equifax] Using cached OAuth token");
+    // Check if cached token is still valid (with 5-minute buffer)
+    if (this.cachedToken && this.cachedToken.expiry && this.cachedToken.expiry > Date.now() + 5 * 60 * 1000) {
+      console.log("[Equifax] Using cached OAuth token, expires in", Math.round((this.cachedToken.expiry - Date.now()) / 1000), "seconds");
       return this.cachedToken.access_token;
     }
     
     try {
-      // Exchange sandbox token for access token
-      // In sandbox, we use the provided token directly or obtain OAuth token
-      if (this.sandboxToken) {
-        // Sandbox mode: use provided token directly
+      // For sandbox/testing, use the static access token directly
+      if (this.environment === "sandbox" && this.staticAccessToken) {
+        console.log("[Equifax] Using static access token for sandbox environment");
         const token: EquifaxOAuthToken = {
-          access_token: this.sandboxToken,
+          access_token: this.staticAccessToken,
           token_type: "Bearer",
           expires_in: 3600,
           expiry: Date.now() + 3600 * 1000,
@@ -172,16 +189,46 @@ class EquifaxClient {
         return token.access_token;
       }
       
-      // Production: perform OAuth2 flow (placeholder for actual implementation)
-      throw new Error("Production OAuth2 flow not yet implemented");
+      // For production/UAT, perform OAuth2 client credentials flow
+      console.log("[Equifax] Exchanging OAuth2 credentials for access token");
+      const response = await fetch(this.EQUIFAX_OAUTH_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({
+          grant_type: "client_credentials",
+          client_id: this.clientId,
+          client_secret: this.clientSecret,
+        }).toString(),
+      });
+      
+      if (!response.ok) {
+        const error = await response.text();
+        console.error("[Equifax] OAuth2 error:", response.status, error);
+        throw new Error(`OAuth2 failed: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      const token: EquifaxOAuthToken = {
+        access_token: data.access_token,
+        token_type: data.token_type || "Bearer",
+        expires_in: data.expires_in || 3600,
+        expiry: Date.now() + (data.expires_in || 3600) * 1000,
+      };
+      
+      this.cachedToken = token;
+      console.log("[Equifax] OAuth2 token obtained, expires in", token.expires_in, "seconds");
+      return token.access_token;
     } catch (error) {
       console.error("[Equifax] Failed to obtain access token:", error);
-      throw new Error("Failed to authenticate with Equifax API");
+      throw new Error("Failed to authenticate with Equifax API: " + (error instanceof Error ? error.message : String(error)));
     }
   }
   
   /**
-   * Fetch consumer credit report from Equifax
+   * Fetch consumer credit report from Equifax using OneView API
+   * Per Swagger spec: POST /reports/credit-report
    */
   async fetchCreditReport(consumerInfo?: {
     firstName?: string;
@@ -189,28 +236,57 @@ class EquifaxClient {
     ssn?: string;
     dateOfBirth?: string;
     address?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
   }): Promise<Record<string, unknown>> {
     try {
       const accessToken = await this.getAccessToken();
+      const apiBase = this.getApiBase();
       
-      // Build request payload
+      // Build request payload per Swagger spec
       const payload = {
-        // For sandbox, typically use mock consumer data
-        consumers: [
-          {
-            firstName: consumerInfo?.firstName || "John",
-            lastName: consumerInfo?.lastName || "Doe",
-            ssn: consumerInfo?.ssn || "123456789", // Mock SSN for sandbox
-            dateOfBirth: consumerInfo?.dateOfBirth || "1980-01-01",
-            address: consumerInfo?.address || "123 Main St, Anytown, USA",
+        consumers: {
+          name: [
+            {
+              identifier: "current",
+              firstName: consumerInfo?.firstName || "John",
+              lastName: consumerInfo?.lastName || "Doe",
+            },
+          ],
+          socialNum: consumerInfo?.ssn ? [
+            {
+              identifier: "current",
+              number: consumerInfo.ssn.replace(/\D/g, ""), // Remove non-digits
+            },
+          ] : [],
+          dateOfBirth: consumerInfo?.dateOfBirth ? this.formatDateOfBirth(consumerInfo.dateOfBirth) : undefined,
+          addresses: [
+            {
+              identifier: "current",
+              streetName: consumerInfo?.address || "123 Main St",
+              city: consumerInfo?.city || "Anytown",
+              state: consumerInfo?.state || "CA",
+              zip: consumerInfo?.zip || "00000",
+            },
+          ],
+        },
+        customerReferenceIdentifier: `rork-${Date.now()}`,
+        customerConfiguration: {
+          equifaxUSConsumerCreditReport: {
+            pdfComboIndicator: "Y",
+            memberNumber: process.env.EQUIFAX_MEMBER_NUMBER || "999XX12345",
+            securityCode: process.env.EQUIFAX_SECURITY_CODE || "@U2",
+            customerCode: "IAPI",
+            multipleReportIndicator: "1",
           },
-        ],
-        // Request both credit data and negative items
-        includeConsumerStatement: true,
-        includeEmploymentData: false,
+        },
       };
       
-      const response = await fetch(`${this.EQUIFAX_API_BASE}/reports`, {
+      console.log("[Equifax] Fetching credit report from:", `${apiBase}/reports/credit-report`);
+      console.log("[Equifax] Request consumer:", payload.consumers.name[0]);
+      
+      const response = await fetch(`${apiBase}/reports/credit-report`, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${accessToken}`,
@@ -224,7 +300,7 @@ class EquifaxClient {
         const errorData = await response.json().catch(() => ({}));
         console.error("[Equifax] API error:", response.status, errorData);
         throw new Error(
-          `Equifax API error: ${response.status} ${errorData.message || response.statusText}`
+          `Equifax API error: ${response.status} ${errorData.message || errorData.error || response.statusText}`
         );
       }
       
@@ -234,6 +310,21 @@ class EquifaxClient {
     } catch (error) {
       console.error("[Equifax] Failed to fetch credit report:", error);
       throw error;
+    }
+  }
+  
+  /**
+   * Format date of birth to MMDDYYYY format for Equifax API
+   */
+  private formatDateOfBirth(dateStr: string): string {
+    try {
+      const date = new Date(dateStr);
+      const mm = String(date.getMonth() + 1).padStart(2, "0");
+      const dd = String(date.getDate()).padStart(2, "0");
+      const yyyy = date.getFullYear();
+      return `${mm}${dd}${yyyy}`;
+    } catch {
+      return "01011980"; // Fallback
     }
   }
   
