@@ -141,6 +141,7 @@ export const equifaxRouter = createTRPCRouter({
       z.object({
         forceRefresh: z.boolean().default(false),
         multiBureau: z.boolean().default(true),
+        userId: z.string().optional(), // Deprecated: userId is extracted from ctx
         consumerInfo: z
           .object({
             firstName: z.string().optional(),
@@ -172,7 +173,7 @@ export const equifaxRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const startTime = Date.now();
       const analytics = EquifaxAnalytics.getInstance();
-      const userId = ctx.user?.id;
+      const userId = ctx.user.id; // protectedProcedure guarantees ctx.user exists
       
       try {
         console.log("[tRPC] fetchCreditReport called by user:", userId, "multiBureau:", input.multiBureau);

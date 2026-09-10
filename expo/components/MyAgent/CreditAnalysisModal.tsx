@@ -110,7 +110,7 @@ export default function CreditAnalysisModal({
   // Fetch Equifax report
   const handleFetchEquifaxReport = useCallback(async () => {
     if (!userId) {
-      setEquifaxError("User not authenticated");
+      setEquifaxError("You must be logged in to fetch your Equifax report. Please sign in and try again.");
       return;
     }
 
@@ -120,8 +120,12 @@ export default function CreditAnalysisModal({
     try {
       const result = await fetchEquifaxMutation.mutateAsync({
         multiBureau: true,
-        userId,
       });
+
+      if (!result.success) {
+        setEquifaxError(result.error || "Failed to fetch Equifax report");
+        return;
+      }
 
       if (result.combined.totalAccounts === 0) {
         setEquifaxError("No credit data found. Please ensure your Equifax connection is active.");
