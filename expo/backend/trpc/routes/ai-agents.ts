@@ -1288,8 +1288,10 @@ interface ToolCall {
 
 async function executeTool(
   toolCall: ToolCall,
-  userId: string
+  userId: string,
+  agentId?: number
 ): Promise<{ toolName: string; result: any; displayContent: string }> {
+  const analytics = EquifaxAnalytics.getInstance();
   switch (toolCall.name) {
     case "get_disputes": {
       const data = await fetchUserDisputes(userId);
@@ -1678,7 +1680,7 @@ export const aiAgentsRouter = createTRPCRouter({
         agentName,
         agentBio,
         equifaxReport: input.equifaxReport,
-        userId: ctx.userId,
+        userId: input.userId,
       });
 
       // 5. Execute any tool calls
@@ -1689,7 +1691,7 @@ export const aiAgentsRouter = createTRPCRouter({
 
       if (toolCalls.length > 0) {
         for (const tc of toolCalls) {
-          const toolResult = await executeTool(tc, input.userId);
+          const toolResult = await executeTool(tc, input.userId, input.agentId);
 
           // Save the tool message
           const { data: savedToolMessage } = await supabase

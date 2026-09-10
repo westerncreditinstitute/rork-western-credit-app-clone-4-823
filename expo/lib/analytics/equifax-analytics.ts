@@ -56,7 +56,7 @@ interface AnalyticsDashboard {
 /**
  * Singleton analytics tracker
  */
-class EquifaxAnalytics {
+export class EquifaxAnalytics {
   private static instance: EquifaxAnalytics;
   private metrics: AnalyticsMetric[] = [];
   private readonly MAX_METRICS = 1000; // Keep last 1000 metrics in memory
@@ -266,7 +266,7 @@ class EquifaxAnalytics {
       "TransUnion",
       "Combined",
     ];
-    const bureauMetrics: Record<BureauType, BureauMetrics> = {};
+    const bureauMetrics = {} as Record<BureauType, BureauMetrics>;
 
     for (const bureau of bureaus) {
       const bureauMetricsForBureau = this.getMetrics({ bureau });

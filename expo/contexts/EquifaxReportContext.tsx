@@ -125,6 +125,11 @@ export function EquifaxReportProvider({ children }: { children: React.ReactNode 
         error,
         errorType,
         lastFetchedAt: null,
+        negativeAccountsByBureau: {
+          equifax: [],
+          experian: [],
+          transunion: [],
+        },
       });
     },
     []
