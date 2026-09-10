@@ -18,21 +18,15 @@ export const createContext = async (opts: FetchCreateContextFnOptions) => {
     try {
       const decoded = JSON.parse(atob(authHeader.replace("Bearer ", "")));
       if (decoded && decoded.id && decoded.email) {
-        const { data: dbUser } = await supabase
-          .from("users")
-          .select("id, email, name, role")
-          .eq("id", decoded.id)
-          .single();
-
-        if (dbUser) {
-          user = {
-            id: dbUser.id,
-            email: dbUser.email,
-            name: dbUser.name,
-            role: dbUser.role || "Student",
-          };
-          console.log("[Context] Authenticated user:", user.email, "role:", user.role);
-        }
+        // For session-only mode, accept the decoded user directly without Supabase lookup
+        // This allows users logged in via AsyncStorage to make authenticated requests
+        user = {
+          id: decoded.id,
+          email: decoded.email,
+          name: decoded.name || "User",
+          role: decoded.role || "Student",
+        };
+        console.log("[Context] Authenticated user:", user.email, "role:", user.role);
       }
     } catch (error) {
       console.log("[Context] Failed to parse auth header:", error);
