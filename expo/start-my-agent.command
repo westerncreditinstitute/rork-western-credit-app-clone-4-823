@@ -106,6 +106,18 @@ if [ ! -f .env ]; then
   exit 1
 fi
 
+# --- 0b. Auto-create .env.local for Testing Dashboard ----
+if [ ! -f .env.local ]; then
+  printf "${D}Creating .env.local for Testing Dashboard...${X}\n"
+  cat > .env.local << 'ENVEOF'
+EXPO_PUBLIC_TESTING_MODE=true
+ENVEOF
+  printf "${G}✓ .env.local created with EXPO_PUBLIC_TESTING_MODE=true${X}\n"
+  printf "${D}(Testing Dashboard will appear in More menu)${X}\n\n"
+else
+  printf "${D}✓ .env.local already exists${X}\n\n"
+fi
+
 # --- 1. Stop anything from a previous run -----------------------
 printf "${D}Stopping any previous backend/app...${X}\n"
 lsof -ti :3000 2>/dev/null | awk 'NF' | while read -r p; do kill -9 "$p" 2>/dev/null; done
