@@ -86,7 +86,12 @@ export default function CreditAnalysisModal({
   const userId = user?.id || "";
 
   // Get multi-bureau report from Equifax context
-  const { report: equifaxReport, negativeAccountsByBureau } = useEquifaxReport();
+  const {
+    report: equifaxReport,
+    negativeAccountsByBureau,
+    setReportData: setEquifaxReportData,
+    setErrorData: setEquifaxErrorData,
+  } = useEquifaxReport();
 
   const [parsing, setParsing] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
@@ -141,22 +146,29 @@ export default function CreditAnalysisModal({
         consumerInfo: consumerInfo,
       });
 
-      if (!result.success) {
-        setEquifaxError(result.error || "Failed to fetch Equifax report");
+      if (!result.success || !result.report) {
+        const errMsg = result.error || "Failed to fetch Equifax report";
+        setEquifaxError(errMsg);
+        setEquifaxErrorData(errMsg, result.errorType || "UNKNOWN_ERROR");
         return;
       }
 
-      if (result.combined.totalAccounts === 0) {
+      // Push the fetched report into EquifaxReportContext so the UI
+      // (renderEquifaxReport, negativeAccountsByBureau, etc.) picks it up.
+      setEquifaxReportData(result.report, result.negativeAccounts);
+
+      if (result.report.combined.totalAccounts === 0) {
         setEquifaxError("No credit data found. Please ensure your Equifax connection is active.");
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : "Failed to fetch Equifax report";
       setEquifaxError(errorMsg);
+      setEquifaxErrorData(errorMsg, "UNKNOWN_ERROR");
       console.error("Equifax fetch error:", error);
     } finally {
       setFetchingEquifax(false);
     }
-  }, [userId, fetchEquifaxMutation, consumerInfo]);
+  }, [userId, fetchEquifaxMutation, consumerInfo, setEquifaxReportData, setEquifaxErrorData]);
 
   // Handle parsed accounts from the WebView parser
   const handleAccountsParsed = useCallback(
