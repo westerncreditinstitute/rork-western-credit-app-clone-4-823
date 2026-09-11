@@ -17,6 +17,7 @@ import { NotificationProvider } from "@/contexts/NotificationContext";
 import { DeferredProviders } from "@/components/DeferredProviders";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { useNotificationResponseRouter } from "@/hooks/useNotificationResponseRouter";
+import { testingService } from "@/services/TestingService";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -58,6 +59,12 @@ function useProtectedRoute() {
 function RootLayoutNav() {
   const theme = useTheme();
   useProtectedRoute();
+  
+  // Initialize TestingService for testing mode
+  useEffect(() => {
+    testingService.initialize();
+  }, []);
+  
   // Re-registers this device's push token whenever permission was
   // already granted in a previous session (no-ops silently if
   // permission was never granted, or no EAS projectId is configured).

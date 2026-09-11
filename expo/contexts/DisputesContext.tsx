@@ -5,6 +5,7 @@ import { trpc, trpcClient } from '@/lib/trpc';
 import { useUser } from './UserContext';
 import { notificationService } from '@/services/NotificationService';
 import { useNotifications } from './NotificationContext';
+import { testingService } from '@/services/TestingService';
 
 interface TimelineItem {
   date: string;
@@ -72,16 +73,26 @@ export const [DisputesProvider, useDisputes] = createContextHook(() => {
   const { user } = useUser();
   const { preferences } = useNotifications();
   const [disputes, setDisputes] = useState<Dispute[]>([]);
+  const [isTestingMode, setIsTestingMode] = useState(false);
   // Tracks which (disputeId, alertType) pairs have already triggered a
   // notification this session/device, loaded from AsyncStorage once per
   // user so alerts survive app restarts without re-firing.
   const sentAlertsRef = useRef<Set<string> | null>(null);
   const lastKnownStatusRef = useRef<Map<string, string>>(new Map());
 
+  // Initialize testing mode on component mount
+  useEffect(() => {
+    const checkTestingMode = async () => {
+      const testingEnabled = testingService.isTestingModeEnabled();
+      setIsTestingMode(testingEnabled);
+    };
+    checkTestingMode();
+  }, []);
+
   const disputesQuery = trpc.disputes.getAll.useQuery(
     { userId: user?.id || '' },
     { 
-      enabled: !!user?.id,
+      enabled: !!user?.id && !isTestingMode,
       staleTime: 2 * 60 * 1000,
     }
   );
@@ -89,7 +100,7 @@ export const [DisputesProvider, useDisputes] = createContextHook(() => {
   const analyticsQuery = trpc.disputes.getAnalytics.useQuery(
     { userId: user?.id || '' },
     { 
-      enabled: !!user?.id,
+      enabled: !!user?.id && !isTestingMode,
       staleTime: 2 * 60 * 1000,
     }
   );
@@ -102,10 +113,22 @@ export const [DisputesProvider, useDisputes] = createContextHook(() => {
   const addReminderMutation = trpc.disputes.addReminder.useMutation();
 
   useEffect(() => {
-    if (disputesQuery.data) {
-      setDisputes(disputesQuery.data as Dispute[]);
-    }
-  }, [disputesQuery.data]);
+    const loadDisputes = async () => {
+      try {
+        if (isTestingMode && user?.id) {
+          // Load disputes from TestingService in testing mode
+          const testDisputes = await testingService.getTestDisputes(user.id);
+          setDisputes(testDisputes as any[]);
+        } else if (disputesQuery.data) {
+          // Load from Supabase in production mode
+          setDisputes(disputesQuery.data as Dispute[]);
+        }
+      } catch (error) {
+        console.error('[DisputesContext] Error loading disputes:', error);
+      }
+    };
+    loadDisputes();
+  }, [disputesQuery.data, isTestingMode, user?.id]);
 
   // ── Proactive dispute alerts ──────────────────────────────────
   // Whenever the dispute list is (re)loaded, check each dispute's 30-day
@@ -249,58 +272,87 @@ export const [DisputesProvider, useDisputes] = createContextHook(() => {
     }
 
     try {
-      const newDispute = await createDisputeMutation.mutateAsync({
-        userId: user.id,
-        ...disputeData,
-      });
+      let newDispute;
       
-      if (newDispute) {
-        setDisputes(prev => [...prev, newDispute as Dispute]);
+      if (isTestingMode) {
+        // Use TestingService for local testing
+        newDispute = await testingService.createTestDispute(user.id, {
+          creditor: disputeData.creditor,
+          accountNumber: disputeData.accountNumber,
+          disputeType: disputeData.disputeType,
+        });
+        setDisputes(prev => [...prev, newDispute as any]);
+      } else {
+        // Use Supabase for production
+        newDispute = await createDisputeMutation.mutateAsync({
+          userId: user.id,
+          ...disputeData,
+        });
+        
+        if (newDispute) {
+          setDisputes(prev => [...prev, newDispute as Dispute]);
+        }
+        
+        disputesQuery.refetch();
+        analyticsQuery.refetch();
       }
-      
-      disputesQuery.refetch();
-      analyticsQuery.refetch();
       
       return newDispute;
     } catch (error) {
       console.error('Error creating dispute:', error);
       throw error;
     }
-  }, [user?.id, createDisputeMutation, disputesQuery, analyticsQuery]);
+  }, [user?.id, isTestingMode, createDisputeMutation, disputesQuery, analyticsQuery]);
 
   const updateDispute = useCallback(async (id: string, updates: Partial<Dispute>) => {
     try {
-      const updatedDispute = await updateDisputeMutation.mutateAsync({
-        id,
-        ...updates,
-      });
+      let updatedDispute;
       
-      if (updatedDispute) {
-        setDisputes(prev => prev.map(d => d.id === id ? updatedDispute as Dispute : d));
+      if (isTestingMode) {
+        updatedDispute = await testingService.updateTestDispute(id, updates);
+        if (updatedDispute) {
+          setDisputes(prev => prev.map(d => d.id === id ? updatedDispute as any : d));
+        }
+      } else {
+        updatedDispute = await updateDisputeMutation.mutateAsync({
+          id,
+          ...updates,
+        });
+        
+        if (updatedDispute) {
+          setDisputes(prev => prev.map(d => d.id === id ? updatedDispute as Dispute : d));
+        }
+        
+        disputesQuery.refetch();
+        analyticsQuery.refetch();
       }
-      
-      disputesQuery.refetch();
-      analyticsQuery.refetch();
       
       return updatedDispute;
     } catch (error) {
       console.error('Error updating dispute:', error);
       throw error;
     }
-  }, [updateDisputeMutation, disputesQuery, analyticsQuery]);
+  }, [isTestingMode, updateDisputeMutation, disputesQuery, analyticsQuery]);
 
   const deleteDispute = useCallback(async (id: string) => {
     try {
-      await deleteDisputeMutation.mutateAsync({ id });
-      setDisputes(prev => prev.filter(d => d.id !== id));
-      disputesQuery.refetch();
-      analyticsQuery.refetch();
+      if (isTestingMode) {
+        const success = await testingService.deleteTestDispute(id);
+        if (success) {
+          setDisputes(prev => prev.filter(d => d.id !== id));
+        }
+      } else {
+        await deleteDisputeMutation.mutateAsync({ id });
+        setDisputes(prev => prev.filter(d => d.id !== id));
+        disputesQuery.refetch();
+        analyticsQuery.refetch();
+      }
       return { success: true };
     } catch (error) {
       console.error('Error deleting dispute:', error);
       throw error;
     }
-  }, [deleteDisputeMutation, disputesQuery, analyticsQuery]);
+  }, [isTestingMode, deleteDisputeMutation, disputesQuery, analyticsQuery]);
 
   const addNote = useCallback(async (
     id: string, 
