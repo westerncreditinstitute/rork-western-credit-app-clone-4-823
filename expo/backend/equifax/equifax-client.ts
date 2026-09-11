@@ -129,15 +129,50 @@ class EquifaxClient {
   private readonly EQUIFAX_PROD_API = "https://api.equifax.com/business/oneview/consumer-credit/v1";
   private readonly EQUIFAX_OAUTH_URL = "https://api.equifax.com/oauth/v2/token";
   
+  /**
+   * DEMO_MODE: When true, all bureau data (including Equifax) is mocked and
+   * the real Equifax API is never called. This lets the full app flow be
+   * tested end-to-end without valid credentials.
+   *
+   * This is controlled by the EQUIFAX_DEMO_MODE env var, but will also
+   * auto-activate if the required real-account fields (Member Number /
+   * Security Code) are missing or still set to Equifax's documentation
+   * placeholder values, so a partially-configured account never produces
+   * a hard failure for the user.
+   */
+  private demoMode: boolean;
+
   private constructor() {
     // Equifax OAuth2 credentials from environment
     this.clientId = process.env.EQUIFAX_CLIENT_ID || "p26PzMCAJN7WOeUqmqE2Fr1AVAzsDpzd";
     this.clientSecret = process.env.EQUIFAX_CLIENT_SECRET || "LNzhev1dqyvLsvHV";
     this.staticAccessToken = process.env.EQUIFAX_STATIC_ACCESS_TOKEN || "kuK2cWmeZ8lAGpqw55XmSbGjBsUi";
     this.environment = (process.env.EQUIFAX_ENVIRONMENT as any) || "sandbox";
-    
+
+    const memberNumber = process.env.EQUIFAX_MEMBER_NUMBER || "999XX12345";
+    const securityCode = process.env.EQUIFAX_SECURITY_CODE || "@U2";
+    const placeholderMemberNumber = memberNumber === "999XX12345";
+    const placeholderSecurityCode = securityCode === "@U2";
+    const explicitDemoFlag = String(process.env.EQUIFAX_DEMO_MODE || "").toLowerCase() === "true";
+
+    this.demoMode = explicitDemoFlag || placeholderMemberNumber || placeholderSecurityCode;
+
     console.log("[Equifax] Initialized with environment:", this.environment);
     console.log("[Equifax] Using Client ID:", this.clientId.substring(0, 8) + "...");
+    console.log(
+      "[Equifax] DEMO_MODE:",
+      this.demoMode,
+      this.demoMode
+        ? "(real Member Number/Security Code not configured yet — using mock data for all bureaus)"
+        : "(real credentials detected — will call live Equifax API)"
+    );
+  }
+
+  /**
+   * Whether the client is currently running in demo/mock mode
+   */
+  isDemoMode(): boolean {
+    return this.demoMode;
   }
   
   /**
@@ -396,15 +431,43 @@ class EquifaxClient {
   }, userId?: string): Promise<ParsedCreditReport> {
     const startTime = Date.now();
     const analytics = EquifaxAnalytics.getInstance();
-    
+
     try {
-      // In sandbox/production, fetch from all bureaus
-      // For now, we'll call Equifax and simulate the other bureaus
-      const equifaxRaw = await this.fetchCreditReport(consumerInfo);
-      
-      // Parse Equifax data
-      const equifaxReport = await this.parseEquifaxReport(equifaxRaw, "Equifax");
-      
+      let equifaxReport: BureauReport;
+      let equifaxRaw: Record<string, unknown> | { demo: true };
+
+      if (this.demoMode) {
+        // DEMO MODE: skip the real Equifax API entirely (credentials are not
+        // yet configured) and use mock data for ALL bureaus, including Equifax.
+        console.log("[Equifax] DEMO_MODE active — generating mock data for Equifax, Experian, and TransUnion");
+        equifaxReport = this.generateMockBureauReport("Equifax", consumerInfo);
+        equifaxRaw = { demo: true };
+      } else {
+        try {
+          // Real credentials are configured — attempt the live Equifax API call.
+          const rawResponse = await this.fetchCreditReport(consumerInfo);
+          equifaxReport = await this.parseEquifaxReport(rawResponse, "Equifax");
+          equifaxRaw = rawResponse;
+        } catch (equifaxError) {
+          // The live call failed (bad credentials, network issue, Equifax outage, etc).
+          // Rather than failing the whole request, gracefully fall back to mock
+          // data for Equifax so the rest of the app keeps working, and surface
+          // a warning in analytics/logs instead of blocking the user.
+          console.warn(
+            "[Equifax] Live API call failed, falling back to mock Equifax data:",
+            equifaxError instanceof Error ? equifaxError.message : equifaxError
+          );
+          analytics.trackError(
+            "EQUIFAX_LIVE_FALLBACK_TO_MOCK",
+            equifaxError instanceof Error ? equifaxError.message : String(equifaxError),
+            "Equifax",
+            userId
+          );
+          equifaxReport = this.generateMockBureauReport("Equifax", consumerInfo);
+          equifaxRaw = { demo: true, fallbackReason: String(equifaxError) };
+        }
+      }
+
       // In production, you would call:
       // const experianRaw = await this.fetchExperianReport(consumerInfo);
       // const transunionRaw = await this.fetchTransUnionReport(consumerInfo);

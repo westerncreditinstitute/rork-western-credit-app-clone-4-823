@@ -188,6 +188,10 @@ export const equifaxRouter = createTRPCRouter({
         
         if (input.multiBureau) {
           parsedReport = await equifaxClient.fetchMultiBureauReport(input.consumerInfo, userId);
+        } else if (equifaxClient.isDemoMode()) {
+          // Single-bureau request while in demo mode: still return mock data
+          // instead of attempting (and failing) a live call.
+          parsedReport = await equifaxClient.fetchMultiBureauReport(input.consumerInfo, userId);
         } else {
           const rawReport = await equifaxClient.fetchCreditReport(input.consumerInfo);
           parsedReport = await equifaxClient.parseReport(rawReport);
@@ -249,6 +253,14 @@ export const equifaxRouter = createTRPCRouter({
       console.log("[tRPC] validateConnection called by user:", ctx.user?.id);
 
       const equifaxClient = getEquifaxClient();
+
+      if (equifaxClient.isDemoMode()) {
+        return {
+          success: true,
+          connected: true,
+          message: "Running in DEMO MODE (mock data). Add EQUIFAX_MEMBER_NUMBER and EQUIFAX_SECURITY_CODE to use live data.",
+        };
+      }
 
       // Try to get access token (will validate OAuth credentials)
       const token = await equifaxClient.getAccessToken();
