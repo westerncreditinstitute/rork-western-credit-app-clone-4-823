@@ -2,7 +2,7 @@ import React from "react";
 import { View, StyleSheet, useColorScheme } from "react-native";
 import { Stack } from "expo-router";
 import { useTheme } from "@react-navigation/native";
-import { TestingDashboard } from "@/components/TestingDashboard";
+import { EnhancedTestingDashboard } from "@/components/EnhancedTestingDashboard";
 import Colors from "@/constants/colors";
 
 export default function TestingDashboardScreen() {
@@ -25,7 +25,7 @@ export default function TestingDashboardScreen() {
         }}
       />
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <TestingDashboard />
+        <EnhancedTestingDashboard />
       </View>
     </>
   );
