@@ -20,6 +20,9 @@ import {
   MessageCircle,
   Download,
   BarChart3,
+  ChevronDown,
+  ChevronUp,
+  MapPin,
 } from "lucide-react-native";
 import Colors from "@/constants/colors";
 import { trpc } from "@/lib/trpc";
@@ -34,6 +37,8 @@ import type {
   ParsedNegativeAccount,
 } from "@/backend/equifax/equifax-client";
 import { generateEquifaxReportPDF } from "@/lib/pdf/equifax-report-pdf";
+import * as Print from "expo-print";
+import * as Sharing from "expo-sharing";
 
 // ============================================================
 // Types
@@ -104,6 +109,16 @@ export default function CreditAnalysisModal({
   const [activeView, setActiveView] = useState<"upload" | "equifax">("upload");
   const [fetchingEquifax, setFetchingEquifax] = useState(false);
   const [equifaxError, setEquifaxError] = useState<string | null>(null);
+  const [exportingPDF, setExportingPDF] = useState(false);
+  // Tracks which negative account (by "bureauKey-accountNumber-idx" key) is
+  // currently expanded to show its full details, including creditor address.
+  const [expandedEquifaxAccount, setExpandedEquifaxAccount] = useState<
+    string | null
+  >(null);
+
+  const toggleEquifaxAccount = useCallback((key: string) => {
+    setExpandedEquifaxAccount((prev) => (prev === key ? null : key));
+  }, []);
   
   // Consumer info for Equifax fetch
   const [consumerInfo, setConsumerInfo] = useState({
@@ -239,38 +254,44 @@ export default function CreditAnalysisModal({
     onClose();
   }, [onClose]);
 
-  // Handle PDF export for Equifax multi-bureau report
-  const handleExportPDF = useCallback(() => {
+  // Handle PDF export for Equifax multi-bureau report.
+  //
+  // Uses expo-print (already a project dependency, same pattern used in
+  // app/certificates.tsx) instead of the browser-only html2pdf.js library,
+  // which was never actually loaded anywhere in the project and always
+  // failed with "PDF export requires html2pdf library." This works on
+  // both web (opens the browser print dialog, which can save as PDF) and
+  // native (generates a real PDF file and opens the native share sheet).
+  const handleExportPDF = useCallback(async () => {
     if (!equifaxReport) return;
 
+    setExportingPDF(true);
     try {
       const html = generateEquifaxReportPDF(equifaxReport);
-      
-      // For web platform, use html2pdf library if available
+
       if (Platform.OS === "web") {
-        const element = document.createElement("div");
-        element.innerHTML = html;
-        
-        // Use html2pdf library (must be available in project)
-        if ((window as any).html2pdf) {
-          (window as any).html2pdf().set({
-            margin: 10,
-            filename: "credit-report.pdf",
-            image: { type: "jpeg", quality: 0.98 },
-            html2canvas: { scale: 2 },
-            jsPDF: { orientation: "portrait", unit: "mm", format: "a4" },
-          }).save();
-        } else {
-          // Fallback: alert user to enable html2pdf
-          alert("PDF export requires html2pdf library. Please add it to your project.");
-        }
+        // On web, Print.printAsync opens the browser's native print
+        // dialog with "Save as PDF" available as a destination.
+        await Print.printAsync({ html });
       } else {
-        // For native platforms, would need different PDF generation approach
-        alert("PDF export is currently available on web. On native, use your system's print-to-PDF feature.");
+        const { uri } = await Print.printToFileAsync({ html });
+
+        const isAvailable = await Sharing.isAvailableAsync();
+        if (isAvailable) {
+          await Sharing.shareAsync(uri, {
+            UTI: ".pdf",
+            mimeType: "application/pdf",
+            dialogTitle: "Credit Report",
+          });
+        } else {
+          alert(`Your report PDF was generated. File location: ${uri}`);
+        }
       }
     } catch (error) {
       console.error("PDF export error:", error);
       alert("Failed to export PDF. Please try again.");
+    } finally {
+      setExportingPDF(false);
     }
   }, [equifaxReport]);
 
@@ -332,25 +353,87 @@ export default function CreditAnalysisModal({
                 </View>
               ) : (
                 <View style={styles.bureauAccountsList}>
-                  {accounts.map((account, idx) => (
-                    <View key={`${account.accountNumber}-${idx}`} style={styles.accountCard}>
-                      <View style={styles.accountCardHeader}>
-                        <Text style={styles.accountCreditor}>{account.creditorName}</Text>
-                        <Text style={styles.accountType}>{account.accountType}</Text>
+                  {accounts.map((account, idx) => {
+                    const accountKey = `${key}-${account.accountNumber}-${idx}`;
+                    const isExpanded = expandedEquifaxAccount === accountKey;
+
+                    return (
+                      <View key={accountKey} style={styles.accountCard}>
+                        <TouchableOpacity
+                          style={styles.accountCardHeader}
+                          onPress={() => toggleEquifaxAccount(accountKey)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`${account.creditorName} details`}
+                        >
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.accountCreditor}>{account.creditorName}</Text>
+                            <Text style={styles.accountNumber}>
+                              {account.accountNumber}
+                            </Text>
+                          </View>
+                          <Text style={styles.accountType}>{account.accountType}</Text>
+                          {isExpanded ? (
+                            <ChevronUp size={16} color={Colors.textLight} />
+                          ) : (
+                            <ChevronDown size={16} color={Colors.textLight} />
+                          )}
+                        </TouchableOpacity>
+
+                        {isExpanded ? (
+                          <View style={styles.accountDetails}>
+                            {account.balance ? (
+                              <Text style={styles.accountBalance}>
+                                Balance: ${account.balance.toLocaleString()}
+                              </Text>
+                            ) : null}
+                            {account.status ? (
+                              <Text style={styles.accountStatus}>Status: {account.status}</Text>
+                            ) : null}
+                            {account.delinquency ? (
+                              <Text style={styles.accountStatus}>
+                                Delinquency: {account.delinquency}
+                              </Text>
+                            ) : null}
+                            {account.dateReported ? (
+                              <Text style={styles.accountStatus}>
+                                Reported: {account.dateReported}
+                              </Text>
+                            ) : null}
+
+                            <View style={styles.addressBox}>
+                              <MapPin size={14} color={Colors.textLight} />
+                              <Text style={styles.addressText}>
+                                {account.creditorAddress
+                                  ? account.creditorAddress
+                                  : "Address not available — please verify before mailing a dispute letter."}
+                              </Text>
+                            </View>
+
+                            {onGenerateLetter ? (
+                              <TouchableOpacity
+                                style={styles.recButton}
+                                onPress={() =>
+                                  onGenerateLetter({
+                                    letterType: "609 Letter",
+                                    creditorName: account.creditorName,
+                                    accountNumber: account.accountNumber,
+                                    furnisherAddress: account.creditorAddress,
+                                  })
+                                }
+                                accessibilityRole="button"
+                                accessibilityLabel={`Prepare dispute letter for ${account.creditorName}`}
+                              >
+                                <FileText size={14} color={Colors.white} />
+                                <Text style={styles.recButtonText}>
+                                  Prepare Dispute Letter
+                                </Text>
+                              </TouchableOpacity>
+                            ) : null}
+                          </View>
+                        ) : null}
                       </View>
-                      <Text style={styles.accountNumber}>
-                        {account.accountNumber}
-                      </Text>
-                      {account.balance && (
-                        <Text style={styles.accountBalance}>
-                          Balance: ${account.balance.toLocaleString()}
-                        </Text>
-                      )}
-                      {account.status && (
-                        <Text style={styles.accountStatus}>Status: {account.status}</Text>
-                      )}
-                    </View>
-                  ))}
+                    );
+                  })}
                 </View>
               )}
             </View>
@@ -361,11 +444,18 @@ export default function CreditAnalysisModal({
         <TouchableOpacity
           style={styles.exportButton}
           onPress={handleExportPDF}
+          disabled={exportingPDF}
           accessibilityRole="button"
           accessibilityLabel="Export report as PDF"
         >
-          <Download size={18} color={Colors.white} />
-          <Text style={styles.exportButtonText}>Export as PDF</Text>
+          {exportingPDF ? (
+            <ActivityIndicator color={Colors.white} size="small" />
+          ) : (
+            <>
+              <Download size={18} color={Colors.white} />
+              <Text style={styles.exportButtonText}>Export as PDF</Text>
+            </>
+          )}
         </TouchableOpacity>
       </>
     );
@@ -988,6 +1078,29 @@ const styles = StyleSheet.create({
   accountStatus: {
     fontSize: 11,
     color: Colors.textLight,
+  },
+  accountDetails: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    gap: 4,
+  },
+  addressBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 6,
+    backgroundColor: Colors.warning + "10",
+    borderRadius: 6,
+    padding: 8,
+    marginTop: 6,
+    marginBottom: 8,
+  },
+  addressText: {
+    flex: 1,
+    fontSize: 11,
+    color: Colors.text,
+    lineHeight: 15,
   },
 
   // Export button

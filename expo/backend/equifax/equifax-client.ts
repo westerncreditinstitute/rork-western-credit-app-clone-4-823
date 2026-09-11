@@ -9,6 +9,7 @@
  */
 
 import { EquifaxAnalytics } from "@/lib/analytics/equifax-analytics";
+import { enrichCreditorAddress } from "@/lib/creditor-addresses";
 
 interface EquifaxOAuthToken {
   access_token: string;
@@ -558,7 +559,16 @@ class EquifaxClient {
         .map((account) => ({
           accountNumber: String(account.accountNumber || account.account_number || "N/A"),
           creditorName: String(account.creditorName || account.creditor_name || "Unknown"),
-          creditorAddress: String(account.creditorAddress || account.creditor_address || ""),
+          // NOTE: Equifax OneView trade line data does NOT include a
+          // furnisher mailing address (only customerName/customerNumber,
+          // an internal Equifax member code). We enrich with a known
+          // creditor address lookup so dispute letters have somewhere to
+          // be mailed; if unknown, this is left undefined and the UI
+          // shows "Address not available" rather than guessing.
+          creditorAddress: enrichCreditorAddress(
+            String(account.creditorName || account.creditor_name || ""),
+            (account.creditorAddress || account.creditor_address) as string | undefined
+          ),
           accountType: this.mapAccountType(String(account.status || "")),
           status: String(account.status || ""),
           delinquency: account.delinquency ? String(account.delinquency) : undefined,
@@ -637,9 +647,16 @@ class EquifaxClient {
     
     for (let i = 0; i < mockNegativeCount; i++) {
       const creditors = mockCreditors[bureau] || [];
+      const mockCreditorName = creditors[i] || `${bureau} Account ${i + 1}`;
       mockNegativeAccounts.push({
         accountNumber: `${Math.random().toString(36).substring(2, 11).toUpperCase()}`,
-        creditorName: creditors[i] || `${bureau} Account ${i + 1}`,
+        creditorName: mockCreditorName,
+        // Demo data includes a realistic mailing address (from the known
+        // creditor lookup table) so the click-to-detail and dispute-letter
+        // prep workflows can be fully tested before real credentials
+        // arrive. Real API data does not include this field (see note in
+        // parseEquifaxReport) — it is enriched the same way there.
+        creditorAddress: enrichCreditorAddress(mockCreditorName, undefined),
         accountType: mockTypes[i % mockTypes.length],
         status: `${mockTypes[i % mockTypes.length].toUpperCase()}: ${Math.floor(Math.random() * 120) + 30} Days Past Due`,
         delinquency: `${Math.floor(Math.random() * 120) + 30} days past due`,
