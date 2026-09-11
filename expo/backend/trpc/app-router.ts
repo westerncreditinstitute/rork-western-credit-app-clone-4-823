@@ -26,6 +26,7 @@ import { leaderboardsRouter } from "./routes/leaderboards";
 import { challengesRouter } from "./routes/challenges";
 import { aiAgentsRouter } from "./routes/ai-agents";
 import { equifaxRouter } from "./routes/equifax";
+import { pushTokensRouter } from "./routes/push-tokens";
 
 export const appRouter = createTRPCRouter({
   example: exampleRouter,
@@ -55,6 +56,7 @@ export const appRouter = createTRPCRouter({
   challenges: challengesRouter,
   aiAgents: aiAgentsRouter,
   equifax: equifaxRouter,
+  pushTokens: pushTokensRouter,
 });
 
 export type AppRouter = typeof appRouter;

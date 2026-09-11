@@ -1,9 +1,10 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import createContextHook from '@nkzw/create-context-hook';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { trpc } from '@/lib/trpc';
+import { trpc, trpcClient } from '@/lib/trpc';
 import { useUser } from './UserContext';
 import { notificationService } from '@/services/NotificationService';
+import { useNotifications } from './NotificationContext';
 
 interface TimelineItem {
   date: string;
@@ -69,6 +70,7 @@ function daysUntil(dateStr: string): number {
 
 export const [DisputesProvider, useDisputes] = createContextHook(() => {
   const { user } = useUser();
+  const { preferences } = useNotifications();
   const [disputes, setDisputes] = useState<Dispute[]>([]);
   // Tracks which (disputeId, alertType) pairs have already triggered a
   // notification this session/device, loaded from AsyncStorage once per
@@ -117,6 +119,15 @@ export const [DisputesProvider, useDisputes] = createContextHook(() => {
     if (!user?.id || !disputesQuery.data) return;
     const userId = user.id;
     const list = disputesQuery.data as Dispute[];
+    // Preferences default to enabled while still loading (matches
+    // DEFAULT_NOTIFICATION_PREFERENCES) so alerts aren't silently
+    // dropped just because the preferences query hasn't resolved yet.
+    // When the user has explicitly turned off "Dispute Alerts" in
+    // Settings > Notifications, this effect still tracks status/deadline
+    // state below (so nothing "catches up" with a flood of alerts the
+    // moment the toggle is turned back on) but skips actually creating
+    // any notification.
+    const alertsEnabled = preferences?.disputeAlerts ?? true;
 
     (async () => {
       try {
@@ -135,12 +146,14 @@ export const [DisputesProvider, useDisputes] = createContextHook(() => {
           if (previousStatus && previousStatus !== dispute.status) {
             const key = `status:${dispute.id}:${dispute.status}:${dispute.lastUpdated}`;
             if (!sent.has(key)) {
-              await notificationService.sendDisputeStatusChangedNotification(
-                userId,
-                dispute.creditor,
-                dispute.id,
-                dispute.status
-              );
+              if (alertsEnabled) {
+                await notificationService.sendDisputeStatusChangedNotification(
+                  userId,
+                  dispute.creditor,
+                  dispute.id,
+                  dispute.status
+                );
+              }
               sent.add(key);
               changed = true;
             }
@@ -156,25 +169,45 @@ export const [DisputesProvider, useDisputes] = createContextHook(() => {
           if (remaining < 0) {
             const key = `overdue:${dispute.id}:${dispute.responseBy}`;
             if (!sent.has(key)) {
-              await notificationService.sendDisputeOverdueNotification(
-                userId,
-                dispute.creditor,
-                dispute.id,
-                dispute.responseBy
-              );
+              if (alertsEnabled) {
+                await notificationService.sendDisputeOverdueNotification(
+                  userId,
+                  dispute.creditor,
+                  dispute.id,
+                  dispute.responseBy
+                );
+                // The in-app notification above only reaches the user
+                // while the app is open/foregrounded. Overdue disputes
+                // are the highest-priority case (an FCRA deadline has
+                // already passed), so this is also the one alert type
+                // routed through a real push notification that can
+                // reach the user's device even if the app is closed.
+                await trpcClient.pushTokens.sendDisputeOverdue
+                  .mutate({
+                    userId,
+                    creditor: dispute.creditor,
+                    disputeId: dispute.id,
+                    responseBy: dispute.responseBy,
+                  })
+                  .catch((err: unknown) => {
+                    console.error('[DisputesContext] Push send for overdue dispute failed:', err);
+                  });
+              }
               sent.add(key);
               changed = true;
             }
           } else if (remaining <= 7) {
             const key = `due-soon:${dispute.id}:${dispute.responseBy}`;
             if (!sent.has(key)) {
-              await notificationService.sendDisputeResponseDueSoonNotification(
-                userId,
-                dispute.creditor,
-                dispute.id,
-                dispute.responseBy,
-                remaining
-              );
+              if (alertsEnabled) {
+                await notificationService.sendDisputeResponseDueSoonNotification(
+                  userId,
+                  dispute.creditor,
+                  dispute.id,
+                  dispute.responseBy,
+                  remaining
+                );
+              }
               sent.add(key);
               changed = true;
             }
@@ -193,7 +226,7 @@ export const [DisputesProvider, useDisputes] = createContextHook(() => {
         console.error('[DisputesContext] Error processing dispute alerts:', error);
       }
     })();
-  }, [user?.id, disputesQuery.data]);
+  }, [user?.id, disputesQuery.data, preferences?.disputeAlerts]);
 
   const createDispute = useCallback(async (disputeData: {
     creditor: string;

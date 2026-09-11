@@ -15,6 +15,8 @@ import { SubscriptionProvider } from "@/contexts/SubscriptionContext";
 import { UserProvider } from "@/contexts/UserContext";
 import { NotificationProvider } from "@/contexts/NotificationContext";
 import { DeferredProviders } from "@/components/DeferredProviders";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
+import { useNotificationResponseRouter } from "@/hooks/useNotificationResponseRouter";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -56,6 +58,14 @@ function useProtectedRoute() {
 function RootLayoutNav() {
   const theme = useTheme();
   useProtectedRoute();
+  // Re-registers this device's push token whenever permission was
+  // already granted in a previous session (no-ops silently if
+  // permission was never granted, or no EAS projectId is configured).
+  usePushNotifications();
+  // Routes the user to the right screen when they tap a push/local
+  // notification (e.g. an overdue-dispute alert opens the Dispute
+  // Tracker directly).
+  useNotificationResponseRouter();
 
   const colors = theme?.colors;
   const isDark = theme?.isDark ?? false;

@@ -6,12 +6,15 @@ import {
   ScrollView,
   TouchableOpacity,
   Switch,
+  ActivityIndicator,
 } from "react-native";
 import { Stack, useRouter } from "expo-router";
-import { ArrowLeft, Bell, Mail, Volume2, Calendar, TrendingUp, BookOpen, Gift } from "lucide-react-native";
+import { ArrowLeft, Bell, Mail, Volume2, Calendar, TrendingUp, BookOpen, Gift, ShieldAlert } from "lucide-react-native";
 import * as Haptics from "expo-haptics";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Card } from "@/components/ui";
+import { useNotifications } from "@/contexts/NotificationContext";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 
 interface NotificationSetting {
   id: string;
@@ -24,6 +27,32 @@ interface NotificationSetting {
 export default function NotificationsScreen() {
   const router = useRouter();
   const { colors } = useTheme();
+  const { preferences, savePreferences } = useNotifications();
+  const {
+    permissionStatus,
+    isRegistering,
+    requestPermission,
+  } = usePushNotifications();
+
+  // Dispute alerts default to "on" while preferences are still loading so
+  // the toggle doesn't flash into the off position on first render.
+  const disputeAlertsEnabled = preferences?.disputeAlerts ?? true;
+
+  const handleToggleDisputeAlerts = async (value: boolean) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      await savePreferences({ disputeAlerts: value });
+      // Turning dispute alerts on is also the natural moment to make sure
+      // the device actually has notification permission granted — without
+      // this the toggle would say "on" while the OS silently drops every
+      // notification because permission was never requested.
+      if (value && permissionStatus !== "granted") {
+        await requestPermission();
+      }
+    } catch (error) {
+      console.error("[NotificationsScreen] Failed to save dispute alert preference:", error);
+    }
+  };
 
   const [pushSettings, setPushSettings] = useState<NotificationSetting[]>([
     {
@@ -136,6 +165,48 @@ export default function NotificationsScreen() {
             />
           </View>
         </Card>
+
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
+            Dispute Tracker Alerts
+          </Text>
+          <Card variant="default" padding="lg">
+            <View style={styles.settingRowSimple}>
+              <View style={[styles.settingIcon, { backgroundColor: colors.error + "15" }]}>
+                <ShieldAlert color={colors.error} size={20} />
+              </View>
+              <View style={styles.settingInfo}>
+                <Text style={[styles.settingTitle, { color: colors.text }]}>Dispute Alerts</Text>
+                <Text style={[styles.settingDesc, { color: colors.textSecondary }]}>
+                  Get notified when a dispute letter is generated, a response deadline is
+                  approaching, or a dispute becomes overdue or changes status.
+                </Text>
+              </View>
+              {isRegistering ? (
+                <ActivityIndicator size="small" color={colors.error} />
+              ) : (
+                <Switch
+                  value={disputeAlertsEnabled}
+                  onValueChange={handleToggleDisputeAlerts}
+                  trackColor={{ false: colors.border, true: colors.error + "60" }}
+                  thumbColor={disputeAlertsEnabled ? colors.error : colors.textLight}
+                />
+              )}
+            </View>
+            {disputeAlertsEnabled && permissionStatus !== "granted" && (
+              <TouchableOpacity
+                style={[styles.permissionBanner, { backgroundColor: colors.warning + "15" }]}
+                onPress={requestPermission}
+              >
+                <Text style={[styles.permissionBannerText, { color: colors.warning }]}>
+                  {permissionStatus === "denied"
+                    ? "Notifications are blocked for this app in your device settings. Enable them to receive dispute alerts even when the app is closed."
+                    : "Tap to allow push notifications so overdue and deadline dispute alerts can reach you outside the app."}
+                </Text>
+              </TouchableOpacity>
+            )}
+          </Card>
+        </View>
 
         {masterPush && (
           <View style={styles.section}>
@@ -341,5 +412,15 @@ const createStyles = (colors: any) =>
     },
     settingDesc: {
       fontSize: 12,
+    },
+    permissionBanner: {
+      marginTop: 12,
+      padding: 12,
+      borderRadius: 10,
+    },
+    permissionBannerText: {
+      fontSize: 12,
+      lineHeight: 17,
+      fontWeight: "600" as const,
     },
   });

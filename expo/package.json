@@ -33,6 +33,7 @@
     "expo-clipboard": "~8.0.8",
     "expo-constants": "~18.0.14",
     "expo-crypto": "~15.0.9",
+    "expo-device": "~8.0.10",
     "expo-document-picker": "~14.0.8",
     "expo-file-system": "~19.0.24",
     "expo-font": "~14.0.12",
@@ -42,6 +43,7 @@
     "expo-linear-gradient": "~15.0.8",
     "expo-linking": "~8.0.12",
     "expo-location": "~19.0.8",
+    "expo-notifications": "~0.32.17",
     "expo-print": "~15.0.8",
     "expo-router": "~6.0.24",
     "expo-screen-capture": "~8.0.10",
@@ -74,15 +76,15 @@
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
+    "@hono/node-server": "^2.1.1",
     "@types/react": "~19.1.10",
+    "@types/ws": "^8.5.13",
+    "dotenv": "^16.4.7",
     "eslint": "^9.31.0",
     "eslint-config-expo": "~10.0.0",
-    "typescript": "~5.9.2",
-    "@hono/node-server": "^2.1.1",
     "tsx": "^4.23.13",
-    "ws": "^8.18.0",
-    "@types/ws": "^8.5.13",
-    "dotenv": "^16.4.7"
+    "typescript": "~5.9.2",
+    "ws": "^8.18.0"
   },
   "private": true
 }

@@ -145,6 +145,10 @@ class NotificationService {
         marketplace_auction_won: 0,
         marketplace_auction_ended: 0,
         marketplace_listing_expired: 0,
+        dispute_letter_generated: 0,
+        dispute_response_due_soon: 0,
+        dispute_overdue: 0,
+        dispute_status_changed: 0,
         system: 0,
       };
 
