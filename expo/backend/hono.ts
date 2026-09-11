@@ -9,6 +9,11 @@ import { getSystemStatus } from "./system-status";
 const app = new Hono();
 
 app.use("*", cors());
+app.use("*", async (c, next) => {
+  console.log("[Hono] Incoming request:", c.req.method, c.req.url);
+  console.log("[Hono] Authorization header:", c.req.header("authorization") ? "PRESENT" : "MISSING");
+  await next();
+});
 
 // The app calls `{API_BASE_URL}/api/trpc/*`. Depending on how traffic reaches
 // this server (edge proxy may or may not strip the `/api` prefix) the path can
