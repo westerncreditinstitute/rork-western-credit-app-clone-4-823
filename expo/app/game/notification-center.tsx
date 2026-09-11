@@ -35,6 +35,8 @@ import {
   Award,
   Clock,
   XCircle,
+  FileText,
+  RefreshCw,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -58,6 +60,10 @@ const NOTIFICATION_ICONS: Record<NotificationType, React.ComponentType<any>> = {
   marketplace_auction_won: Award,
   marketplace_auction_ended: Clock,
   marketplace_listing_expired: XCircle,
+  dispute_letter_generated: FileText,
+  dispute_response_due_soon: Clock,
+  dispute_overdue: AlertTriangle,
+  dispute_status_changed: RefreshCw,
   system: Bell,
 };
 

@@ -39,6 +39,7 @@ import type {
 import { generateEquifaxReportPDF } from "@/lib/pdf/equifax-report-pdf";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
+import { determineLetterStrategyFromAccountType } from "@/lib/dispute-letter-strategy";
 
 // ============================================================
 // Types
@@ -71,6 +72,10 @@ export interface CreditAnalysisModalProps {
     creditorName: string;
     accountNumber: string;
     furnisherAddress?: string;
+    /** AI-determined legal rationale for the recommended letter type, so
+     *  the Credit Repair Tool can show WHY this letter was picked instead
+     *  of asking the user to choose one themselves. */
+    rationale?: string;
   }) => void;
   /** Continue the conversation about this analysis in chat. */
   onDiscussInChat?: (analysis: CreditAnalysisResult) => void;
@@ -412,14 +417,24 @@ export default function CreditAnalysisModal({
                             {onGenerateLetter ? (
                               <TouchableOpacity
                                 style={styles.recButton}
-                                onPress={() =>
+                                onPress={() => {
+                                  // Automated AI Dispute logic determines the
+                                  // correct letter type from the account's
+                                  // negative classification instead of the
+                                  // user picking one manually.
+                                  const strategy =
+                                    determineLetterStrategyFromAccountType(
+                                      account.accountType,
+                                      `${account.status || ""} ${account.delinquency || ""}`,
+                                    );
                                   onGenerateLetter({
-                                    letterType: "609 Letter",
+                                    letterType: strategy.letterType,
                                     creditorName: account.creditorName,
                                     accountNumber: account.accountNumber,
                                     furnisherAddress: account.creditorAddress,
-                                  })
-                                }
+                                    rationale: strategy.rationale,
+                                  });
+                                }}
                                 accessibilityRole="button"
                                 accessibilityLabel={`Prepare dispute letter for ${account.creditorName}`}
                               >
@@ -802,6 +817,7 @@ export default function CreditAnalysisModal({
                               creditorName: rec.creditor,
                               accountNumber: rec.accountNumber,
                               furnisherAddress: rec.furnisherAddress,
+                              rationale: rec.rationale,
                             })
                           }
                           accessibilityRole="button"

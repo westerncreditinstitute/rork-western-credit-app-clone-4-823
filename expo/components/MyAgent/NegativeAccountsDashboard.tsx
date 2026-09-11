@@ -57,6 +57,7 @@ export interface NegativeAccountsDashboardProps {
     creditorName: string;
     accountNumber: string;
     furnisherAddress?: string;
+    rationale?: string;
   }) => void;
 }
 
@@ -342,6 +343,7 @@ export default function NegativeAccountsDashboard({
                                             creditorName: acct.creditor,
                                             accountNumber: acct.accountNumber,
                                             furnisherAddress: acct.furnisherAddress,
+                                            rationale: acct.rationale,
                                           })
                                         }
                                         accessibilityRole="button"

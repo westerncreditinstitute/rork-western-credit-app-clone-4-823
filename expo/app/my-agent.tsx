@@ -116,6 +116,13 @@ function MyAgentScreenInner({
     creditorName?: string;
     accountNumber?: string;
     furnisherAddress?: string;
+    /** AI-determined rationale for why this letter type was chosen, shown
+     *  in the Credit Repair Tool instead of a manual letter-type picker. */
+    rationale?: string;
+    /** True when the letter type was chosen automatically by the AI
+     *  Dispute logic rather than typed/selected by the user, so the
+     *  Credit Repair Tool can show an "AI Recommended" badge. */
+    autoDetermined?: boolean;
   } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -313,16 +320,20 @@ function MyAgentScreenInner({
     setCreditRepairVisible(true);
   }, []);
 
-  /** Jump from an analysis recommendation straight into letter generation. */
+  /** Jump from an analysis recommendation straight into letter generation.
+   *  The letter type is already auto-determined by the AI Dispute logic
+   *  (see determineLetterStrategyFromAccountType / analyzeCreditAccounts)
+   *  before this fires, so the user never has to pick one manually. */
   const handleAnalysisGenerateLetter = useCallback(
     (data: {
       letterType: string;
       creditorName: string;
       accountNumber: string;
       furnisherAddress?: string;
+      rationale?: string;
     }) => {
       setCreditAnalysisVisible(false);
-      setCreditRepairPrefill(data);
+      setCreditRepairPrefill({ ...data, autoDetermined: true });
       setTimeout(() => setCreditRepairVisible(true), 300);
     },
     [],
@@ -335,9 +346,10 @@ function MyAgentScreenInner({
       creditorName: string;
       accountNumber: string;
       furnisherAddress?: string;
+      rationale?: string;
     }) => {
       setNegativeDashboardVisible(false);
-      setCreditRepairPrefill(data);
+      setCreditRepairPrefill({ ...data, autoDetermined: true });
       setTimeout(() => setCreditRepairVisible(true), 300);
     },
     [],

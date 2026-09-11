@@ -93,6 +93,14 @@ export interface CreditRepairModalProps {
     /** Furnisher/creditor mailing address, when known (e.g. parsed from
      *  the credit report). Auto-populates the address field below. */
     furnisherAddress?: string;
+    /** Legal rationale for why this letter type fits the negative item,
+     *  produced by the AI Dispute logic. Shown instead of a manual
+     *  letter-type picker when `autoDetermined` is true. */
+    rationale?: string;
+    /** True when the letter type was chosen automatically by the AI
+     *  Dispute logic (negative-account "Prepare Dispute Letter" flow)
+     *  rather than requiring the user to pick one from the dropdown. */
+    autoDetermined?: boolean;
   } | null;
   /** Called after a letter is generated and saved as a dispute. `disputeId`
    *  is undefined when the letter generated successfully but the save to
@@ -123,6 +131,13 @@ export default function CreditRepairModal({
   const [generatedLetter, setGeneratedLetter] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // AI Dispute logic rationale for the currently selected letter type, and
+  // whether the type was picked automatically rather than by the user.
+  // When autoDetermined is true, the manual dropdown stays collapsed by
+  // default and an "AI Recommended" explanation is shown instead — the
+  // user can still tap "Change letter type" to override if they want to.
+  const [rationale, setRationale] = useState<string | null>(null);
+  const [autoDetermined, setAutoDetermined] = useState(false);
 
   // ── Load the user's saved return address, once per user ──────
   useEffect(() => {
@@ -162,6 +177,14 @@ export default function CreditRepairModal({
       // source account has none) so a stale address from a previously
       // generated letter never carries over onto an unrelated creditor.
       setFurnisherAddress(prefillData.furnisherAddress || "");
+      // Sync the AI Dispute logic's recommendation state. Reset both when
+      // not provided so a previous auto-determined letter's rationale
+      // never carries over onto an unrelated, manually-entered letter.
+      setRationale(prefillData.rationale || null);
+      setAutoDetermined(!!prefillData.autoDetermined);
+      // Fully automated by default: keep the manual picker collapsed
+      // whenever the AI already chose a letter type for this account.
+      setShowTypePicker(false);
     }
     if (!visible) {
       setGeneratedLetter(null);
@@ -266,25 +289,55 @@ export default function CreditRepairModal({
 
           {/* ── Letter type selector ───────────────────────────── */}
           <Text style={styles.fieldLabel}>Letter Type</Text>
-          <TouchableOpacity
-            style={styles.dropdownButton}
-            onPress={() => setShowTypePicker(!showTypePicker)}
-            accessibilityRole="button"
-            accessibilityLabel={`Selected letter type: ${selectedType?.label}`}
-            accessibilityHint="Tap to choose a different letter type"
-          >
-            <View style={{ flex: 1 }}>
-              <Text style={styles.dropdownLabel}>{selectedType?.label}</Text>
-              <Text style={styles.dropdownDesc} numberOfLines={showTypePicker ? undefined : 1}>
-                {selectedType?.description}
-              </Text>
+
+          {autoDetermined ? (
+            // Fully automated: the AI Dispute logic already determined the
+            // correct letter type from this account's negative status, so
+            // no manual selection is required. The rationale explains why,
+            // and "Change letter type" is available for the rare case the
+            // user wants to override the recommendation.
+            <View style={styles.aiRecommendedBox}>
+              <View style={styles.aiRecommendedHeader}>
+                <View style={styles.aiBadge}>
+                  <Text style={styles.aiBadgeText}>AI RECOMMENDED</Text>
+                </View>
+                <Text style={styles.dropdownLabel}>{selectedType?.label}</Text>
+              </View>
+              {rationale ? (
+                <Text style={styles.aiRationaleText}>{rationale}</Text>
+              ) : (
+                <Text style={styles.dropdownDesc}>{selectedType?.description}</Text>
+              )}
+              <TouchableOpacity
+                onPress={() => setShowTypePicker(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Change letter type"
+                style={styles.changeTypeButton}
+              >
+                <Text style={styles.changeTypeText}>Change letter type</Text>
+              </TouchableOpacity>
             </View>
-            <ChevronDown
-              size={20}
-              color={Colors.textLight}
-              style={{ transform: [{ rotate: showTypePicker ? "180deg" : "0deg" }] }}
-            />
-          </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={styles.dropdownButton}
+              onPress={() => setShowTypePicker(!showTypePicker)}
+              accessibilityRole="button"
+              accessibilityLabel={`Selected letter type: ${selectedType?.label}`}
+              accessibilityHint="Tap to choose a different letter type"
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={styles.dropdownLabel}>{selectedType?.label}</Text>
+                <Text style={styles.dropdownDesc} numberOfLines={showTypePicker ? undefined : 1}>
+                  {selectedType?.description}
+                </Text>
+              </View>
+              <ChevronDown
+                size={20}
+                color={Colors.textLight}
+                style={{ transform: [{ rotate: showTypePicker ? "180deg" : "0deg" }] }}
+              />
+            </TouchableOpacity>
+          )}
 
           {showTypePicker ? (
             <View style={styles.typeList}>
@@ -298,6 +351,11 @@ export default function CreditRepairModal({
                   onPress={() => {
                     setLetterType(type.id);
                     setShowTypePicker(false);
+                    // The user is now manually overriding the AI's
+                    // recommendation, so the rationale no longer applies
+                    // and the "AI Recommended" badge should disappear.
+                    setAutoDetermined(false);
+                    setRationale(null);
                   }}
                   accessibilityRole="button"
                   accessibilityLabel={type.label}
@@ -530,6 +588,46 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.textSecondary,
     marginTop: 2,
+  },
+  aiRecommendedBox: {
+    backgroundColor: Colors.primaryLight + "15",
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: Colors.primary + "40",
+  },
+  aiRecommendedHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 6,
+  },
+  aiBadge: {
+    backgroundColor: Colors.primary,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  aiBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Colors.white,
+    letterSpacing: 0.5,
+  },
+  aiRationaleText: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: Colors.textSecondary,
+  },
+  changeTypeButton: {
+    marginTop: 10,
+    alignSelf: "flex-start",
+  },
+  changeTypeText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: Colors.primary,
+    textDecorationLine: "underline",
   },
   typeList: {
     backgroundColor: Colors.surface,

@@ -607,6 +607,44 @@ async function fetchUserDisputes(userId: string) {
 }
 
 // ============================================================
+// Helper: Proactive notifications for the Dispute Tracker
+// ============================================================
+// Fired server-side (rather than only client-side) so a notification is
+// logged no matter which entry point generated the letter — the button
+// flow in CreditAnalysisModal/NegativeAccountsDashboard, the manual
+// Credit Repair Tool, or the AI chat agent's generate_dispute_letter tool
+// call all funnel through here. Never throws: a failed notification
+// insert must not block or fail the letter generation it's reporting on.
+async function notifyDisputeLetterGenerated(params: {
+  userId: string;
+  creditor: string;
+  letterType: string;
+  disputeId?: string;
+}): Promise<void> {
+  try {
+    const { error } = await supabase.from("notifications").insert({
+      user_id: params.userId,
+      type: "dispute_letter_generated",
+      title: "Dispute Letter Generated",
+      body: `Your ${params.letterType} for ${params.creditor} was generated and logged in your Dispute Tracker.`,
+      data: {
+        creditor: params.creditor,
+        letterType: params.letterType,
+        disputeId: params.disputeId,
+        actionUrl: "/dispute-tracker",
+      },
+      priority: "normal",
+      is_read: false,
+    });
+    if (error) {
+      console.error("[AI Agents] notifyDisputeLetterGenerated error:", error);
+    }
+  } catch (err) {
+    console.error("[AI Agents] notifyDisputeLetterGenerated threw:", err);
+  }
+}
+
+// ============================================================
 // Helper: Generate dispute letter (tool: generate_dispute_letter)
 // ============================================================
 
@@ -1369,6 +1407,16 @@ async function executeTool(
         .select("*")
         .single();
 
+      // Proactively alert the user, just like the button-triggered
+      // generateLetter mutation does, so every entry point behaves
+      // identically for the AI Credit Repair Agent's tracking/alerts.
+      await notifyDisputeLetterGenerated({
+        userId,
+        creditor: creditorName,
+        letterType: letter.letterType,
+        disputeId: savedDispute?.id,
+      });
+
       return {
         toolName: "generate_dispute_letter",
         result: {
@@ -1851,6 +1899,16 @@ export const aiAgentsRouter = createTRPCRouter({
           disputeId: undefined,
         };
       }
+
+      // Let the AI Credit Repair Agent's alert system know a letter now
+      // exists in the Dispute Tracker, so the user is proactively notified
+      // instead of having to check the app themselves.
+      await notifyDisputeLetterGenerated({
+        userId: input.userId,
+        creditor: input.creditorName,
+        letterType: letter.letterType,
+        disputeId: savedDispute?.id,
+      });
 
       return {
         success: true,

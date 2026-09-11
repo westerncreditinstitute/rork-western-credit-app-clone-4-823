@@ -562,6 +562,105 @@ class NotificationService {
       priority: 'normal',
     });
   }
+
+  // ============================================================
+  // AI Credit Repair Agent / Dispute Tracker notifications
+  // ============================================================
+  // These let the Dispute Tracker proactively alert the user instead of
+  // requiring them to open the app and check status themselves — the
+  // AI Credit Repair Agent (and the letter-generation flows it powers)
+  // fires these at the moments below:
+  //   1. Immediately after a dispute letter is generated & saved.
+  //   2. When a dispute's 30-day response deadline is approaching.
+  //   3. When a dispute's response deadline has passed with no update.
+  //   4. When a dispute's status changes (e.g. resolved, rejected).
+
+  async sendDisputeLetterGeneratedNotification(
+    userId: string,
+    creditor: string,
+    letterType: string,
+    disputeId?: string
+  ): Promise<void> {
+    await this.createNotification({
+      userId,
+      type: 'dispute_letter_generated',
+      title: 'Dispute Letter Generated',
+      body: `Your ${letterType} for ${creditor} was generated and logged in your Dispute Tracker.`,
+      data: {
+        creditor,
+        letterType,
+        disputeId,
+        actionUrl: '/dispute-tracker',
+      },
+      priority: 'normal',
+    });
+  }
+
+  async sendDisputeResponseDueSoonNotification(
+    userId: string,
+    creditor: string,
+    disputeId: string,
+    responseBy: string,
+    daysRemaining: number
+  ): Promise<void> {
+    await this.createNotification({
+      userId,
+      type: 'dispute_response_due_soon',
+      title: 'Dispute Response Due Soon',
+      body: `${creditor}'s response deadline is in ${daysRemaining} day${daysRemaining === 1 ? '' : 's'} (${responseBy}). Review your Dispute Tracker for next steps.`,
+      data: {
+        creditor,
+        disputeId,
+        responseBy,
+        daysRemaining,
+        actionUrl: '/dispute-tracker',
+      },
+      priority: 'high',
+    });
+  }
+
+  async sendDisputeOverdueNotification(
+    userId: string,
+    creditor: string,
+    disputeId: string,
+    responseBy: string
+  ): Promise<void> {
+    await this.createNotification({
+      userId,
+      type: 'dispute_overdue',
+      title: 'Dispute Response Overdue',
+      body: `${creditor} has not responded by the expected date (${responseBy}). Under the FCRA, an unanswered dispute past 30 days may need to be escalated — check your Dispute Tracker.`,
+      data: {
+        creditor,
+        disputeId,
+        responseBy,
+        actionUrl: '/dispute-tracker',
+      },
+      priority: 'urgent',
+    });
+  }
+
+  async sendDisputeStatusChangedNotification(
+    userId: string,
+    creditor: string,
+    disputeId: string,
+    newStatus: string
+  ): Promise<void> {
+    const statusLabel = newStatus.replace(/-/g, ' ');
+    await this.createNotification({
+      userId,
+      type: 'dispute_status_changed',
+      title: 'Dispute Status Updated',
+      body: `Your dispute with ${creditor} is now marked as "${statusLabel}".`,
+      data: {
+        creditor,
+        disputeId,
+        status: newStatus,
+        actionUrl: '/dispute-tracker',
+      },
+      priority: newStatus === 'resolved' ? 'high' : 'normal',
+    });
+  }
 }
 
 export const notificationService = new NotificationService();

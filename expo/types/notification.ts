@@ -15,6 +15,10 @@ export type NotificationType =
   | 'marketplace_auction_won'
   | 'marketplace_auction_ended'
   | 'marketplace_listing_expired'
+  | 'dispute_letter_generated'
+  | 'dispute_response_due_soon'
+  | 'dispute_overdue'
+  | 'dispute_status_changed'
   | 'system';
 
 export type NotificationPriority = 'low' | 'normal' | 'high' | 'urgent';
@@ -44,6 +48,12 @@ export interface NotificationData {
   sellerId?: string;
   bidAmount?: number;
   winningBid?: number;
+  disputeId?: string;
+  creditor?: string;
+  letterType?: string;
+  status?: string;
+  responseBy?: string;
+  daysRemaining?: number;
   [key: string]: unknown;
 }
 
@@ -71,6 +81,7 @@ export interface NotificationPreferences {
   achievements: boolean;
   marketplaceAlerts: boolean;
   auctionAlerts: boolean;
+  disputeAlerts: boolean;
   systemNotifications: boolean;
   soundEnabled: boolean;
   vibrationEnabled: boolean;
@@ -110,6 +121,7 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   achievements: true,
   marketplaceAlerts: true,
   auctionAlerts: true,
+  disputeAlerts: true,
   systemNotifications: true,
   soundEnabled: true,
   vibrationEnabled: true,
@@ -132,6 +144,10 @@ export const NOTIFICATION_ICONS: Record<NotificationType, string> = {
   marketplace_auction_won: 'Award',
   marketplace_auction_ended: 'Clock',
   marketplace_listing_expired: 'XCircle',
+  dispute_letter_generated: 'FileText',
+  dispute_response_due_soon: 'Clock',
+  dispute_overdue: 'AlertTriangle',
+  dispute_status_changed: 'RefreshCw',
   system: 'Bell',
 };
 
@@ -152,5 +168,9 @@ export const NOTIFICATION_COLORS: Record<NotificationType, string> = {
   marketplace_auction_won: '#10B981',
   marketplace_auction_ended: '#6B7280',
   marketplace_listing_expired: '#EF4444',
+  dispute_letter_generated: '#3B82F6',
+  dispute_response_due_soon: '#F59E0B',
+  dispute_overdue: '#EF4444',
+  dispute_status_changed: '#10B981',
   system: '#6366F1',
 };
