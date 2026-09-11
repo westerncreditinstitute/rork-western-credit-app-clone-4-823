@@ -122,21 +122,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       if (!isSupabaseConfigured) {
         console.log('[Auth] Using demo registration mode');
-        const demoUser: AuthUser = {
-          id: `demo-${Date.now()}`,
-          name: userData.name,
-          email: userData.email.toLowerCase().trim(),
-          phone: userData.phone || '',
-          avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face',
-          memberSince: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
-          role: 'Student',
-          coursesCompleted: 0,
-          totalEarnings: 0,
-          referrals: 0,
-          createdAt: new Date().toISOString(),
-        };
-        
+        const demoUser = createDemoUser(userData.email, userData.name);
+        console.log('[Auth] About to save demo user to AsyncStorage:', demoUser);
         await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(demoUser));
+        console.log('[Auth] Demo user saved, verifying:', await AsyncStorage.getItem(AUTH_STORAGE_KEY));
         setUser(demoUser);
         setIsAuthenticated(true);
         console.log('[Auth] Demo user registered:', demoUser.email);
@@ -180,21 +169,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             backendErrorMessage.includes('timed out') ||
             backendErrorMessage.includes('fetch')) {
           console.log('[Auth] Network error detected, falling back to demo mode');
-          const demoUser: AuthUser = {
-            id: `demo-${Date.now()}`,
-            name: userData.name,
-            email: userData.email.toLowerCase().trim(),
-            phone: userData.phone || '',
-            avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face',
-            memberSince: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
-            role: 'Student',
-            coursesCompleted: 0,
-            totalEarnings: 0,
-            referrals: 0,
-            createdAt: new Date().toISOString(),
-          };
-          
+          const demoUser = createDemoUser(userData.email, userData.name);
+          console.log('[Auth] About to save demo user to AsyncStorage:', demoUser);
           await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(demoUser));
+          console.log('[Auth] Demo user saved, verifying:', await AsyncStorage.getItem(AUTH_STORAGE_KEY));
           setUser(demoUser);
           setIsAuthenticated(true);
           console.log('[Auth] Demo user registered (fallback):', demoUser.email);
@@ -223,8 +201,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const createDemoUser = useCallback((email: string, name?: string): AuthUser => {
+    // Generate a valid UUID-like format for demo users
+    const uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      const r = Math.random() * 16 | 0;
+      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+    
     return {
-      id: `demo-${Date.now()}`,
+      id: uuid,
       name: name || email.split('@')[0] || 'Demo User',
       email: email.toLowerCase().trim(),
       phone: '',
