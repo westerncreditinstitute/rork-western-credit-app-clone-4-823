@@ -21,6 +21,7 @@ import {
   ChevronRight,
   Shield,
   Crown,
+  Beaker,
 } from "lucide-react-native";
 import Colors from "@/constants/colors";
 import { useSubscription } from "@/contexts/SubscriptionContext";
@@ -137,6 +138,18 @@ export default function MoreScreen() {
       icon: <Bell color={Colors.primary} size={24} />,
       route: "/notifications",
     },
+    ...(process.env.EXPO_PUBLIC_TESTING_MODE === "true"
+      ? [
+          {
+            id: "testing-dashboard",
+            label: "Testing Dashboard",
+            description: "Create test users and disputes for local testing",
+            icon: <Beaker color={Colors.primary} size={24} />,
+            route: "/testing-dashboard",
+            badge: "DEV",
+          },
+        ]
+      : []),
   ];
 
   const adminTools: MenuItem[] = isAdmin
