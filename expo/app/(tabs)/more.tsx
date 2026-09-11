@@ -47,6 +47,7 @@ export default function MoreScreen() {
   // (or .env) to preview ACE-1 gated features without a paid subscription.
   // Leave it unset/false in production so real gating applies.
   const unlockForTesting = process.env.EXPO_PUBLIC_UNLOCK_ACE1 === "true";
+  const testingModeEnabled = process.env.EXPO_PUBLIC_TESTING_MODE === "true";
 
   const isACE1 =
     unlockForTesting || tier === "ace1_student" || tier === "cso_affiliate";
@@ -138,7 +139,7 @@ export default function MoreScreen() {
       icon: <Bell color={Colors.primary} size={24} />,
       route: "/notifications",
     },
-    ...(process.env.EXPO_PUBLIC_TESTING_MODE === "true"
+    ...(testingModeEnabled
       ? [
           {
             id: "testing-dashboard",
