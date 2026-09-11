@@ -31,6 +31,7 @@ import Colors from '@/constants/colors';
 import { testingService } from '@/services/TestingService';
 import { useDisputes } from '@/contexts/DisputesContext';
 import { useUser } from '@/contexts/UserContext';
+import { useTestingDashboard } from '@/hooks/useTestingDashboard';
 import { Beaker, ChevronDown, ChevronUp, AlertCircle, CheckCircle } from 'lucide-react-native';
 
 interface MockEquifaxCredentials {
@@ -173,6 +174,10 @@ export const EnhancedTestingDashboard = () => {
   const { colors } = useTheme();
   const { user } = useUser();
   const { disputes } = useDisputes();
+  const testing = useTestingDashboard();
+  
+  // Current test user
+  const [currentTestUser, setCurrentTestUser] = useState<any | null>(null);
 
   // UI State
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['overview']));
@@ -240,22 +245,22 @@ export const EnhancedTestingDashboard = () => {
       return;
     }
 
-    setIsLoading(true);
     try {
-      const newUser = await testingService.createTestUser({
+      const newUser = await testing.createTestUser({
         name: userName,
         email: userEmail,
-        phone: '',
+        role: userRole as 'Student' | 'CSO' | 'Affiliate' | 'Admin',
       });
 
-      Alert.alert('Success', `Test user created!\n\nName: ${newUser.name}\nEmail: ${newUser.email}\nRole: ${userRole}`);
+      setCurrentTestUser(newUser);
+      Alert.alert('Success', `Test user created in database!\n\nName: ${newUser.name}\nEmail: ${newUser.email}\nID: ${newUser.id}\nRole: ${userRole}`);
       setShowUserModal(false);
       setCurrentStep('equifax');
+      setUserName('');
+      setUserEmail('');
       await loadStats();
     } catch (error) {
       Alert.alert('Error', `Failed to create test user: ${error}`);
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -307,18 +312,42 @@ export const EnhancedTestingDashboard = () => {
     : [];
 
   const handleGenerateLetter = (accountNumber: string) => {
+    if (!currentTestUser) {
+      Alert.alert('Error', 'Please create a test user first');
+      return;
+    }
+
     const account = filteredAccounts.find(a => a.accountNumber === accountNumber);
     if (!account) return;
 
     Alert.alert(
       'Generate Letter',
-      `Generate dispute letter for ${account.creditorName}?\n\nAccount: ${account.accountNumber}\nBalance: $${account.balance}\nBureau: ${account.bureau}`,
+      `Generate dispute letter for ${account.creditorName}?\n\nAccount: ${accountNumber}\nBalance: $${account.balance}\nBureau: ${account.bureau}`,
       [
         {
           text: 'Generate',
-          onPress: () => {
-            Alert.alert('Success', `Dispute letter generated for ${account.creditorName}!`);
-            setCurrentStep('agent');
+          onPress: async () => {
+            try {
+              const letterContent = `DISPUTE LETTER\n\nDate: ${new Date().toLocaleDateString()}\n\nTo: ${account.creditorName}\n${account.creditorAddress}\n\nRe: Dispute of Account ${accountNumber}\n\nDear Sir or Madam:\n\nI am writing to formally dispute the above-referenced account on my credit report. This account contains inaccurate information and should be corrected or deleted.\n\nPlease investigate this matter and provide me with written notification of your findings.\n\nSincerely,\n${currentTestUser.name}`;
+
+              const dispute = await testing.createTestDispute({
+                userId: currentTestUser.id,
+                creditor: account.creditorName,
+                creditorAddress: account.creditorAddress,
+                accountNumber: accountNumber,
+                balance: account.balance,
+                accountType: account.accountType,
+                status: account.status,
+                bureau: account.bureau,
+                letterContent: letterContent,
+                notes: `Generated via Testing Dashboard on ${new Date().toLocaleString()}`,
+              });
+
+              Alert.alert('Success', `Dispute letter generated and saved!\n\nDispute ID: ${dispute.id}\n\nThe dispute has been saved to your tracker.`);
+              setCurrentStep('agent');
+            } catch (error) {
+              Alert.alert('Error', `Failed to generate letter: ${error}`);
+            }
           },
         },
         { text: 'Cancel', onPress: () => {} },

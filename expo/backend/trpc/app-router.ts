@@ -4,6 +4,7 @@ import { videosRouter } from "./routes/videos";
 import { documentsRouter } from "./routes/documents";
 import { avatarsRouter } from "./routes/avatars";
 import { disputesRouter } from "./routes/disputes";
+import { testingRouter } from "./routes/testing";
 import { usersRouter } from "./routes/users";
 import { progressRouter } from "./routes/progress";
 import { providersRouter } from "./routes/providers";
@@ -57,6 +58,7 @@ export const appRouter = createTRPCRouter({
   aiAgents: aiAgentsRouter,
   equifax: equifaxRouter,
   pushTokens: pushTokensRouter,
+  testing: testingRouter,
 });
 
 export type AppRouter = typeof appRouter;
