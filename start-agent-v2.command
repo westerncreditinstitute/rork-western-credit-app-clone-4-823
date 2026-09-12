@@ -1,10 +1,11 @@
 #!/bin/bash
 
 # ============================================================================
-# Western Credit AI Dispute Assistant - Start Agent (v2 - Fixed timing)
+# Western Credit AI Dispute Assistant - Start Agent (v2 - Auto-Update)
 # ============================================================================
-# This script starts both the backend server and Expo web server with proper
-# initialization sequencing to prevent connection errors.
+# This script automatically pulls latest updates from GitHub, then starts
+# both the backend server and Expo web server with proper initialization
+# sequencing to prevent connection errors.
 
 # Always use the home directory rork823 folder
 SCRIPT_DIR="$HOME/rork823"
@@ -15,6 +16,19 @@ if [ ! -d "$SCRIPT_DIR" ]; then
     read -p "Press Enter to close..."
     exit 1
 fi
+
+# ============================================================================
+# AUTO-UPDATE FROM GITHUB (Automatic Deployment)
+# ============================================================================
+
+# Call the automatic update & deploy script
+if [ -f "$SCRIPT_DIR/expo/scripts/auto-deploy-updates.sh" ]; then
+    bash "$SCRIPT_DIR/expo/scripts/auto-deploy-updates.sh"
+else
+    echo "⚠️  Auto-deploy script not found. Skipping automatic updates."
+fi
+
+echo ""
 
 # Colors
 GREEN='\033[0;32m'
