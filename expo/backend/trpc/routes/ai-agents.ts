@@ -594,7 +594,17 @@ async function fetchUserDisputes(userId: string) {
     return { disputes: [], summary: "Unable to retrieve disputes at this time." };
   }
 
-  const disputes = data || [];
+  const disputes = (data || []).map((d: any) => ({
+    id: d.id,
+    creditor: d.creditor,
+    accountNumber: d.account_number,
+    disputeType: d.dispute_type,
+    dateSent: d.date_sent,
+    status: d.status,
+    lastUpdated: d.last_updated,
+    responseBy: d.response_by,
+  }));
+
   const open = disputes.filter(
     (d: any) => d.status === "sent" || d.status === "in-progress"
   ).length;
@@ -1057,6 +1067,16 @@ async function callAIBackend(params: {
     }>;
     creditScore?: number;
   };
+  disputes?: Array<{
+    id: string;
+    creditor: string;
+    accountNumber: string;
+    disputeType: string;
+    dateSent: string;
+    status: 'sent' | 'in-progress' | 'resolved' | 'rejected';
+    lastUpdated: string;
+    responseBy: string;
+  }>;
   userId?: string;
 }): Promise<{ response: string; toolCalls: ToolCall[] }> {
   const startTime = Date.now();
@@ -1104,6 +1124,72 @@ IMPORTANT: You have access to the user's negative accounts above. When appropria
       params.equifaxReport.totalAccounts,
       params.userId
     );
+  }
+
+  // If disputes data is provided, add it to the system context
+  if (params.disputes && params.disputes.length > 0) {
+    const active = params.disputes.filter(d => d.status === 'sent' || d.status === 'in-progress');
+    const resolved = params.disputes.filter(d => d.status === 'resolved');
+    const rejected = params.disputes.filter(d => d.status === 'rejected');
+    
+    // Calculate which disputes are approaching their 30-day deadline
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const daysUntilDeadline = (dateStr: string) => {
+      if (!dateStr) return Infinity;
+      const target = new Date(dateStr);
+      target.setHours(0, 0, 0, 0);
+      return Math.floor((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    };
+    
+    const dueWithin7Days = active.filter(d => {
+      const days = daysUntilDeadline(d.responseBy);
+      return days >= 0 && days <= 7;
+    });
+    
+    const overdueDisputes = active.filter(d => daysUntilDeadline(d.responseBy) < 0);
+    
+    const disputesContext = `
+
+DISPUTE TRACKER STATUS (Real-time from your account):
+- Total Disputes: ${params.disputes.length}
+- Active/Open: ${active.length}
+- Resolved: ${resolved.length}
+- Rejected: ${rejected.length}
+${overdueDisputes.length > 0 ? `- ⚠️ OVERDUE (no response received): ${overdueDisputes.length}` : ''}
+${dueWithin7Days.length > 0 ? `- ⏰ DUE WITHIN 7 DAYS: ${dueWithin7Days.length}` : ''}
+
+Your Current Disputes:
+${params.disputes
+  .map((d, i) => {
+    const days = daysUntilDeadline(d.responseBy);
+    let statusEmoji = '';
+    if (d.status === 'sent') statusEmoji = '📤';
+    else if (d.status === 'in-progress') statusEmoji = '⏳';
+    else if (d.status === 'resolved') statusEmoji = '✓';
+    else if (d.status === 'rejected') statusEmoji = '✗';
+    
+    let deadline = '';
+    if (days < 0) deadline = ` ⚠️ OVERDUE by ${Math.abs(days)} days`;
+    else if (days <= 7) deadline = ` ⏰ DUE in ${days} days`;
+    else deadline = ` (due ${d.responseBy})`;
+    
+    return `${i + 1}. ${statusEmoji} ${d.creditor} - ${d.disputeType}
+   Account #: ${d.accountNumber}
+   Status: ${d.status}
+   Sent: ${d.dateSent}${deadline}`;
+  })
+  .join("\n")}
+
+IMPORTANT DISPUTE GUIDANCE:
+1. When the user asks about their disputes or status, reference the specific disputes above
+2. If any dispute is overdue or due within 7 days, proactively alert the user
+3. For active disputes, provide next steps based on how many days remain
+4. When generating new dispute letters, save them to the Dispute Tracker
+5. Consider the user's dispute history when recommending next actions
+6. If they have resolved disputes, acknowledge their progress`;
+
+    systemMessage += disputesContext;
   }
 
   // Cap each history message so an entire credit-report analysis in an old
@@ -1333,16 +1419,57 @@ async function executeTool(
   switch (toolCall.name) {
     case "get_disputes": {
       const data = await fetchUserDisputes(userId);
-      const disputeList = data.disputes
-        .map(
-          (d: any) =>
-            `• ${d.creditor} — ${d.dispute_type} — Status: ${d.status} — Sent: ${d.date_sent}`
-        )
-        .join("\n");
+      
+      // Format disputes for AI-friendly output
+      let displayContent = `📋 **Your Dispute Status**\n\n${data.summary}\n`;
+      
+      if (data.disputes.length === 0) {
+        displayContent += "\nYou haven't filed any disputes yet. I can help you generate and track them!";
+      } else {
+        // Calculate which disputes are approaching their 30-day deadline
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const daysUntilDeadline = (dateStr: string) => {
+          if (!dateStr) return Infinity;
+          const target = new Date(dateStr);
+          target.setHours(0, 0, 0, 0);
+          return Math.floor((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        };
+        
+        const active = data.disputes.filter((d: any) => d.status === 'sent' || d.status === 'in-progress');
+        const overdueDisputes = active.filter((d: any) => daysUntilDeadline(d.responseBy) < 0);
+        const dueWithin7Days = active.filter((d: any) => {
+          const days = daysUntilDeadline(d.responseBy);
+          return days >= 0 && days <= 7;
+        });
+        
+        if (overdueDisputes.length > 0) {
+          displayContent += `\n⚠️ **ACTION REQUIRED - OVERDUE DISPUTES:**\n`;
+          overdueDisputes.forEach((d: any) => {
+            const days = Math.abs(daysUntilDeadline(d.responseBy));
+            displayContent += `- ${d.creditor} (${d.disputeType}) - Overdue by ${days} days\n`;
+          });
+        }
+        
+        if (dueWithin7Days.length > 0) {
+          displayContent += `\n⏰ **Due Within 7 Days:**\n`;
+          dueWithin7Days.forEach((d: any) => {
+            const days = daysUntilDeadline(d.responseBy);
+            displayContent += `- ${d.creditor} (${d.disputeType}) - Due in ${days} days\n`;
+          });
+        }
+        
+        displayContent += `\n**All Your Disputes:**\n`;
+        data.disputes.forEach((d: any, idx: number) => {
+          const statusIcon = d.status === 'sent' ? '📤' : d.status === 'in-progress' ? '⏳' : d.status === 'resolved' ? '✓' : '✗';
+          displayContent += `${idx + 1}. ${statusIcon} ${d.creditor} (${d.disputeType}) - ${d.status}\n   Sent: ${d.dateSent}\n`;
+        });
+      }
+      
       return {
         toolName: "get_disputes",
         result: data,
-        displayContent: `📋 **Dispute Status Retrieved**\n\n${data.summary}\n\n${disputeList || "No disputes found."}`,
+        displayContent,
       };
     }
 
@@ -1716,18 +1843,22 @@ export const aiAgentsRouter = createTRPCRouter({
       const agentName = agent?.agent_name || "AI Agent";
       const agentBio = agent?.bio || "";
 
+      // Load user's current disputes from database for AI context
+      const { disputes: userDisputes } = await fetchUserDisputes(input.userId);
+
       // 3. Build the message array for the AI call
       const messages = [
         ...input.history.map((m) => ({ role: m.role, content: m.content })),
         { role: "user", content: input.message },
       ];
 
-      // 4. Call the AI backend
+      // 4. Call the AI backend with disputes context
       const { response, toolCalls } = await callAIBackend({
         messages,
         agentName,
         agentBio,
         equifaxReport: input.equifaxReport,
+        disputes: userDisputes,
         userId: input.userId,
       });
 
