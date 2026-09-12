@@ -49,14 +49,9 @@ export const useTestingDashboard = () => {
   const createTestDispute = useCallback(async (data: {
     userId: string;
     creditor: string;
-    creditorAddress?: string;
     accountNumber: string;
-    balance?: number;
-    accountType: 'charge-off' | 'collection' | 'late-payment' | 'delinquent';
     status: string;
-    bureau: 'Equifax' | 'Experian' | 'TransUnion';
     letterContent?: string;
-    notes?: string;
   }) => {
     setIsLoading(true);
     setError(null);

@@ -333,14 +333,9 @@ export const EnhancedTestingDashboard = () => {
               const dispute = await testing.createTestDispute({
                 userId: currentTestUser.id,
                 creditor: account.creditorName,
-                creditorAddress: account.creditorAddress,
                 accountNumber: accountNumber,
-                balance: account.balance,
-                accountType: account.accountType,
                 status: account.status,
-                bureau: account.bureau,
                 letterContent: letterContent,
-                notes: `Generated via Testing Dashboard on ${new Date().toLocaleString()}`,
               });
 
               Alert.alert('Success', `Dispute letter generated and saved!\n\nDispute ID: ${dispute.id}\n\nThe dispute has been saved to your tracker.`);

@@ -27,14 +27,9 @@ const CreateTestUserSchema = z.object({
 const CreateTestDisputeSchema = z.object({
   userId: z.string().uuid(),
   creditor: z.string(),
-  creditorAddress: z.string().optional(),
   accountNumber: z.string(),
-  balance: z.number().optional(),
-  accountType: z.enum(["charge-off", "collection", "late-payment", "delinquent"]),
   status: z.string(),
-  bureau: z.enum(["Equifax", "Experian", "TransUnion"]),
   letterContent: z.string().optional(),
-  notes: z.string().optional(),
 });
 
 /**
@@ -143,23 +138,20 @@ export const testingRouter = createTRPCRouter({
           });
         }
 
-        // Create dispute
+        // Create dispute - only use fields that actually exist in the schema
         const disputeData = {
           user_id: input.userId,
           creditor: input.creditor,
-          creditor_address: input.creditorAddress || "",
           account_number: input.accountNumber,
-          account_type: input.accountType,
           status: input.status,
-          balance: input.balance || 0,
-          bureau: input.bureau,
           date_sent: new Date().toISOString(),
           response_by: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days
           dispute_type: "standard",
           letter_content: input.letterContent || "",
-          notes: input.notes || "",
           last_updated: new Date().toISOString(),
-          is_test_dispute: true,
+          timeline: [],
+          documents: [],
+          reminders: [],
         };
 
         const { data: newDispute, error: disputeError } = await supabase
