@@ -272,7 +272,7 @@ export const [DisputesProvider, useDisputes] = createContextHook(() => {
     }
 
     try {
-      let newDispute;
+      let newDispute: Dispute | undefined;
       
       if (isTestingMode) {
         // Use TestingService for local testing
@@ -281,7 +281,7 @@ export const [DisputesProvider, useDisputes] = createContextHook(() => {
           accountNumber: disputeData.accountNumber,
           disputeType: disputeData.disputeType,
         });
-        setDisputes(prev => [...prev, newDispute as any]);
+        setDisputes(prev => [...prev, newDispute as Dispute]);
       } else {
         // Use Supabase for production
         newDispute = await createDisputeMutation.mutateAsync({
@@ -306,12 +306,12 @@ export const [DisputesProvider, useDisputes] = createContextHook(() => {
 
   const updateDispute = useCallback(async (id: string, updates: Partial<Dispute>) => {
     try {
-      let updatedDispute;
+      let updatedDispute: Dispute | undefined;
       
       if (isTestingMode) {
         updatedDispute = await testingService.updateTestDispute(id, updates);
         if (updatedDispute) {
-          setDisputes(prev => prev.map(d => d.id === id ? updatedDispute as any : d));
+          setDisputes(prev => prev.map(d => d.id === id ? updatedDispute as Dispute : d));
         }
       } else {
         updatedDispute = await updateDisputeMutation.mutateAsync({

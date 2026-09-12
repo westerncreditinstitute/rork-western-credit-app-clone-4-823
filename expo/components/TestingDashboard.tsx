@@ -439,7 +439,6 @@ ${dataString}
                   </Text>
                   <Text
                     style={{
-                      color: colors.text + '99',
                       fontSize: 12,
                       fontWeight: '500',
                       backgroundColor:
