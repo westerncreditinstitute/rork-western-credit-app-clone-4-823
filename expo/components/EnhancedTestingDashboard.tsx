@@ -188,7 +188,7 @@ export const EnhancedTestingDashboard = () => {
   const [showUserModal, setShowUserModal] = useState(false);
   const [userName, setUserName] = useState('Test User');
   const [userEmail, setUserEmail] = useState('test@example.com');
-  const [userRole, setUserRole] = useState<'student' | 'cso' | 'affiliate' | 'admin'>('student');
+  const [userRole, setUserRole] = useState<'Student' | 'CSO' | 'Affiliate' | 'Admin'>('Student');
 
   // Equifax linking
   const [equifaxStatus, setEquifaxStatus] = useState<EquifaxLinkingStatus>({
@@ -249,7 +249,7 @@ export const EnhancedTestingDashboard = () => {
       const newUser = await testing.createTestUser({
         name: userName,
         email: userEmail,
-        role: userRole as 'Student' | 'CSO' | 'Affiliate' | 'Admin',
+        role: userRole,
       });
 
       setCurrentTestUser(newUser);
@@ -703,14 +703,14 @@ export const EnhancedTestingDashboard = () => {
 
             <Text style={styles.roleLabel}>User Role:</Text>
             <View style={styles.roleOptions}>
-              {['student', 'cso', 'affiliate', 'admin'].map(role => (
+              {(['Student', 'CSO', 'Affiliate', 'Admin'] as const).map(role => (
                 <TouchableOpacity
                   key={role}
                   style={[
                     styles.roleOption,
                     userRole === role && { backgroundColor: Colors.primary },
                   ]}
-                  onPress={() => setUserRole(role as any)}
+                  onPress={() => setUserRole(role)}
                 >
                   <Text
                     style={[
@@ -718,7 +718,7 @@ export const EnhancedTestingDashboard = () => {
                       userRole === role && { color: '#fff' },
                     ]}
                   >
-                    {role.toUpperCase()}
+                    {role}
                   </Text>
                 </TouchableOpacity>
               ))}
