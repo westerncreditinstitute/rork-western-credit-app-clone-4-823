@@ -89,7 +89,6 @@ export const testingRouter = createTRPCRouter({
               email: input.email,
               name: input.name,
               role: input.role,
-              tier: "standard",
               created_at: new Date().toISOString(),
             },
           ])
