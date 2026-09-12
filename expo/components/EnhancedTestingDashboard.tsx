@@ -308,7 +308,7 @@ export const EnhancedTestingDashboard = () => {
           ...equifaxStatus.bureauData.experian,
           ...equifaxStatus.bureauData.transunion,
         ]
-      : equifaxStatus.bureauData[selectedBureau] || []
+      : equifaxStatus.bureauData[selectedBureau.toLowerCase() as keyof typeof equifaxStatus.bureauData] || []
     : [];
 
   const handleGenerateLetter = (accountNumber: string) => {
@@ -317,7 +317,7 @@ export const EnhancedTestingDashboard = () => {
       return;
     }
 
-    const account = filteredAccounts.find(a => a.accountNumber === accountNumber);
+    const account = filteredAccounts.find((a: MockNegativeAccount) => a.accountNumber === accountNumber);
     if (!account) return;
 
     Alert.alert(
@@ -575,7 +575,7 @@ export const EnhancedTestingDashboard = () => {
 
           {equifaxStatus.bureauData && filteredAccounts.length > 0 ? (
             <View style={styles.accountsList}>
-              {filteredAccounts.map(account => (
+              {filteredAccounts.map((account: MockNegativeAccount) => (
                 <View key={account.accountNumber} style={styles.accountCard}>
                   <View style={styles.accountHeader}>
                     <View>
