@@ -187,7 +187,7 @@ export const EnhancedTestingDashboard = () => {
   // User creation
   const [showUserModal, setShowUserModal] = useState(false);
   const [userName, setUserName] = useState('Test User');
-  const [userEmail, setUserEmail] = useState('test@example.com');
+  const [userEmail, setUserEmail] = useState('test.user@test.local');
   const [userRole, setUserRole] = useState<'Student' | 'CSO' | 'Affiliate' | 'Admin'>('Student');
 
   // Equifax linking

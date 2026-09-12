@@ -81,7 +81,7 @@ export const testingRouter = createTRPCRouter({
           });
         }
 
-        // Create new user
+        // Create new user (mark as test by using .test email domain)
         const { data: newUser, error } = await supabase
           .from("users")
           .insert([
@@ -90,7 +90,6 @@ export const testingRouter = createTRPCRouter({
               name: input.name,
               role: input.role,
               tier: "standard",
-              is_test_user: true,
               created_at: new Date().toISOString(),
             },
           ])
@@ -204,7 +203,7 @@ export const testingRouter = createTRPCRouter({
       const { data: users, error } = await supabase
         .from("users")
         .select("id, email, name, role, created_at")
-        .eq("is_test_user", true)
+        .ilike("email", "%.test@%") // Find test users by email pattern
         .order("created_at", { ascending: false });
 
       if (error) {
@@ -297,8 +296,7 @@ export const testingRouter = createTRPCRouter({
         const { error: disputeError } = await supabase
           .from("disputes")
           .delete()
-          .eq("user_id", input.userId)
-          .eq("is_test_dispute", true);
+          .eq("user_id", input.userId);
 
         if (disputeError) {
           throw new TRPCError({
@@ -311,8 +309,7 @@ export const testingRouter = createTRPCRouter({
         const { error: userError } = await supabase
           .from("users")
           .delete()
-          .eq("id", input.userId)
-          .eq("is_test_user", true);
+          .eq("id", input.userId);
 
         if (userError) {
           throw new TRPCError({
@@ -340,11 +337,11 @@ export const testingRouter = createTRPCRouter({
     try {
       console.log("[Testing] Cleaning up all test data");
 
-      // Get all test users
+      // Get all test users (identified by .test@ email pattern)
       const { data: testUsers, error: fetchError } = await supabase
         .from("users")
         .select("id")
-        .eq("is_test_user", true);
+        .ilike("email", "%.test@%");
 
       if (fetchError) {
         throw new TRPCError({
@@ -359,12 +356,11 @@ export const testingRouter = createTRPCRouter({
 
       const userIds = testUsers.map((u) => u.id);
 
-      // Delete all test disputes
+      // Delete all disputes for test users
       const { error: disputeError } = await supabase
         .from("disputes")
         .delete()
-        .in("user_id", userIds)
-        .eq("is_test_dispute", true);
+        .in("user_id", userIds);
 
       if (disputeError) {
         throw new TRPCError({
@@ -377,8 +373,7 @@ export const testingRouter = createTRPCRouter({
       const { error: userError } = await supabase
         .from("users")
         .delete()
-        .in("id", userIds)
-        .eq("is_test_user", true);
+        .in("id", userIds);
 
       if (userError) {
         throw new TRPCError({
