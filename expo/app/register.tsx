@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { GraduationCap, Mail, User, Phone, ArrowRight, CheckCircle, Shield, Lock, Eye, EyeOff } from 'lucide-react-native';
+import { GraduationCap, Mail, User, Phone, ArrowRight, CheckCircle, Shield, Lock, Eye, EyeOff, Tag } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { useRouter } from 'expo-router';
@@ -32,6 +32,7 @@ export default function RegisterScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [phone, setPhone] = useState('');
   const [selectedTier, setSelectedTier] = useState<'free' | 'ace1_student'>('free');
+  const [promoCode, setPromoCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [mode, setMode] = useState<'register' | 'login'>('register');
@@ -108,6 +109,7 @@ export default function RegisterScreen() {
           password: password,
           phone: phone.trim() || undefined,
           desiredTier: selectedTier,
+          promoCode: promoCode.trim() || undefined,
         });
 
         if (result.success) {
@@ -375,6 +377,22 @@ export default function RegisterScreen() {
                 </View>
               )}
 
+              {mode === 'register' && (
+                <View style={styles.inputGroup}>
+                  <View style={styles.iconContainer}>
+                    <Tag size={20} color="#D4AF37" />
+                  </View>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Promo Code (Optional)"
+                    placeholderTextColor="#64748B"
+                    value={promoCode}
+                    onChangeText={setPromoCode}
+                    testID="promo-code-input"
+                  />
+                </View>
+              )}
+
               {error ? (
                 <View style={styles.errorContainer}>
                   <Text style={styles.errorText}>{error}</Text>
@@ -418,6 +436,7 @@ export default function RegisterScreen() {
                   setPassword('');
                   setConfirmPassword('');
                   setSelectedTier('free');
+                  setPromoCode('');
                 }}
               >
                 <Text style={styles.switchModeText}>

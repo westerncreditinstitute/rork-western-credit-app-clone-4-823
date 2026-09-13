@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   View,
   Text,
@@ -8,6 +9,7 @@ import {
   Image,
   TextInput,
   KeyboardAvoidingView,
+  Alert,
   Platform,
   Animated,
 } from 'react-native';
@@ -23,15 +25,19 @@ import {
   ChevronLeft,
 } from 'lucide-react-native';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useSubscription } from '@/contexts/SubscriptionContext';
 import { useMultiplayer } from '@/contexts/MultiplayerContext';
 import { ChatRoom, ChatMessage } from '@/types/multiplayer';
 
 export default function ChatScreen() {
   const { colors } = useTheme();
+  const { isFree, isPremium } = useSubscription();
   const { chatRooms, chatMessages, sendChatMessage, currentPlayer } = useMultiplayer();
 
   const [selectedRoom, setSelectedRoom] = useState<ChatRoom | null>(null);
   const [messageText, setMessageText] = useState('');
+  const [chatCount, setChatCount] = useState(0);
+  const [chatCountToday, setChatCountToday] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -43,6 +49,31 @@ export default function ChatScreen() {
     }).start();
   }, [selectedRoom]);
 
+
+  // Daily reset for chat counter
+  useEffect(() => {
+    const checkAndResetDailyCounter = async () => {
+      try {
+        const lastResetDate = await AsyncStorage.getItem("chatCountLastResetDate");
+        const today = new Date().toDateString();
+        
+        if (lastResetDate !== today) {
+          // It's a new day, reset the counter
+          setChatCountToday(0);
+          await AsyncStorage.setItem("chatCountLastResetDate", today);
+          await AsyncStorage.setItem("chatCountToday", "0");
+        } else {
+          // Same day, restore the counter from storage
+          const stored = await AsyncStorage.getItem("chatCountToday");
+          if (stored) setChatCountToday(parseInt(stored, 10));
+        }
+      } catch (error) {
+        console.error("Error checking daily reset:", error);
+      }
+    };
+    
+    checkAndResetDailyCounter();
+  }, []);
   const getRoomIcon = (type: ChatRoom['type']) => {
     switch (type) {
       case 'global': return Globe;
@@ -74,7 +105,27 @@ export default function ChatScreen() {
 
   const handleSend = () => {
     if (!messageText.trim() || !selectedRoom) return;
+    
+    // Check chat limits
+    const maxChats = isFree ? 10 : Infinity; // Free trial: 10 total
+    const maxChatsPerDay = isPremium ? 3 : Infinity; // Paid: 3 per day
+    
+    if (isFree && chatCount >= maxChats) {
+      Alert.alert('Chat Limit Reached', `You have reached your limit of ${maxChats} chats on the free trial. Upgrade to ACE-1 for unlimited chats!`);
+      return;
+    }
+    
+    if (isPremium && chatCountToday >= maxChatsPerDay) {
+      Alert.alert('Daily Limit Reached', `You have reached your daily limit of ${maxChatsPerDay} chats. Please try again tomorrow!`);
+      return;
+    }
+    
     sendChatMessage(selectedRoom.id, messageText.trim());
+    setChatCount(prev => prev + 1);
+    const newCount = chatCountToday + 1;
+    setChatCountToday(newCount);
+    // Persist daily counter to AsyncStorage
+    AsyncStorage.setItem('chatCountToday', newCount.toString()).catch(console.error);
     setMessageText('');
     setTimeout(() => {
       scrollViewRef.current?.scrollToEnd({ animated: true });
@@ -250,6 +301,16 @@ export default function ChatScreen() {
         </ScrollView>
 
         <View style={[styles.inputContainer, { backgroundColor: colors.surface }]}>
+          {isFree && (
+            <Text style={[styles.chatCounter, { color: colors.textSecondary }]}>
+              Free Trial: {chatCount}/10 chats used
+            </Text>
+          )}
+          {isPremium && (
+            <Text style={[styles.chatCounter, { color: colors.textSecondary }]}>
+              Premium: {chatCountToday}/3 chats today
+            </Text>
+          )}
           <TextInput
             style={[styles.input, { backgroundColor: colors.background, color: colors.text }]}
             placeholder="Type a message..."
@@ -344,4 +405,5 @@ const styles = StyleSheet.create({
   inputContainer: { flexDirection: 'row', alignItems: 'flex-end', padding: 12, gap: 10 },
   input: { flex: 1, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, fontSize: 15, maxHeight: 100 },
   sendButton: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
+  chatCounter: { fontSize: 12, marginBottom: 8, textAlign: 'center' },
 });

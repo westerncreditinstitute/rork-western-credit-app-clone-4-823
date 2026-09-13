@@ -36,6 +36,7 @@ import AccountSummary from "@/components/AccountSummary";
 import DisputeLetterPrompt from "@/components/DisputeLetterPrompt";
 import { useDisputes } from "@/contexts/DisputesContext";
 import { useUser } from "@/contexts/UserContext";
+import { useSubscription } from "@/contexts/SubscriptionContext";
 
 const DARK_LOGO_URL = "https://static.wixstatic.com/media/ec0146_ce8d0d3506564ee1841686216fee5650~mv2.png";
 
@@ -105,6 +106,7 @@ export default function AIDisputeAssistantScreen() {
   const insets = useSafeAreaInsets();
   const { createDispute } = useDisputes();
   const { user } = useUser();
+  const { isFree, isPremium } = useSubscription();
 
   const [currentStep, setCurrentStep] = useState(1);
   const [detectedBureau, setDetectedBureau] = useState<string>("auto");
@@ -1013,9 +1015,18 @@ export default function AIDisputeAssistantScreen() {
               <Text style={styles.recommendationDescription}>
                 {getRecommendationDescription(recommendation)}
               </Text>
-              <TouchableOpacity style={styles.primaryButton} onPress={proceedToNextAccount}>
+              <TouchableOpacity 
+                style={[
+                  styles.primaryButton, 
+                  isFree && currentAccountIndex === selectedAccounts.length - 1 && styles.primaryButtonDisabled
+                ]} 
+                onPress={proceedToNextAccount}
+                disabled={isFree && currentAccountIndex === selectedAccounts.length - 1}
+              >
                 <Text style={styles.primaryButtonText}>
-                  {currentAccountIndex < selectedAccounts.length - 1 ? "Next Account" : "Generate Letters"}
+                  {currentAccountIndex < selectedAccounts.length - 1 
+                    ? "Next Account" 
+                    : (isFree ? "🔒 Upgrade to ACE-1 to Generate Letters" : "Generate Letters")}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -1143,8 +1154,17 @@ export default function AIDisputeAssistantScreen() {
           <TouchableOpacity style={styles.secondaryButton} onPress={() => setCurrentStep(3)}>
             <Text style={styles.secondaryButtonText}>Back</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.primaryButton} onPress={generateAllLetters}>
-            <Text style={styles.primaryButtonText}>Generate Letters</Text>
+          <TouchableOpacity 
+            style={[
+              styles.primaryButton, 
+              isFree && styles.primaryButtonDisabled
+            ]} 
+            onPress={generateAllLetters}
+            disabled={isFree}
+          >
+            <Text style={styles.primaryButtonText}>
+              {isFree ? "🔒 Upgrade to ACE-1 to Generate Letters" : "Generate Letters"}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -1248,8 +1268,26 @@ export default function AIDisputeAssistantScreen() {
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Generated Letters</Text>
         
+        {isFree && disputes.length > 0 && (
+          <View style={[styles.card, { backgroundColor: Colors.surface, borderColor: Colors.border, borderWidth: 1, marginBottom: 16 }]}>
+            <Text style={[styles.cardSubtitle, { color: Colors.textLight }]}>
+              💡 Free Trial: Showing only recommended letters. Upgrade to ACE-1 to see all available dispute letters.
+            </Text>
+          </View>
+        )}
         <ScrollView style={styles.lettersList} showsVerticalScrollIndicator={false}>
-          {disputes.map((dispute, index) => (
+          {disputes
+            .filter(dispute => {
+              // For free users, only show the recommended letter for each account
+              if (isFree && selectedAccounts.length > 0) {
+                // Check if this is the recommended letter for any of the selected accounts
+                const account = selectedAccounts.find(acc => acc.name === dispute.creditor);
+                return account && dispute.disputeType === account.recommendation;
+              }
+              // Premium users can see all letters
+              return true;
+            })
+            .map((dispute, index) => (
             <View key={dispute.id} style={styles.letterItem}>
               <TouchableOpacity
                 style={styles.letterHeader}
@@ -1589,6 +1627,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
     flex: 1,
+  },
+  primaryButtonDisabled: {
+    backgroundColor: Colors.border,
+    opacity: 0.6,
   },
   primaryButtonText: {
     fontSize: 16,

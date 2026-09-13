@@ -116,6 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     password: string;
     phone?: string;
     desiredTier?: 'free' | 'ace1_student';
+    promoCode?: string;
   }): Promise<{ success: boolean; error?: string; user?: AuthUser; tier?: string }> => {
     try {
       console.log('[Auth] Registering user:', userData.email);
@@ -141,6 +142,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           password: userData.password,
           phone: userData.phone,
           desiredTier: userData.desiredTier || 'free',
+          promoCode: userData.promoCode,
         });
 
         const authUser: AuthUser = {

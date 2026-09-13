@@ -116,6 +116,7 @@ export const usersRouter = createTRPCRouter({
       password: z.string().min(6, "Password must be at least 6 characters"),
       phone: z.string().optional(),
       desiredTier: z.enum(['free', 'ace1_student']).optional().default('free'),
+      promoCode: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
       console.log("[Users] register called for:", input.email);
@@ -159,9 +160,13 @@ export const usersRouter = createTRPCRouter({
 
       console.log("[Users] Created user:", data.id);
 
-      // If ACE-1 tier requested, create a subscription record
-      if (input.desiredTier === 'ace1_student') {
-        console.log("[Users] Creating ACE-1 subscription for:", data.id);
+      // If ACE-1 tier requested or promo code applied, create a subscription record
+      const isPromoApplied = input.promoCode === 'WCI2026';
+      const shouldCreateSubscription = input.desiredTier === 'ace1_student' || isPromoApplied;
+      
+      if (shouldCreateSubscription) {
+        const tier = isPromoApplied ? 'ace1_student' : input.desiredTier;
+        console.log("[Users] Creating", tier, "subscription for:", data.id, isPromoApplied ? "(promo applied)" : "");
         
         const now = new Date().toISOString();
         const subscriptionId = `subscriptions:${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -171,13 +176,14 @@ export const usersRouter = createTRPCRouter({
         const subscription = {
           id: subscriptionId,
           userId: data.id,
-          tier: 'ace1_student',
+          tier: tier || 'ace1_student',
           status: 'active',
           monthlyFee: 25,
           startDate: now,
           initialRegistrationDate: now,
           initialRegistrationExpiry: expiryDate.toISOString(),
           autoRenew: true,
+          promoApplied: isPromoApplied,
           createdAt: now,
           updatedAt: now,
         };
@@ -213,11 +219,12 @@ export const usersRouter = createTRPCRouter({
 
         return { 
           ...dbToUser(data),
-          tier: 'ace1_student',
+          tier: tier || 'ace1_student',
           subscription: { 
-            tier: 'ace1_student',
+            tier: tier || 'ace1_student',
             status: 'active',
             expiryDate: expiryDate.toISOString(),
+            promoApplied: isPromoApplied,
           }
         };
       }
