@@ -24,6 +24,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 
 import Colors from "@/constants/colors";
+import { useSubscription } from "@/contexts/SubscriptionContext";
 
 type PlanType = "ace1_course";
 
@@ -103,8 +104,10 @@ const courseOptions = [
 export default function SubscriptionPlansScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { upgradeToACE1 } = useSubscription();
   const [selectedPlan, setSelectedPlan] = useState<PlanType | null>(null);
   const [showCourses, setShowCourses] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const handleSelectPlan = (planId: PlanType) => {
     setSelectedPlan(planId);
@@ -133,7 +136,7 @@ export default function SubscriptionPlansScreen() {
     );
   };
 
-  const handleCourseEnroll = (courseId: string) => {
+  const handleCourseEnroll = async (courseId: string) => {
     const course = courseOptions.find(c => c.id === courseId);
     if (!course) return;
 
@@ -149,9 +152,42 @@ export default function SubscriptionPlansScreen() {
         { text: "Cancel", style: "cancel" },
         {
           text: isACE1 ? `Pay $${course.certFee}` : `Pay $${course.price + course.certFee}`,
-          onPress: () => {
-            Alert.alert("Success", `You are now enrolled in ${course.name}!`);
-            router.back();
+          onPress: async () => {
+            if (isACE1) {
+              setIsProcessing(true);
+              try {
+                console.log('[SubscriptionPlans] Starting ACE-1 upgrade...');
+                const success = await upgradeToACE1();
+                
+                if (success) {
+                  console.log('[SubscriptionPlans] ACE-1 upgrade successful');
+                  Alert.alert(
+                    "Successfully Enrolled!", 
+                    "You are now enrolled in ACE-1! Your 7-day free trial is active.",
+                    [{ text: "OK", onPress: () => router.back() }]
+                  );
+                } else {
+                  console.error('[SubscriptionPlans] ACE-1 upgrade failed');
+                  Alert.alert(
+                    "Enrollment Error",
+                    "Failed to process your enrollment. Please try again.",
+                    [{ text: "OK" }]
+                  );
+                }
+              } catch (error) {
+                console.error('[SubscriptionPlans] Error during enrollment:', error);
+                Alert.alert(
+                  "Enrollment Error",
+                  "An unexpected error occurred. Please try again.",
+                  [{ text: "OK" }]
+                );
+              } finally {
+                setIsProcessing(false);
+              }
+            } else {
+              Alert.alert("Success", `You are now enrolled in ${course.name}!`);
+              router.back();
+            }
           },
         },
       ]

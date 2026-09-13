@@ -486,6 +486,52 @@ export const [SubscriptionProvider, useSubscription] = createContextHook(() => {
     }
   }, [userId]);
 
+  const upgradeToACE1 = useCallback(async () => {
+    try {
+      if (!userId) {
+        console.error('[SubscriptionContext] Cannot upgrade: userId is missing');
+        return false;
+      }
+
+      console.log('[SubscriptionContext] Attempting to upgrade user to ACE-1:', userId);
+
+      // Call backend to create ACE-1 subscription with 7-day trial
+      const subscription = await trpc.subscriptions.create.mutate({
+        userId,
+        tier: 'ace1_student',
+        isInitialRegistration: false,
+      });
+
+      if (!subscription) {
+        console.error('[SubscriptionContext] Backend failed to create subscription');
+        return false;
+      }
+
+      console.log('[SubscriptionContext] Subscription created:', subscription);
+
+      // Set expiry to 7 days from now
+      const expiry = new Date();
+      expiry.setDate(expiry.getDate() + 7);
+      
+      // Update local state
+      setExpiryDate(expiry);
+      setIsExpired(false);
+      setTier('ace1_student');
+      
+      // Persist to AsyncStorage
+      const tierKey = getStorageKey(SUBSCRIPTION_STORAGE_KEY, userId);
+      const expiryKey = getStorageKey(SUBSCRIPTION_EXPIRY_KEY, userId);
+      await AsyncStorage.setItem(tierKey, 'ace1_student');
+      await AsyncStorage.setItem(expiryKey, expiry.toISOString());
+
+      console.log('[SubscriptionContext] ACE-1 upgrade completed successfully');
+      return true;
+    } catch (error) {
+      console.error('[SubscriptionContext] Error upgrading to ACE-1:', error);
+      return false;
+    }
+  }, [userId]);
+
   const upgradeToCSOAffiliate = useCallback(async () => {
     try {
       const expiry = new Date();
@@ -547,6 +593,7 @@ export const [SubscriptionProvider, useSubscription] = createContextHook(() => {
     isLoading,
     updateTier,
     renewSubscription,
+    upgradeToACE1,
     upgradeToCSOAffiliate,
     isFree,
     isACE1,
