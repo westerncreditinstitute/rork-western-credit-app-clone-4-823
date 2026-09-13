@@ -387,7 +387,7 @@ export default function AIDisputeAssistantScreen() {
 
   const saveDisputesToCloud = useCallback(async (disputesToSave: Dispute[]) => {
     if (!user?.id) {
-      console.log("No user logged in, skipping cloud save");
+      console.log("[AI Dispute Assistant] No user logged in, skipping cloud save");
       return;
     }
 
@@ -395,10 +395,12 @@ export default function AIDisputeAssistantScreen() {
     let savedCount = 0;
     let lastError: string | null = null;
 
+    console.log(`[AI Dispute Assistant] Starting to save ${disputesToSave.length} dispute(s) to cloud...`);
+
     for (const dispute of disputesToSave) {
       try {
         const account = selectedAccounts.find(a => a.name === dispute.creditor);
-        await createDispute({
+        const savedDispute = await createDispute({
           creditor: dispute.creditor,
           accountNumber: dispute.accountNumber,
           disputeType: dispute.disputeType,
@@ -409,9 +411,9 @@ export default function AIDisputeAssistantScreen() {
           notes: `${dispute.disputeType} letter generated via AI Dispute Assistant. Bureau: ${account?.bureau || detectedBureau || 'Unknown'}`,
         });
         savedCount++;
-        console.log(`Saved dispute for ${dispute.creditor} to cloud`);
+        console.log(`[AI Dispute Assistant] Successfully saved dispute for ${dispute.creditor} (ID: ${savedDispute?.id || 'unknown'})`);
       } catch (error) {
-        console.error(`Error saving dispute for ${dispute.creditor}:`, error);
+        console.error(`[AI Dispute Assistant] Error saving dispute for ${dispute.creditor}:`, error);
         lastError = error instanceof Error ? error.message : String(error);
       }
     }
@@ -474,6 +476,8 @@ export default function AIDisputeAssistantScreen() {
     // Auto-save to cloud tracker
     if (user?.id) {
       await saveDisputesToCloud(newDisputes);
+      // Add small delay to ensure server has persisted data before Dispute Tracker refetches
+      await new Promise(resolve => setTimeout(resolve, 500));
     }
   }, [formData, selectedAccounts, generateLetterContent, user?.id, saveDisputesToCloud]);
 
