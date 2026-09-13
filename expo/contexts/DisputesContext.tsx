@@ -276,18 +276,27 @@ export const [DisputesProvider, useDisputes] = createContextHook(() => {
       
       if (isTestingMode) {
         // Use TestingService for local testing
-        newDispute = await testingService.createTestDispute(user.id, {
+        // TestingService stores a leaner local record (no lastUpdated /
+        // reminders) than the Supabase-backed shape, so fill those in rather
+        // than casting a partially-shaped object through as a full Dispute.
+        const testDispute = await testingService.createTestDispute(user.id, {
           creditor: disputeData.creditor,
           accountNumber: disputeData.accountNumber,
           disputeType: disputeData.disputeType,
         });
+        newDispute = {
+          ...testDispute,
+          lastUpdated: testDispute.updatedAt,
+          reminders: [],
+          documents: testDispute.documents.map((doc) => ({ ...doc, size: 0 })),
+        };
         setDisputes(prev => [...prev, newDispute as Dispute]);
       } else {
         // Use Supabase for production
-        newDispute = await createDisputeMutation.mutateAsync({
+        newDispute = (await createDisputeMutation.mutateAsync({
           userId: user.id,
           ...disputeData,
-        });
+        })) as Dispute;
         
         if (newDispute) {
           setDisputes(prev => [...prev, newDispute as Dispute]);
@@ -309,15 +318,23 @@ export const [DisputesProvider, useDisputes] = createContextHook(() => {
       let updatedDispute: Dispute | undefined;
       
       if (isTestingMode) {
-        updatedDispute = await testingService.updateTestDispute(id, updates);
+        const testUpdated = await testingService.updateTestDispute(id, updates);
+        updatedDispute = testUpdated
+          ? {
+              ...testUpdated,
+              lastUpdated: testUpdated.updatedAt,
+              reminders: [],
+              documents: testUpdated.documents.map((doc) => ({ ...doc, size: 0 })),
+            }
+          : undefined;
         if (updatedDispute) {
           setDisputes(prev => prev.map(d => d.id === id ? updatedDispute as Dispute : d));
         }
       } else {
-        updatedDispute = await updateDisputeMutation.mutateAsync({
+        updatedDispute = (await updateDisputeMutation.mutateAsync({
           id,
           ...updates,
-        });
+        })) as Dispute;
         
         if (updatedDispute) {
           setDisputes(prev => prev.map(d => d.id === id ? updatedDispute as Dispute : d));

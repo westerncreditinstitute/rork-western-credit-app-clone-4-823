@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode, useMemo, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { TRPCClientError } from '@trpc/client';
-import { trpcClient } from '@/lib/trpc';
+import { trpcClient, isTransportErrorMessage } from '@/lib/trpc';
 import { isSupabaseConfigured } from '@/lib/supabase';
 
 function extractErrorMessage(error: unknown): string {
@@ -21,6 +21,33 @@ function extractErrorMessage(error: unknown): string {
   }
   return 'An unexpected error occurred';
 }
+
+/**
+ * True when a failure is the transport giving up rather than the server
+ * rejecting the request.
+ *
+ * The tRPC client normalises an unreachable / cold-starting server into its
+ * own friendly copy (`OFFLINE_MESSAGE` / `SERVER_WAKING_MESSAGE`), which does
+ * NOT contain the raw "Failed to fetch" text. Matching only on the raw strings
+ * meant a server outage fell through to the generic error path, where
+ * `console.error` surfaced it as a full-screen runtime error overlay.
+ */
+function isNetworkFailure(message: string): boolean {
+  return (
+    isTransportErrorMessage(message) ||
+    message.includes('Failed to fetch') ||
+    message.includes('Network request failed') ||
+    message.includes('timed out') ||
+    message.includes('fetch')
+  );
+}
+
+/**
+ * Shown when the account could not be created or verified because the server
+ * was unreachable. Deliberately actionable: the attempt is safe to repeat.
+ */
+const RETRY_MESSAGE =
+  "Can't reach the server right now, so your account wasn't created. Check your connection and tap the button again in a moment.";
 
 interface AuthUser {
   id: string;
@@ -42,7 +69,13 @@ interface AuthContextType {
   user: AuthUser | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  register: (userData: { name: string; email: string; password: string; phone?: string }) => Promise<{ success: boolean; error?: string; user?: AuthUser }>;
+  register: (userData: {
+    name: string;
+    email: string;
+    password: string;
+    phone?: string;
+    desiredTier?: 'free' | 'ace1_student';
+  }) => Promise<{ success: boolean; error?: string; user?: AuthUser; tier?: string }>;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string; user?: AuthUser }>;
   logout: () => Promise<void>;
   updateProfile: (updates: Partial<AuthUser>) => Promise<{ success: boolean; error?: string; user?: AuthUser }>;
@@ -169,29 +202,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           tier: (result as any).tier || userData.desiredTier || 'free',
         };
       } catch (backendError) {
-        console.warn('[Auth] Backend registration failed, checking if network error:', backendError);
-        
         const backendErrorMessage = extractErrorMessage(backendError);
-        if (backendErrorMessage.includes('Failed to fetch') || 
-            backendErrorMessage.includes('Network request failed') ||
-            backendErrorMessage.includes('timed out') ||
-            backendErrorMessage.includes('fetch')) {
-          console.log('[Auth] Network error detected, falling back to demo mode');
-          const demoUser = createDemoUser(userData.email, userData.name);
-          console.log('[Auth] About to save demo user to AsyncStorage:', demoUser);
-          await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(demoUser));
-          console.log('[Auth] Demo user saved, verifying:', await AsyncStorage.getItem(AUTH_STORAGE_KEY));
-          setUser(demoUser);
-          setIsAuthenticated(true);
-          console.log('[Auth] Demo user registered (fallback):', demoUser.email);
-          return { success: true, user: demoUser };
+
+        // Server unreachable / cold starting. Registration MUST persist server
+        // side - silently minting a local demo account here would hand the user
+        // a phantom ACE-1 login that exists on no other device and has no
+        // subscription record. Ask them to retry instead, quietly: a network
+        // blip is not a crash, so warn rather than error.
+        if (isNetworkFailure(backendErrorMessage)) {
+          console.warn(
+            '[Auth] Registration could not reach the server, asking user to retry:',
+            backendErrorMessage,
+          );
+          return { success: false, error: RETRY_MESSAGE };
         }
-        
+
         throw backendError;
       }
     } catch (error) {
-      console.error('[Auth] Registration error:', error);
       const rawMessage = extractErrorMessage(error);
+
+      if (isNetworkFailure(rawMessage)) {
+        console.warn('[Auth] Registration transport failure:', rawMessage);
+        return { success: false, error: RETRY_MESSAGE };
+      }
+
+      console.error('[Auth] Registration error:', error);
       let errorMessage = 'Registration failed. Please try again.';
       
       if (rawMessage.includes('already exists')) {
@@ -275,23 +311,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log('[Auth] User logged in successfully:', authUser.email);
         return { success: true, user: authUser };
       } catch (backendError) {
-        console.warn('[Auth] Backend login failed, checking error type:', backendError);
-        
         const backendErrorMessage = extractErrorMessage(backendError);
-        
-        // Fall back to demo mode for network errors
-        if (backendErrorMessage.includes('Failed to fetch') || 
-            backendErrorMessage.includes('Network request failed') ||
-            backendErrorMessage.includes('timed out') ||
-            backendErrorMessage.includes('fetch')) {
-          console.log('[Auth] Network error detected, falling back to demo mode');
-          const demoUser = createDemoUser(email);
-          await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(demoUser));
-          setUser(demoUser);
-          setIsAuthenticated(true);
-          console.log('[Auth] Demo user logged in (fallback):', demoUser.email);
-          return { success: true, user: demoUser };
+
+        // Server unreachable: a demo fallback would mint a brand-new random id,
+        // and every per-user storage key (tier, progress, enrolments) is
+        // namespaced by that id - so "logging in" offline would silently hide
+        // the real account's data behind an empty one. Retrying is correct.
+        if (isNetworkFailure(backendErrorMessage)) {
+          console.warn(
+            '[Auth] Login could not reach the server, asking user to retry:',
+            backendErrorMessage,
+          );
+          return {
+            success: false,
+            error:
+              "Can't reach the server right now. Check your connection and try signing in again in a moment.",
+          };
         }
+
+        console.warn('[Auth] Backend login failed:', backendErrorMessage);
         
         // Fall back to demo mode for invalid credentials (user may not exist in DB yet)
         if (backendErrorMessage.includes('Invalid email or password')) {
@@ -307,8 +345,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw backendError;
       }
     } catch (error) {
-      console.error('[Auth] Login error:', error);
       const rawMessage = extractErrorMessage(error);
+
+      if (isNetworkFailure(rawMessage)) {
+        console.warn('[Auth] Login transport failure:', rawMessage);
+        return {
+          success: false,
+          error:
+            "Can't reach the server right now. Check your connection and try signing in again in a moment.",
+        };
+      }
+
+      console.error('[Auth] Login error:', error);
       let errorMessage = 'Login failed. Please try again.';
       
       if (rawMessage.includes('Invalid email or password')) {
