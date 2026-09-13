@@ -115,7 +115,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     email: string; 
     password: string;
     phone?: string;
-  }): Promise<{ success: boolean; error?: string; user?: AuthUser }> => {
+    desiredTier?: 'free' | 'ace1_student';
+  }): Promise<{ success: boolean; error?: string; user?: AuthUser; tier?: string }> => {
     try {
       console.log('[Auth] Registering user:', userData.email);
       console.log('[Auth] Supabase configured:', isSupabaseConfigured);
@@ -139,6 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           email: userData.email.toLowerCase().trim(),
           password: userData.password,
           phone: userData.phone,
+          desiredTier: userData.desiredTier || 'free',
         });
 
         const authUser: AuthUser = {
@@ -159,7 +161,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(authUser);
         setIsAuthenticated(true);
         console.log('[Auth] User registered successfully:', authUser.email);
-        return { success: true, user: authUser };
+        return { 
+          success: true, 
+          user: authUser,
+          tier: (result as any).tier || userData.desiredTier || 'free',
+        };
       } catch (backendError) {
         console.warn('[Auth] Backend registration failed, checking if network error:', backendError);
         

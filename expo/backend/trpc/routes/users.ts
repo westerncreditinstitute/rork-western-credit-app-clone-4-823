@@ -115,6 +115,7 @@ export const usersRouter = createTRPCRouter({
       email: z.string().email("Invalid email address"),
       password: z.string().min(6, "Password must be at least 6 characters"),
       phone: z.string().optional(),
+      desiredTier: z.enum(['free', 'ace1_student']).optional().default('free'),
     }))
     .mutation(async ({ input }) => {
       console.log("[Users] register called for:", input.email);
@@ -157,6 +158,70 @@ export const usersRouter = createTRPCRouter({
       }
 
       console.log("[Users] Created user:", data.id);
+
+      // If ACE-1 tier requested, create a subscription record
+      if (input.desiredTier === 'ace1_student') {
+        console.log("[Users] Creating ACE-1 subscription for:", data.id);
+        
+        const now = new Date().toISOString();
+        const subscriptionId = `subscriptions:${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const expiryDate = new Date();
+        expiryDate.setDate(expiryDate.getDate() + 60);
+        
+        const subscription = {
+          id: subscriptionId,
+          userId: data.id,
+          tier: 'ace1_student',
+          status: 'active',
+          monthlyFee: 25,
+          startDate: now,
+          initialRegistrationDate: now,
+          initialRegistrationExpiry: expiryDate.toISOString(),
+          autoRenew: true,
+          createdAt: now,
+          updatedAt: now,
+        };
+
+        try {
+          const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
+          const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
+          const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
+
+          if (endpoint && namespace && token) {
+            const response = await fetch(`${endpoint}/sql`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${token}`,
+                "surreal-ns": namespace,
+                "surreal-db": "app",
+              },
+              body: JSON.stringify({
+                query: `CREATE ${subscriptionId} CONTENT ${JSON.stringify(subscription)}`,
+              }),
+            });
+
+            if (!response.ok) {
+              console.warn("[Users] Failed to create subscription, but user account created successfully");
+            } else {
+              console.log("[Users] Subscription created successfully");
+            }
+          }
+        } catch (error) {
+          console.error("[Users] Error creating subscription:", error);
+        }
+
+        return { 
+          ...dbToUser(data),
+          tier: 'ace1_student',
+          subscription: { 
+            tier: 'ace1_student',
+            status: 'active',
+            expiryDate: expiryDate.toISOString(),
+          }
+        };
+      }
+
       return dbToUser(data);
     }),
 
