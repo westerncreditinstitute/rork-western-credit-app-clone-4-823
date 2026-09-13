@@ -171,7 +171,7 @@ export const usersRouter = createTRPCRouter({
         const now = new Date().toISOString();
         const subscriptionId = `subscriptions:${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         const expiryDate = new Date();
-        expiryDate.setDate(expiryDate.getDate() + 60);
+        expiryDate.setDate(expiryDate.getDate() + 7);
         
         const subscription = {
           id: subscriptionId,
@@ -217,9 +217,7 @@ export const usersRouter = createTRPCRouter({
           console.error("[Users] Error creating subscription:", error);
         }
 
-        return { 
-          ...dbToUser(data),
-          tier: tier || 'ace1_student',
+        return { \n          ...dbToUser(data),\n          tier: tier || 'ace1_student',
           subscription: { 
             tier: tier || 'ace1_student',
             status: 'active',
@@ -229,7 +227,10 @@ export const usersRouter = createTRPCRouter({
         };
       }
 
-      return dbToUser(data);
+      return {
+        ...dbToUser(data),
+        tier: 'free',
+      };
     }),
 
   login: publicProcedure
