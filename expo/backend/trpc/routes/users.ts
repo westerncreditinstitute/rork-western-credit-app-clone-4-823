@@ -217,7 +217,9 @@ export const usersRouter = createTRPCRouter({
           console.error("[Users] Error creating subscription:", error);
         }
 
-        return { \n          ...dbToUser(data),\n          tier: tier || 'ace1_student',
+        return {
+          ...dbToUser(data),
+          tier: tier || 'ace1_student',
           subscription: { 
             tier: tier || 'ace1_student',
             status: 'active',
