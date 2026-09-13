@@ -221,7 +221,7 @@ export const [SubscriptionProvider, useSubscription] = createContextHook(() => {
         const tierKey = getStorageKey(SUBSCRIPTION_STORAGE_KEY, userId);
         AsyncStorage.setItem(tierKey, data.tier).catch(console.error);
         
-        const expiryDate = data.endDate || (data as any).initialRegistrationExpiry;
+        const expiryDate = data.endDate || (data as any).initialRegistrationExpiry || (data as any).trialEndDate;
         if (expiryDate) {
           const expiry = new Date(expiryDate);
           setExpiryDate(expiry);

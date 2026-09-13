@@ -68,9 +68,9 @@ export const subscriptionsRouter = createTRPCRouter({
       const now = new Date().toISOString();
       const id = `subscriptions:${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       
-      const initialExpiry = input.isInitialRegistration 
-        ? new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString()
-        : undefined;
+      // Calculate expiry: 7 days for ACE-1 (both initial registration and upgrades)
+      const trialDays = input.tier === 'ace1_student' ? 7 : 60;
+      const expiryDate = new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000).toISOString();
 
       const subscription = {
         id,
@@ -79,8 +79,9 @@ export const subscriptionsRouter = createTRPCRouter({
         status: "active",
         monthlyFee: SUBSCRIPTION_FEES[input.tier],
         startDate: now,
+        endDate: input.tier === 'ace1_student' ? expiryDate : undefined,
         initialRegistrationDate: input.isInitialRegistration ? now : undefined,
-        initialRegistrationExpiry: initialExpiry,
+        initialRegistrationExpiry: input.isInitialRegistration ? expiryDate : undefined,
         autoRenew: true,
         referredBy: input.referredBy,
         createdAt: now,
