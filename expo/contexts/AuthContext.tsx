@@ -75,6 +75,8 @@ interface AuthContextType {
     password: string;
     phone?: string;
     desiredTier?: 'free' | 'ace1_student';
+    /** Optional launch promo code (e.g. WCI2026) validated server-side. */
+    promoCode?: string;
   }) => Promise<{ success: boolean; error?: string; user?: AuthUser; tier?: string }>;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string; user?: AuthUser }>;
   logout: () => Promise<void>;

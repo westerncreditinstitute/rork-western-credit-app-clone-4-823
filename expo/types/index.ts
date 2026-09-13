@@ -46,6 +46,8 @@ export interface Course {
   freeTrialDays?: number;
   monthlyInstallment?: number;
   installmentMonths?: number;
+  /** Recurring subscription price for courses billed monthly (ACE tiers). */
+  monthlyFee?: number;
   renewalFee?: number;
   limitedTimeOffer?: boolean;
   image: string;

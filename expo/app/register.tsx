@@ -378,8 +378,8 @@ export default function RegisterScreen() {
               )}
 
               {mode === 'register' && (
-                <View style={styles.inputGroup}>
-                  <View style={styles.iconContainer}>
+                <View style={styles.inputContainer}>
+                  <View style={styles.inputIcon}>
                     <Tag size={20} color="#D4AF37" />
                   </View>
                   <TextInput
