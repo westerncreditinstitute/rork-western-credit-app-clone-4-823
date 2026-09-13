@@ -114,7 +114,7 @@ export default function RegisterScreen() {
 
         if (result.success) {
           const tier = (result as any).tier || selectedTier || 'free';
-          const durationDays = selectedTier === 'ace1_student' ? 60 : undefined;
+          const durationDays = selectedTier === 'ace1_student' ? 7 : undefined;
           await updateTier(tier, durationDays);
           console.log('[Register] User registered as', tier, 'subscriber');
         } else {
@@ -245,7 +245,7 @@ export default function RegisterScreen() {
                   <Text style={styles.tierFeature}>✓ Full course access</Text>
                   <Text style={styles.tierFeature}>✓ AI Credit Coach</Text>
                   <Text style={styles.tierFeature}>✓ AI Dispute Assistant</Text>
-                  <Text style={styles.tierFeature}>✓ 60-day trial (no payment)</Text>
+                  <Text style={styles.tierFeature}>✓ 7-day trial (no payment)</Text>
                 </TouchableOpacity>
               </Animated.View>
             )}

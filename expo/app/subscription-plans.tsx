@@ -47,12 +47,12 @@ const plans: Plan[] = [
   {
     id: "ace1_course",
     name: "ACE-1 Course",
-    subtitle: "60-Day Free Trial",
+    subtitle: "7-Day Free Trial",
     price: 99.99,
     priceLabel: "Certificate Fee Only",
     badge: "BEST START",
     features: [
-      { text: "Full ACE-1 Course Access (60 days)", included: true },
+      { text: "Full ACE-1 Course Access (7 days)", included: true },
       { text: "AI Credit Repair Coach", included: true },
       { text: "AI Dispute Assistant", included: true },
       { text: "Lawsuit Assistant", included: true },
@@ -70,7 +70,7 @@ const courseOptions = [
     name: "ACE-1: Advanced Credit Repair",
     price: 499.99,
     certFee: 99.99,
-    freeTrialDays: 60,
+    freeTrialDays: 7,
     description: "Master advanced credit repair techniques",
     image: "https://images.unsplash.com/photo-1554224154-26032ffc0d07?w=600&h=400&fit=crop",
   },
@@ -139,7 +139,7 @@ export default function SubscriptionPlansScreen() {
 
     const isACE1 = courseId === "ace1";
     const message = isACE1
-      ? `ACE-1 is FREE for 60 days! You only pay the $${course.certFee} certificate fee to enroll. After 60 days, continue access for $25/month.`
+      ? `ACE-1 is FREE for 7 days! You only pay the $${course.certFee} certificate fee to enroll. After 7 days, continue access for $25/month.`
       : `${course.name} costs $${course.price} + $${course.certFee} certificate fee (Total: $${course.price + course.certFee}).`;
 
     Alert.alert(
@@ -286,7 +286,7 @@ export default function SubscriptionPlansScreen() {
                   <Zap color={Colors.surface} size={14} />
                   <Text style={styles.ace1BadgeText}>SPECIAL OFFER</Text>
                 </View>
-                <Text style={styles.ace1HighlightTitle}>ACE-1 Free for 60 Days!</Text>
+                <Text style={styles.ace1HighlightTitle}>ACE-1 Free for 7 Days!</Text>
                 <Text style={styles.ace1HighlightText}>
                   Start your credit repair journey with just the $99.99 certificate fee. 
                   Get full access to all course materials and AI tools.

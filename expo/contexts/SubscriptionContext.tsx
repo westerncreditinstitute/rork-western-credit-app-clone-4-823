@@ -351,7 +351,7 @@ export const [SubscriptionProvider, useSubscription] = createContextHook(() => {
       // Update subscription for paid courses
       const isPaidCourse = PAID_COURSE_IDS.includes(courseId);
       if (isPaidCourse && tier === 'free') {
-        const trialDays = isACE1Course ? 60 : 30;
+        const trialDays = isACE1Course ? 7 : 30;
         const newTier: SubscriptionTier = 'ace1_student';
         
         setTier(newTier);
@@ -443,7 +443,7 @@ export const [SubscriptionProvider, useSubscription] = createContextHook(() => {
         // Update tier if any paid courses are enrolled
         const hasPaidCourse = currentEnrolled.some(id => PAID_COURSE_IDS.includes(id));
         if (hasPaidCourse && tier === 'free') {
-          await updateTier('ace1_student', 60);
+          await updateTier('ace1_student', 7);
           console.log('[Subscription] Updated tier due to enrolled paid courses');
         }
       }
