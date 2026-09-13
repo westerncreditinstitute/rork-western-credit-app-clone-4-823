@@ -108,7 +108,7 @@ export default function ChatScreen() {
     
     // Check chat limits
     const maxChats = isFree ? 10 : Infinity; // Free trial: 10 total
-    const maxChatsPerDay = isPremium ? 3 : Infinity; // Paid: 3 per day
+    const maxChatsPerDay = isPremium ? 10 : Infinity; // Paid: 10 per day (300/month)
     
     if (isFree && chatCount >= maxChats) {
       Alert.alert('Chat Limit Reached', `You have reached your limit of ${maxChats} chats on the free trial. Upgrade to ACE-1 for unlimited chats!`);
