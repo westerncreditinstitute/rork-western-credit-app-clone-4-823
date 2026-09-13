@@ -31,6 +31,7 @@ export default function RegisterScreen() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [phone, setPhone] = useState('');
+  const [selectedTier, setSelectedTier] = useState<'free' | 'ace1_student'>('free');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [mode, setMode] = useState<'register' | 'login'>('register');
@@ -106,11 +107,14 @@ export default function RegisterScreen() {
           email: email.trim(),
           password: password,
           phone: phone.trim() || undefined,
+          desiredTier: selectedTier,
         });
 
         if (result.success) {
-          await updateTier('free');
-          console.log('[Register] User registered as free subscriber');
+          const tier = (result as any).tier || selectedTier || 'free';
+          const durationDays = selectedTier === 'ace1_student' ? 60 : undefined;
+          await updateTier(tier, durationDays);
+          console.log('[Register] User registered as', tier, 'subscriber');
         } else {
           setError(result.error || 'Registration failed');
         }
@@ -199,6 +203,50 @@ export default function RegisterScreen() {
                 Master Your Credit. Transform Your Future.
               </Text>
             </Animated.View>
+
+            {mode === 'register' && (
+              <Animated.View
+                style={[
+                  styles.tiersContainer,
+                  { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
+                ]}
+              >
+                <Text style={styles.tiersTitle}>Choose Your Plan</Text>
+                
+                <TouchableOpacity
+                  style={[
+                    styles.tierCard,
+                    selectedTier === 'free' && styles.tierCardSelected,
+                  ]}
+                  onPress={() => setSelectedTier('free')}
+                >
+                  <View style={styles.tierHeader}>
+                    <Text style={styles.tierName}>Free</Text>
+                    <Text style={styles.tierPrice}>$0</Text>
+                  </View>
+                  <Text style={styles.tierFeature}>✓ Weekly tips</Text>
+                  <Text style={styles.tierFeature}>✓ Community access</Text>
+                  <Text style={styles.tierFeature}>✓ Basic resources</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.tierCard,
+                    selectedTier === 'ace1_student' && styles.tierCardSelected,
+                  ]}
+                  onPress={() => setSelectedTier('ace1_student')}
+                >
+                  <View style={styles.tierHeader}>
+                    <Text style={styles.tierName}>ACE-1 Student</Text>
+                    <Text style={styles.tierPrice}>Free Trial</Text>
+                  </View>
+                  <Text style={styles.tierFeature}>✓ Full course access</Text>
+                  <Text style={styles.tierFeature}>✓ AI Credit Coach</Text>
+                  <Text style={styles.tierFeature}>✓ AI Dispute Assistant</Text>
+                  <Text style={styles.tierFeature}>✓ 60-day trial (no payment)</Text>
+                </TouchableOpacity>
+              </Animated.View>
+            )}
 
             <Animated.View
               style={[
@@ -351,7 +399,10 @@ export default function RegisterScreen() {
                   ) : (
                     <>
                       <Text style={styles.submitText}>
-                        {mode === 'register' ? 'Get Started Free' : 'Sign In'}
+                        {mode === 'register' 
+                          ? (selectedTier === 'ace1_student' ? 'Start ACE-1 Trial' : 'Get Started Free')
+                          : 'Sign In'
+                        }
                       </Text>
                       <ArrowRight size={20} color="#0A1628" />
                     </>
@@ -366,6 +417,7 @@ export default function RegisterScreen() {
                   setError('');
                   setPassword('');
                   setConfirmPassword('');
+                  setSelectedTier('free');
                 }}
               >
                 <Text style={styles.switchModeText}>
@@ -483,6 +535,49 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
     textAlign: 'center',
     letterSpacing: 0.3,
+  },
+  tiersContainer: {
+    marginBottom: 24,
+  },
+  tiersTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  tierCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 2,
+    borderColor: 'rgba(212, 175, 55, 0.2)',
+  },
+  tierCardSelected: {
+    borderColor: '#D4AF37',
+    backgroundColor: 'rgba(212, 175, 55, 0.1)',
+  },
+  tierHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  tierName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  tierPrice: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#D4AF37',
+  },
+  tierFeature: {
+    fontSize: 13,
+    color: '#CBD5E1',
+    marginBottom: 4,
   },
   formCard: {
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
