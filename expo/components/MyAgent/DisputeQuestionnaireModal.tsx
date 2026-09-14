@@ -61,7 +61,8 @@ export interface DisputeQuestionnaireModalProps {
  * Asks the AI Dispute Assistant's escalation questions before a letter is
  * recommended.
  *
- * The Equifax "Prepare Dispute Letter" path used to jump straight from a
+ * The "Analyze My Credit Report" path - covering both a manually uploaded
+ * report and the linked Equifax 3-bureau report - used to jump straight from a
  * negative account to a generated letter, choosing the letter purely from what
  * the item was (collection, charge-off, ...). That ignores what the consumer
  * has already tried, and the letter that follows can be plainly wrong - a

@@ -347,10 +347,10 @@ export default function NegativeAccountsDashboard({
                                           })
                                         }
                                         accessibilityRole="button"
-                                        accessibilityLabel={`Generate ${acct.letterType} for ${acct.creditor}`}
+                                        accessibilityLabel={`Prepare dispute letter for ${acct.creditor}`}
                                       >
                                         <Text style={styles.generateButtonText}>
-                                          Generate This Letter
+                                          Prepare Dispute Letter
                                         </Text>
                                       </TouchableOpacity>
                                     ) : null}

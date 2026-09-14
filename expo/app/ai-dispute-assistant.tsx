@@ -78,7 +78,8 @@ interface Dispute {
 
 /**
  * The escalation questions now live in `lib/dispute-questionnaire.ts` so the
- * Equifax "Prepare Dispute Letter" path (My Agent -> Analyze My Report) asks
+ * "Prepare Dispute Letter" path (My Agent -> Analyze My Credit Report, both the
+ * uploaded-report list and the linked Equifax 3-bureau report) asks
  * exactly the same things before recommending a letter. Keeping a second copy
  * here is what let the two flows drift apart in the first place.
  */

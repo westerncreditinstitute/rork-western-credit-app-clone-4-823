@@ -821,10 +821,10 @@ export default function CreditAnalysisModal({
                             })
                           }
                           accessibilityRole="button"
-                          accessibilityLabel={`Generate ${rec.letterType} for ${rec.creditor}`}
+                          accessibilityLabel={`Prepare dispute letter for ${rec.creditor}`}
                         >
                           <Text style={styles.recButtonText}>
-                            Generate This Letter
+                            Prepare Dispute Letter
                           </Text>
                         </TouchableOpacity>
                       ) : null}
