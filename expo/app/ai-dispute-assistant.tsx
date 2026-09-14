@@ -34,6 +34,7 @@ import Colors from "@/constants/colors";
 import CreditReportParser, { ParsedAccount } from "@/components/CreditReportParser";
 import AccountSummary from "@/components/AccountSummary";
 import DisputeLetterPrompt from "@/components/DisputeLetterPrompt";
+import DisputeTrackerEmbedded from "@/components/DisputeTrackerEmbedded";
 import { useDisputes } from "@/contexts/DisputesContext";
 import { useUser } from "@/contexts/UserContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
@@ -1220,172 +1221,134 @@ export default function AIDisputeAssistantScreen() {
         </View>
       )}
 
-      <View style={styles.analyticsCard}>
-        <View style={styles.analyticsHeader}>
-          <PieChart color={Colors.primary} size={24} />
-          <Text style={styles.analyticsTitle}>Dispute Analytics</Text>
-        </View>
-        <View style={styles.analyticsGrid}>
-          <View style={styles.analyticsItem}>
-            <Text style={styles.analyticsValue}>{disputes.length}</Text>
-            <Text style={styles.analyticsLabel}>Total Disputes</Text>
-          </View>
-          <View style={styles.analyticsItem}>
-            <Text style={styles.analyticsValue}>
-              {disputes.filter(d => d.status === "resolved").length}
-            </Text>
-            <Text style={styles.analyticsLabel}>Resolved</Text>
-          </View>
-          <View style={styles.analyticsItem}>
-            <Text style={styles.analyticsValue}>
-              {disputes.filter(d => d.status === "sent" || d.status === "in-progress").length}
-            </Text>
-            <Text style={styles.analyticsLabel}>Pending</Text>
-          </View>
-        </View>
-        
+      <ScrollView style={styles.step5ScrollContent} showsVerticalScrollIndicator={false}>
         {/* Cloud Sync Status */}
         {user?.id && (
-          <View style={styles.cloudSyncStatus}>
+          <View style={styles.cloudSyncCard}>
             {isSavingToCloud ? (
               <View style={styles.cloudSyncRow}>
                 <CloudUpload color={Colors.primary} size={18} />
-                <Text style={styles.cloudSyncText}>Saving to Cloud Tracker...</Text>
+                <Text style={styles.cloudSyncText}>Saving disputes to Cloud Tracker...</Text>
               </View>
             ) : savedToCloud ? (
               <View style={styles.cloudSyncRow}>
                 <CheckCircle2 color={Colors.success} size={18} />
-                <Text style={[styles.cloudSyncText, { color: Colors.success }]}>Saved to Cloud Dispute Tracker</Text>
+                <Text style={[styles.cloudSyncText, { color: Colors.success }]}>✓ Saved to Cloud Dispute Tracker</Text>
               </View>
             ) : cloudSaveError ? (
               <View style={styles.cloudSyncRow}>
                 <AlertTriangle color={Colors.warning} size={18} />
                 <Text style={[styles.cloudSyncText, { color: Colors.warning }]}>
-                  Not saved to Dispute Tracker: {cloudSaveError}
+                  Note: {cloudSaveError}
                 </Text>
               </View>
             ) : null}
           </View>
         )}
-      </View>
 
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Generated Letters</Text>
-        
+        <View style={styles.analyticsCard}>
+          <View style={styles.analyticsHeader}>
+            <PieChart color={Colors.primary} size={24} />
+            <Text style={styles.analyticsTitle}>Dispute Summary</Text>
+          </View>
+          <View style={styles.analyticsGrid}>
+            <View style={styles.analyticsItem}>
+              <Text style={styles.analyticsValue}>{disputes.length}</Text>
+              <Text style={styles.analyticsLabel}>Generated</Text>
+            </View>
+            <View style={styles.analyticsItem}>
+              <Text style={styles.analyticsValue}>
+                {disputes.filter(d => d.status === "resolved").length}
+              </Text>
+              <Text style={styles.analyticsLabel}>Resolved</Text>
+            </View>
+            <View style={styles.analyticsItem}>
+              <Text style={styles.analyticsValue}>
+                {disputes.filter(d => d.status === "sent" || d.status === "in-progress").length}
+              </Text>
+              <Text style={styles.analyticsLabel}>Pending</Text>
+            </View>
+          </View>
+        </View>
+
         {isFree && disputes.length > 0 && (
-          <View style={[styles.card, { backgroundColor: Colors.surface, borderColor: Colors.border, borderWidth: 1, marginBottom: 16 }]}>
-            <Text style={[styles.cardSubtitle, { color: Colors.textLight }]}>
+          <View style={styles.freeTrialBanner}>
+            <Text style={styles.freeTrialText}>
               💡 Free Trial: Showing only recommended letters. Upgrade to ACE-1 to see all available dispute letters.
             </Text>
           </View>
         )}
-        <ScrollView style={styles.lettersList} showsVerticalScrollIndicator={false}>
-          {disputes
-            .filter(dispute => {
-              // For free users, only show the recommended letter for each account
-              if (isFree && selectedAccounts.length > 0) {
-                // Check if this is the recommended letter for any of the selected accounts
-                const account = selectedAccounts.find(acc => acc.name === dispute.creditor);
-                return account && dispute.disputeType === account.recommendation;
-              }
-              // Premium users can see all letters
-              return true;
-            })
-            .map((dispute, index) => (
-            <View key={dispute.id} style={styles.letterItem}>
-              <TouchableOpacity
-                style={styles.letterHeader}
-                onPress={() => setExpandedLetter(expandedLetter === index ? null : index)}
-              >
-                <View style={styles.letterHeaderLeft}>
-                  <FileText color={Colors.primary} size={20} />
-                  <View style={styles.letterInfo}>
-                    <Text style={styles.letterTitle}>{dispute.creditor}</Text>
-                    <Text style={styles.letterType}>{dispute.disputeType}</Text>
-                  </View>
-                </View>
-                <View style={styles.letterHeaderRight}>
-                  <View style={[styles.statusBadge, { backgroundColor: getStatusColor(dispute.status) + "20" }]}>
-                    <Text style={[styles.statusBadgeText, { color: getStatusColor(dispute.status) }]}>
-                      {dispute.status.charAt(0).toUpperCase() + dispute.status.slice(1)}
+
+        {/* Generated Letters Section */}
+        {disputes.length > 0 && (
+          <View style={styles.lettersSection}>
+            <Text style={styles.sectionTitle}>Generated Letters</Text>
+            <View style={styles.lettersGrid}>
+              {disputes
+                .filter(dispute => {
+                  if (isFree && selectedAccounts.length > 0) {
+                    const account = selectedAccounts.find(acc => acc.name === dispute.creditor);
+                    return account && dispute.disputeType === account.recommendation;
+                  }
+                  return true;
+                })
+                .map((dispute) => (
+                <TouchableOpacity
+                  key={dispute.id}
+                  style={styles.letterCard}
+                  onPress={() => handleViewLetter(dispute)}
+                >
+                  <FileText color={Colors.primary} size={24} />
+                  <Text style={styles.letterCardTitle}>{dispute.creditor}</Text>
+                  <Text style={styles.letterCardType}>{dispute.disputeType}</Text>
+                  <View style={[styles.letterCardStatus, { backgroundColor: getStatusColor(dispute.status) + "20" }]}>
+                    <Text style={[styles.letterCardStatusText, { color: getStatusColor(dispute.status) }]}>
+                      {dispute.status}
                     </Text>
                   </View>
-                  {expandedLetter === index ? (
-                    <ChevronUp color={Colors.textLight} size={20} />
-                  ) : (
-                    <ChevronDown color={Colors.textLight} size={20} />
-                  )}
-                </View>
-              </TouchableOpacity>
-              
-              {expandedLetter === index && (
-                <View style={styles.letterContent}>
-                  <ScrollView style={styles.letterPreview} nestedScrollEnabled={true}>
-                    <Text style={styles.letterPreviewText}>{dispute.letterContent}</Text>
-                  </ScrollView>
-                  <View style={styles.letterActions}>
-                    <TouchableOpacity
-                      style={styles.letterActionButton}
-                      onPress={() => handleViewLetter(dispute)}
-                    >
-                      <Eye color={Colors.primary} size={18} />
-                      <Text style={styles.letterActionText}>View</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.letterActionButton}
-                      onPress={() => handleDownloadLetter(dispute)}
-                    >
-                      <Download color={Colors.primary} size={18} />
-                      <Text style={styles.letterActionText}>Download</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.letterActionButton}
-                      onPress={() => handlePrintLetter(dispute)}
-                    >
-                      <Printer color={Colors.primary} size={18} />
-                      <Text style={styles.letterActionText}>Print</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.letterActionButton}
-                      onPress={() => handleCopyLetter(dispute)}
-                    >
-                      <Copy color={Colors.primary} size={18} />
-                      <Text style={styles.letterActionText}>Copy</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
+                </TouchableOpacity>
+              ))}
             </View>
-          ))}
-        </ScrollView>
 
-        <View style={styles.buttonRow}>
-          <TouchableOpacity style={styles.secondaryButton} onPress={() => setCurrentStep(4)}>
-            <Text style={styles.secondaryButtonText}>Edit Info</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.primaryButton, { flex: 0.5 }]}
-            onPress={handleDownloadAllLetters}
-          >
-            <Download color={Colors.surface} size={18} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.primaryButton, { flex: 0.5 }]}
-            onPress={handlePrintAllLetters}
-          >
-            <Printer color={Colors.surface} size={18} />
-          </TouchableOpacity>
+            <View style={styles.buttonRow}>
+              <TouchableOpacity style={styles.secondaryButton} onPress={() => setCurrentStep(4)}>
+                <Text style={styles.secondaryButtonText}>Edit Info</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.primaryButton, { flex: 0.5 }]}
+                onPress={handleDownloadAllLetters}
+              >
+                <Download color={Colors.surface} size={18} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.primaryButton, { flex: 0.5 }]}
+                onPress={handlePrintAllLetters}
+              >
+                <Printer color={Colors.surface} size={18} />
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* Embedded Dispute Tracker - Main Content */}
+        <View style={styles.trackerWrapper}>
+          <DisputeTrackerEmbedded
+            showHeader={true}
+            maxHeight={600}
+            onDisputeSelected={(dispute) => {
+              console.log("Dispute selected:", dispute.id);
+            }}
+          />
         </View>
 
-        {/* View Cloud Tracker Button */}
         <TouchableOpacity
-          style={styles.viewTrackerButton}
+          style={styles.viewFullTrackerButton}
           onPress={() => router.push("/dispute-tracker" as any)}
         >
           <CloudUpload color={Colors.surface} size={20} />
-          <Text style={styles.viewTrackerButtonText}>View Cloud Dispute Tracker</Text>
+          <Text style={styles.viewFullTrackerButtonText}>View Full Dispute Tracker</Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
     </View>
   );
 
@@ -2126,5 +2089,118 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: Colors.text,
+  },
+  /* New styles for Step 5 integration */
+  step5ScrollContent: {
+    flex: 1,
+    paddingBottom: 20,
+  },
+  cloudSyncCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 8,
+    margin: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  cloudSyncRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  cloudSyncText: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: Colors.text,
+    flex: 1,
+  },
+  freeTrialBanner: {
+    backgroundColor: Colors.warning + "15",
+    borderRadius: 8,
+    margin: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: Colors.warning + "40",
+  },
+  freeTrialText: {
+    fontSize: 12,
+    color: Colors.text,
+    fontWeight: "500",
+  },
+  lettersSection: {
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: Colors.text,
+    marginBottom: 12,
+  },
+  lettersGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+    marginBottom: 12,
+  },
+  letterCard: {
+    flex: 1,
+    minWidth: 140,
+    backgroundColor: Colors.surface,
+    borderRadius: 8,
+    padding: 12,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  letterCardTitle: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Colors.text,
+    marginTop: 8,
+    textAlign: "center",
+  },
+  letterCardType: {
+    fontSize: 10,
+    color: Colors.textLight,
+    marginTop: 4,
+    textAlign: "center",
+  },
+  letterCardStatus: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    marginTop: 8,
+  },
+  letterCardStatusText: {
+    fontSize: 10,
+    fontWeight: "600",
+    textTransform: "capitalize",
+  },
+  trackerWrapper: {
+    height: 700,
+    marginHorizontal: 12,
+    marginVertical: 12,
+    borderRadius: 12,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  viewFullTrackerButton: {
+    backgroundColor: Colors.primary,
+    borderRadius: 8,
+    marginHorizontal: 12,
+    marginVertical: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+  },
+  viewFullTrackerButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: Colors.surface,
   },
 });
