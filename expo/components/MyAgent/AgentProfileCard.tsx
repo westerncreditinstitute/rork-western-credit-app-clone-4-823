@@ -16,6 +16,7 @@ import {
   ClipboardList,
   ChevronRight,
   FileSearch,
+  LayoutDashboard,
   Radio,
 } from "lucide-react-native";
 import { useSubscription } from "@/contexts/SubscriptionContext";
@@ -66,6 +67,8 @@ export interface AgentProfileCardProps {
   onOpenDisputeTracker?: () => void;
   /** Open the AI Dispute Assistant (credit report analysis) modal */
   onOpenCreditAnalysis?: () => void;
+  /** Open the all-bureaus credit summary dashboard */
+  onOpenCreditSummary?: () => void;
   /** Open the per-bureau negative accounts dashboard */
   onOpenNegativeAccountsDashboard?: () => void;
   /** Whether the current user is an ACE-1 student (controls action button visibility) */
@@ -83,6 +86,7 @@ export default function AgentProfileCard({
   onOpenCreditRepair,
   onOpenDisputeTracker,
   onOpenCreditAnalysis,
+  onOpenCreditSummary,
   onOpenNegativeAccountsDashboard,
   isACE1 = true,
 }: AgentProfileCardProps) {
@@ -116,6 +120,14 @@ export default function AgentProfileCard({
       icon: FileSearch,
       color: TEAL,
       onPress: onOpenCreditAnalysis,
+    },
+    {
+      id: "credit-summary",
+      label: "Credit Summary",
+      description: "All three bureaus in one view",
+      icon: LayoutDashboard,
+      color: "#38BDF8",
+      onPress: onOpenCreditSummary,
     },
     {
       id: "negative-accounts-dashboard",

@@ -44,6 +44,7 @@ import CreditRepairModal from "@/components/MyAgent/CreditRepairModal";
 import DisputeTrackerModal from "@/components/MyAgent/DisputeTrackerModal";
 import CreditAnalysisModal from "@/components/MyAgent/CreditAnalysisModal";
 import NegativeAccountsDashboard from "@/components/MyAgent/NegativeAccountsDashboard";
+import CreditSummaryDashboard from "@/components/MyAgent/CreditSummaryDashboard";
 import DisputeQuestionnaireModal, {
   type QuestionnaireAccount,
   type DisputeQuestionnaireResult,
@@ -115,6 +116,7 @@ function MyAgentScreenInner({
   const [disputeTrackerVisible, setDisputeTrackerVisible] = useState(false);
   const [creditAnalysisVisible, setCreditAnalysisVisible] = useState(false);
   const [negativeDashboardVisible, setNegativeDashboardVisible] = useState(false);
+  const [creditSummaryVisible, setCreditSummaryVisible] = useState(false);
   const [questionnaireVisible, setQuestionnaireVisible] = useState(false);
   // The account awaiting the escalation questionnaire. Set when a "Prepare
   // Dispute Letter" button fires; cleared once the questions are answered (or
@@ -740,6 +742,7 @@ function MyAgentScreenInner({
                 }}
                 onOpenDisputeTracker={() => setDisputeTrackerVisible(true)}
                 onOpenCreditAnalysis={() => setCreditAnalysisVisible(true)}
+                onOpenCreditSummary={() => setCreditSummaryVisible(true)}
                 onOpenNegativeAccountsDashboard={() =>
                   setNegativeDashboardVisible(true)
                 }
@@ -883,6 +886,18 @@ function MyAgentScreenInner({
               agentName={agent.agent_name}
               onGenerateLetter={handleAnalysisGenerateLetter}
               onDiscussInChat={handleDiscussAnalysisInChat}
+            />
+            <CreditSummaryDashboard
+              visible={creditSummaryVisible}
+              onClose={() => setCreditSummaryVisible(false)}
+              onViewBreakdown={() => {
+                setCreditSummaryVisible(false);
+                setNegativeDashboardVisible(true);
+              }}
+              onUploadReport={() => {
+                setCreditSummaryVisible(false);
+                setCreditAnalysisVisible(true);
+              }}
             />
             <NegativeAccountsDashboard
               visible={negativeDashboardVisible}
