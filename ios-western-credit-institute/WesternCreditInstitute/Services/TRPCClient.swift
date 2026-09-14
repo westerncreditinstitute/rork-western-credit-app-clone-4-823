@@ -10,6 +10,10 @@ nonisolated enum TRPCClientError: Error, LocalizedError {
     case notConfigured
     case serverWaking
     case offline
+    /// The server rejected the request's credentials (HTTP 401).
+    /// Distinct from `.server` so callers can send the user back to sign-in
+    /// instead of showing a dead-end error.
+    case unauthorized
     /// A tRPC procedure answered with an error payload (message preserved).
     case server(message: String)
 
@@ -18,7 +22,7 @@ nonisolated enum TRPCClientError: Error, LocalizedError {
     var isTransportFailure: Bool {
         switch self {
         case .offline, .serverWaking: return true
-        case .notConfigured, .server: return false
+        case .notConfigured, .unauthorized, .server: return false
         }
     }
 
@@ -27,6 +31,7 @@ nonisolated enum TRPCClientError: Error, LocalizedError {
         case .notConfigured: return "The API server is not configured."
         case .serverWaking: return "The server is starting up and didn't respond in time. Please try again in a few seconds."
         case .offline: return "Can't reach the server right now. Check your internet connection and try again in a moment."
+        case .unauthorized: return "Your session has expired. Please sign in again."
         case .server(let message): return message
         }
     }
@@ -111,7 +116,12 @@ nonisolated final class TRPCClient: Sendable {
         components?.percentEncodedQuery = "input=\(encodedInput)"
         guard let url = components?.url else { throw TRPCClientError.offline }
 
-        return try await execute(request: { URLRequest(url: url) }, session: readSession, isWrite: false)
+        // Built per attempt so a session established mid-retry is picked up.
+        return try await execute(
+            request: { Self.authorized(URLRequest(url: url)) },
+            session: readSession,
+            isWrite: false
+        )
     }
 
     /// tRPC POST mutation with retry/backoff.
@@ -126,7 +136,11 @@ nonisolated final class TRPCClient: Sendable {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: input)
 
-        return try await execute(request: { request }, session: writeSession, isWrite: true)
+        return try await execute(
+            request: { Self.authorized(request) },
+            session: writeSession,
+            isWrite: true
+        )
     }
 
     /// Probes the health route to confirm reachability, mirroring the Expo
@@ -188,6 +202,13 @@ nonisolated final class TRPCClient: Sendable {
                 // application-level 4xx. Only the edge 5xx family means down.
                 Self.reportReachable()
 
+                // A rejected credential is never worth retrying, and the
+                // caller needs to tell them apart from a procedure error.
+                if http.statusCode == 401 {
+                    AuthSessionStore.shared.reportRejectedCredential()
+                    throw TRPCClientError.unauthorized
+                }
+
                 guard (200..<300).contains(http.statusCode) else {
                     // A 4xx from tRPC carries the procedure's error message.
                     throw Self.decodedError(from: data)
@@ -220,6 +241,18 @@ nonisolated final class TRPCClient: Sendable {
         }
 
         throw lastError
+    }
+
+    /// Attaches the stored session credential when signed in.
+    ///
+    /// Mirrors the Expo client's `getAuthHeaders`: the backend's `createContext`
+    /// expects `Bearer base64({ id, email })`, so both platforms present the
+    /// same header and hit the same `protectedProcedure` path.
+    private static func authorized(_ request: URLRequest) -> URLRequest {
+        guard let token = AuthSessionStore.shared.bearerToken else { return request }
+        var authorized = request
+        authorized.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        return authorized
     }
 
     // MARK: - Sync status reporting

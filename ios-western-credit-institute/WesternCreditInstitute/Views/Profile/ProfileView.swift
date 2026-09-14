@@ -8,6 +8,7 @@ import SwiftUI
 struct ProfileView: View {
     @Environment(ThemeManager.self) private var theme
     @Environment(AppStore.self) private var store
+    @Environment(AuthStore.self) private var auth
     @Environment(\.openURL) private var openURL
 
     @Binding var selectedTab: AppTab
@@ -61,7 +62,7 @@ struct ProfileView: View {
         .confirmationDialog("Sign out of your account?", isPresented: $showSignOutConfirmation, titleVisibility: .visible) {
             Button("Sign Out", role: .destructive) {
                 Haptics.warning()
-                store.setTier(.free)
+                auth.signOut()
             }
             Button("Cancel", role: .cancel) {}
         }

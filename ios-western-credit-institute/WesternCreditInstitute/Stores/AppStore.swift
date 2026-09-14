@@ -18,10 +18,17 @@ final class AppStore {
         static let walletUnlocked = "wci.wallet.unlocked"
         static let paidProviders = "wci.providers.paid"
         static let adminUnlocked = "wci.admin.unlocked"
+        /// Which account the persisted state above belongs to.
+        static let owner = "wci.state.ownerUserId"
     }
 
     // MARK: - Published state
 
+    /// The signed-in account.
+    ///
+    /// Seeded with the bundled sample so SwiftUI previews and the pre-auth
+    /// frame have something to render; `applySignedInUser` replaces it with the
+    /// real account as soon as a session exists.
     var user: AppUser = MockData.currentUser
     var tier: SubscriptionTier
     var enrolledCourseIds: Set<String>
@@ -58,6 +65,48 @@ final class AppStore {
 
         syncInitialEnrollments()
         applyReadState()
+    }
+
+    // MARK: - Session
+
+    /// Adopts the signed-in account, or restores the placeholder on sign-out.
+    ///
+    /// Persisted unlocks belong to whoever earned them, so they are cleared only
+    /// when a *different* account signs in. The comparison is against the stored
+    /// owner id rather than the in-memory `user`, which still holds the sample
+    /// account on launch — comparing against that would wipe a returning user's
+    /// purchases every single time the app started.
+    func applySignedInUser(_ signedIn: AppUser?) {
+        user = signedIn ?? MockData.currentUser
+
+        // Signing out leaves the data in place: the same person signing back in
+        // should find their unlocks intact.
+        guard let signedIn else { return }
+
+        let defaults = UserDefaults.standard
+        let storedOwner = defaults.string(forKey: Keys.owner)
+        guard storedOwner != signedIn.id else { return }
+
+        // A nil owner means this state predates per-account tracking (or is a
+        // first run), so it belongs to this user rather than someone else.
+        if storedOwner != nil {
+            resetPerAccountState()
+        }
+        defaults.set(signedIn.id, forKey: Keys.owner)
+    }
+
+    /// Drops entitlements that belong to the previously signed-in account.
+    private func resetPerAccountState() {
+        let defaults = UserDefaults.standard
+
+        isWalletUnlocked = false
+        isAdminUnlocked = false
+        paidProviderIds = []
+        defaults.set([], forKey: Keys.paidProviders)
+
+        // Tier is an entitlement of the account, not the device.
+        tier = .free
+        defaults.set(SubscriptionTier.free.rawValue, forKey: Keys.tier)
     }
 
     // MARK: - Subscription

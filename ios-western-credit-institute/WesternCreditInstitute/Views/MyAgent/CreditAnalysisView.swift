@@ -31,6 +31,7 @@ struct CreditAnalysisView: View {
     @State private var expandedAccountId: String?
     @State private var questionnaireTarget: DisputeTarget?
     @State private var generatedLetter: GeneratedLetter?
+    @State private var showEquifaxFetch = false
 
     init(userId: String) {
         _viewModel = State(initialValue: CreditAnalysisViewModel(userId: userId))
@@ -73,6 +74,12 @@ struct CreditAnalysisView: View {
                 rationale: letter.rationale
             )
         }
+        .sheet(isPresented: $showEquifaxFetch) {
+            EquifaxFetchSheet(userId: viewModel.userId) {
+                // A live pull saves new analyses, so reload to show them.
+                Task { await viewModel.refresh() }
+            }
+        }
     }
 
     // MARK: - Ready
@@ -94,6 +101,8 @@ struct CreditAnalysisView: View {
         ForEach(viewModel.bureaus) { bureau in
             bureauCard(bureau)
         }
+
+        refreshReportButton
 
         disputeOneAtATimeNote
     }
@@ -397,22 +406,23 @@ struct CreditAnalysisView: View {
         .padding(.vertical, Spacing.xxl)
     }
 
-    /// Nothing saved yet. iOS reads analyses that were uploaded and parsed
-    /// elsewhere, so this says exactly how to get data here rather than
-    /// offering an upload button that cannot work.
+    /// Nothing saved yet. The live pull is offered first because it works
+    /// entirely on device; uploading a PDF still happens in the web app.
     private var emptyView: some View {
         VStack(spacing: Spacing.md) {
             EmptyStateView(
                 symbol: "doc.text.magnifyingglass",
                 title: "No reports analyzed yet",
-                message: "Upload a credit report from Experian, Equifax or TransUnion and it will appear here, grouped by bureau, with every negative account ready to dispute."
+                message: "Pull your file from all three bureaus to see every negative account, grouped by bureau and ready to dispute."
             )
+
+            pullReportButton
 
             HStack(alignment: .top, spacing: Spacing.sm) {
                 Image(systemName: "info.circle.fill")
                     .font(.system(size: 14))
                     .foregroundStyle(theme.colors.primary)
-                Text("Report upload and parsing currently happens in the web and mobile web app. Once a report is analyzed there, it shows up here automatically for the same account.")
+                Text("Already uploaded a report in the web app? It shows up here automatically for the same account.")
                     .font(.system(size: 12))
                     .lineSpacing(3)
                     .foregroundStyle(theme.colors.textSecondary)
@@ -421,6 +431,57 @@ struct CreditAnalysisView: View {
             .padding(Spacing.md)
             .background(theme.colors.infoLight, in: .rect(cornerRadius: Radius.md, style: .continuous))
         }
+    }
+
+    /// Primary call to action on the empty state.
+    private var pullReportButton: some View {
+        let colors = theme.colors
+
+        return Button {
+            Haptics.medium()
+            showEquifaxFetch = true
+        } label: {
+            HStack(spacing: Spacing.sm) {
+                Image(systemName: "arrow.down.doc.fill")
+                    .font(.system(size: 15, weight: .semibold))
+                Text("Pull My Credit Report")
+                    .font(.system(size: 16, weight: .bold))
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, Spacing.md)
+            .background(
+                LinearGradient(colors: colors.gradientSecondary, startPoint: .leading, endPoint: .trailing),
+                in: .rect(cornerRadius: Radius.md, style: .continuous)
+            )
+        }
+        .buttonStyle(PressableButtonStyle())
+    }
+
+    /// Secondary action once reports already exist.
+    private var refreshReportButton: some View {
+        let colors = theme.colors
+
+        return Button {
+            Haptics.light()
+            showEquifaxFetch = true
+        } label: {
+            HStack(spacing: Spacing.sm) {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 14, weight: .semibold))
+                Text("Pull A Fresh Report")
+                    .font(.system(size: 14, weight: .bold))
+            }
+            .foregroundStyle(colors.primary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, Spacing.md - 2)
+            .background(colors.primary.opacity(0.08), in: .rect(cornerRadius: Radius.md, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
+                    .strokeBorder(colors.primary.opacity(0.25), lineWidth: 1)
+            }
+        }
+        .buttonStyle(PressableButtonStyle())
     }
 
     private func failureView(message: String) -> some View {

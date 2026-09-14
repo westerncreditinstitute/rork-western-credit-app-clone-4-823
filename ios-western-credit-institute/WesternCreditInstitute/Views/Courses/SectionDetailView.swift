@@ -17,7 +17,7 @@ struct SectionDetailView: View {
 
     @State private var viewModel: SectionDetailViewModel
 
-    init(course: Course, section: CourseSection) {
+    init(course: Course, section: CourseSection, userId: String) {
         self.course = course
         _viewModel = State(
             initialValue: SectionDetailViewModel(
@@ -27,7 +27,7 @@ struct SectionDetailView: View {
                     sectionId: section.id,
                     sectionTitle: section.title
                 ),
-                userId: MockData.currentUser.id
+                userId: userId
             )
         )
     }
