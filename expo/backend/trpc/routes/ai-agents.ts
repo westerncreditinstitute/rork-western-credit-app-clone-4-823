@@ -932,14 +932,53 @@ function analyzeCreditAccounts(accounts: ParsedAccountRecord[]): {
   };
 }
 
+/** One bureau's most recent analysis. */
+interface BureauAnalysis {
+  bureau: string;
+  createdAt: string;
+  accounts: ParsedAccountRecord[];
+  negativeCount: number;
+  totalNegativeBalance: number;
+  recommendations: any[];
+}
+
 /**
- * Fetches the user's most recent stored credit report analysis.
- * Used by the `analyze_credit_report` tool so the agent can discuss
- * a report the user uploaded earlier in a previous session.
+ * Looks up the signed-in account's email so a "no report" answer can name
+ * the account it searched. Reports are keyed to a user id, so uploading
+ * under one login and asking under another is indistinguishable from
+ * having no report at all unless we say which account we looked at.
+ *
+ * Legacy rows carry non-UUID ids ("1", "demo-…"), which the uuid column
+ * rejects — that surfaces as an error, not a throw, and yields null.
+ */
+async function fetchUserEmail(userId: string): Promise<string | null> {
+  try {
+    const { data, error } = await supabase
+      .from("users")
+      .select("email")
+      .eq("id", userId)
+      .maybeSingle();
+    if (error || !data) return null;
+    return (data.email as string) || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fetches the user's stored credit report analysis across EVERY bureau.
+ *
+ * Each upload/pull is saved as its own row per bureau (see
+ * saveCreditAnalysis), so reading only the single newest row — which is
+ * what this used to do — meant a user who had all three bureaus on file
+ * got told about one of them, and a tri-bureau pull would surface only
+ * whichever bureau happened to save last. Negative items are disputed
+ * bureau by bureau, so the agent needs all of them.
  */
 async function fetchLatestCreditAnalysis(userId: string): Promise<{
   found: boolean;
   bureau?: string;
+  bureaus: BureauAnalysis[];
   accounts: ParsedAccountRecord[];
   negativeCount: number;
   totalNegativeBalance: number;
@@ -947,46 +986,69 @@ async function fetchLatestCreditAnalysis(userId: string): Promise<{
   recommendations: any[];
   createdAt?: string;
 }> {
-  try {
-    const { data, error } = await supabase
-      .from("credit_report_analyses")
-      .select("*")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+  const empty = {
+    found: false,
+    bureaus: [] as BureauAnalysis[],
+    accounts: [] as ParsedAccountRecord[],
+    negativeCount: 0,
+    totalNegativeBalance: 0,
+    summary: "",
+    recommendations: [] as any[],
+  };
 
-    if (error || !data) {
+  try {
+    const rows = await fetchAnalysesPerBureau(userId);
+    if (rows.length === 0) return empty;
+
+    const bureaus: BureauAnalysis[] = rows.map((row) => {
+      const analysis = analyzeCreditAccounts(row.accounts || []);
       return {
-        found: false,
-        accounts: [],
-        negativeCount: 0,
-        totalNegativeBalance: 0,
-        summary: "",
-        recommendations: [],
+        bureau: row.bureau,
+        createdAt: row.createdAt,
+        accounts: row.accounts || [],
+        negativeCount: analysis.negativeCount,
+        totalNegativeBalance: analysis.totalNegativeBalance,
+        recommendations: analysis.recommendations,
       };
-    }
+    });
+
+    // Newest bureau first, so `bureau`/`createdAt` keep their old meaning
+    // for callers that still read a single report.
+    bureaus.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+    const accounts = bureaus.flatMap((b) => b.accounts);
+    const recommendations = bureaus.flatMap((b) =>
+      b.recommendations.map((r) => ({ ...r, bureau: b.bureau })),
+    );
+    const negativeCount = bureaus.reduce((n, b) => n + b.negativeCount, 0);
+    const totalNegativeBalance = bureaus.reduce(
+      (n, b) => n + b.totalNegativeBalance,
+      0,
+    );
+
+    const perBureau = bureaus
+      .map((b) => `${b.bureau}: ${b.negativeCount} negative`)
+      .join(", ");
+    const summary =
+      `Reviewed ${accounts.length} account${accounts.length === 1 ? "" : "s"} across ` +
+      `${bureaus.length} bureau${bureaus.length === 1 ? "" : "s"} (${perBureau}) — ` +
+      `${negativeCount} negative item${negativeCount === 1 ? "" : "s"} totaling ` +
+      `$${totalNegativeBalance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} in reported balances.`;
 
     return {
       found: true,
-      bureau: data.bureau || undefined,
-      accounts: (data.accounts || []) as ParsedAccountRecord[],
-      negativeCount: data.negative_count || 0,
-      totalNegativeBalance: Number(data.total_negative_balance || 0),
-      summary: data.summary || "",
-      recommendations: data.recommendations || [],
-      createdAt: data.created_at,
+      bureau: bureaus[0]?.bureau,
+      bureaus,
+      accounts,
+      negativeCount,
+      totalNegativeBalance,
+      summary,
+      recommendations,
+      createdAt: bureaus[0]?.createdAt,
     };
   } catch (e) {
     console.error("[AI Agents] fetchLatestCreditAnalysis error:", e);
-    return {
-      found: false,
-      accounts: [],
-      negativeCount: 0,
-      totalNegativeBalance: 0,
-      summary: "",
-      recommendations: [],
-    };
+    return empty;
   }
 }
 
@@ -1574,32 +1636,53 @@ async function executeTool(
       const analysis = await fetchLatestCreditAnalysis(userId);
 
       if (!analysis.found) {
+        // Analyses are keyed to the user id, so a report uploaded under a
+        // different login is invisible here and looks identical to having
+        // none. Naming the account we searched makes that distinguishable
+        // instead of telling someone who just uploaded a report that it
+        // does not exist.
+        const email = await fetchUserEmail(userId);
+        const signedInAs = email
+          ? `\n\nI searched the account **${email}**. If you uploaded your report while signed in as a different email, sign back in with that one and it will be here.`
+          : "";
+
         return {
           toolName: "analyze_credit_report",
-          result: { found: false },
-          displayContent: `📄 **No Credit Report Found**\n\nI don't have a credit report on file for you yet. Tap **Analyze Report** on your agent card to upload a PDF or paste your report text — then I can walk through every negative item with you and recommend exactly which dispute letter to send for each one.`,
+          result: { found: false, searchedUserId: userId, searchedEmail: email },
+          displayContent: `📄 **No Credit Report Found**\n\nI don't have a credit report on file for this account yet. Tap **Analyze Report** on your agent card to upload a PDF or pull your report — then I can walk through every negative item with you and recommend exactly which dispute letter to send for each one.${signedInAs}`,
         };
       }
+
+      const bureauList = analysis.bureaus.map((b) => b.bureau).join(", ");
 
       if (analysis.negativeCount === 0) {
         return {
           toolName: "analyze_credit_report",
           result: analysis,
-          displayContent: `✅ **Credit Report Analyzed**${analysis.bureau ? ` (${analysis.bureau})` : ""}\n\n${analysis.summary}\n\nSince there are no negative items to dispute, our focus should be on building positive history: keep utilization under 10%, never miss a payment, and let your accounts age.`,
+          displayContent: `✅ **Credit Report Analyzed**${bureauList ? ` (${bureauList})` : ""}\n\n${analysis.summary}\n\nSince there are no negative items to dispute, our focus should be on building positive history: keep utilization under 10%, never miss a payment, and let your accounts age.`,
         };
       }
 
-      const lines = (analysis.recommendations || [])
-        .map(
-          (r: any, i: number) =>
-            `**${i + 1}. ${r.creditor}** — ${r.negativeType}${r.balance ? ` — ${r.balance}` : ""}\n   → Recommended: **${r.letterType}**\n   → Why: ${r.rationale}`,
-        )
-        .join("\n\n");
+      // Grouped by bureau: the same account often appears on more than one
+      // bureau and each one must be disputed separately, so a flat list
+      // would hide which bureau a letter is actually aimed at.
+      const sections = analysis.bureaus
+        .filter((b) => b.negativeCount > 0)
+        .map((b) => {
+          const lines = b.recommendations
+            .map(
+              (r: any, i: number) =>
+                `**${i + 1}. ${r.creditor}** — ${r.negativeType}${r.balance ? ` — ${r.balance}` : ""}\n   → Recommended: **${r.letterType}**\n   → Why: ${r.rationale}`,
+            )
+            .join("\n\n");
+          return `**${b.bureau.toUpperCase()}** — ${b.negativeCount} negative item${b.negativeCount === 1 ? "" : "s"}\n\n${lines}`;
+        })
+        .join("\n\n———\n\n");
 
       return {
         toolName: "analyze_credit_report",
         result: analysis,
-        displayContent: `🔍 **Credit Report Analysis**${analysis.bureau ? ` (${analysis.bureau})` : ""}\n\n${analysis.summary}\n\n**Recommended dispute strategy:**\n\n${lines}\n\nTell me which account you'd like to start with and I'll generate that letter for you right now.`,
+        displayContent: `🔍 **Credit Report Analysis**${bureauList ? ` (${bureauList})` : ""}\n\n${analysis.summary}\n\n**Recommended dispute strategy:**\n\n${sections}\n\nTell me which account you'd like to start with and I'll generate that letter for you right now.`,
       };
     }
 

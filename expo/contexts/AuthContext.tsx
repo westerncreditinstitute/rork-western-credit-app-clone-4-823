@@ -332,18 +332,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         console.warn('[Auth] Backend login failed:', backendErrorMessage);
-        
-        // Fall back to demo mode for invalid credentials (user may not exist in DB yet)
-        if (backendErrorMessage.includes('Invalid email or password')) {
-          console.log('[Auth] Invalid credentials, falling back to demo mode');
-          const demoUser = createDemoUser(email);
-          await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(demoUser));
-          setUser(demoUser);
-          setIsAuthenticated(true);
-          console.log('[Auth] Demo user logged in (credentials fallback):', demoUser.email);
-          return { success: true, user: demoUser };
-        }
-        
+
+        // A rejected password must stay rejected. This previously fell back to
+        // minting a demo account with a brand-new random id, which "succeeded"
+        // into an empty account: uploaded reports, disputes and progress all
+        // live under the real user id, so the user appeared signed in while
+        // their own credit report was invisible to them and to the agent.
         throw backendError;
       }
     } catch (error) {
