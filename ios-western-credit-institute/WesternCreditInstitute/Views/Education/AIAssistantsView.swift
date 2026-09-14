@@ -19,32 +19,20 @@ struct AIDisputeAssistantView: View {
     @State private var creditorName = ""
     @State private var accountNumber = ""
     @State private var generatedLetter = ""
-    @State private var showLetter = false
+    /// Set once the escalation ladder resolves, which can happen before the
+    /// last question: the first step answered "no" IS the recommendation.
+    @State private var recommendation: String?
 
-    private let questions: [(id: String, title: String, options: [(value: String, label: String)])] = [
-        ("disputeType", "Are you disputing Original Creditor or Debt Collector?", [
-            ("originalCreditorOpen", "Original Creditor (Open Account)"),
-            ("originalCreditorClosed", "Original Creditor (Closed Account)"),
-            ("debtCollector", "Debt Collector"),
-        ]),
-        ("step1", "Did you dispute with the Credit Reporting Agency Online?", [
-            ("yes", "Yes"), ("no", "No"),
-        ]),
-        ("step2", "Did you send a certified mail dispute to the information furnisher?", [
-            ("yes", "Yes"), ("no", "No"),
-        ]),
-        ("step3", "Has it been more than 30 days since you sent the dispute?", [
-            ("yes", "Yes"), ("no", "No"),
-        ]),
-        ("step4", "Did you receive a response from the credit bureau?", [
-            ("yes", "Yes"), ("no", "No"),
-        ]),
-        ("step5", "Was the disputed item verified or removed?", [
-            ("verified", "Verified (Still Reporting)"),
-            ("removed", "Removed"),
-            ("updated", "Updated/Modified"),
-        ]),
-    ]
+    /// Shared with the Expo app via `DisputeQuestionnaire`, so both ask the
+    /// same questions and reach the same recommendation. These used to be an
+    /// inline list here that had drifted - steps 3-5 asked about elapsed time
+    /// and bureau responses rather than the escalation actions taken, so this
+    /// screen could never tell which letter came next.
+    private let questions = DisputeQuestionnaire.questions
+
+    private var resolved: RecommendedLetter? {
+        recommendation == nil ? nil : DisputeQuestionnaire.resolveRecommendedLetter(answers)
+    }
 
     var body: some View {
         let colors = theme.colors
@@ -67,7 +55,9 @@ struct AIDisputeAssistantView: View {
                 .background(LinearGradient(colors: theme.colors.gradientPrimary, startPoint: .topLeading, endPoint: .bottomTrailing))
                 .clipShape(.rect(cornerRadius: Radius.xl))
 
-                if currentStep < questions.count {
+                if let recommendation, let resolved, generatedLetter.isEmpty {
+                    recommendationCard(recommendation: recommendation, resolved: resolved)
+                } else if generatedLetter.isEmpty {
                     // Progress
                     ProgressView(value: Double(currentStep), total: Double(questions.count))
                         .tint(colors.primary)
@@ -134,12 +124,11 @@ struct AIDisputeAssistantView: View {
                         }
                         Button {
                             Haptics.medium()
-                            if currentStep < questions.count - 1 { currentStep += 1 }
-                            else { generateLetter() }
+                            advance()
                         } label: {
                             HStack(spacing: 4) {
-                                Text(currentStep < questions.count - 1 ? "Next" : "Generate Letter")
-                                Image(systemName: currentStep < questions.count - 1 ? "chevron.right" : "doc.text.fill")
+                                Text("Next")
+                                Image(systemName: "chevron.right")
                             }.font(.system(size: 15, weight: .bold))
                                 .foregroundStyle(.white).frame(maxWidth: .infinity).padding(.vertical, 14)
                                 .background(colors.primary).clipShape(.rect(cornerRadius: Radius.md))
@@ -174,7 +163,10 @@ struct AIDisputeAssistantView: View {
 
                                 Button {
                                     Haptics.medium()
-                                    currentStep = 0; answers = [:]; generatedLetter = ""
+                                    currentStep = 0
+                                    answers = [:]
+                                    generatedLetter = ""
+                                    recommendation = nil
                                 } label: {
                                     HStack(spacing: 4) { Image(systemName: "arrow.counterclockwise"); Text("Restart") }.font(.system(size: 14, weight: .semibold))
                                         .foregroundStyle(.white).frame(maxWidth: .infinity).padding(.vertical, 12)
@@ -194,7 +186,212 @@ struct AIDisputeAssistantView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
-    private func generateLetter() {
+    // MARK: - Recommendation
+
+    /// Shown once the ladder resolves. Mirrors the Expo questionnaire's
+    /// recommendation card: what to send next, why, and either a generate
+    /// button or guidance when the answer is advice rather than a letter.
+    @ViewBuilder
+    private func recommendationCard(recommendation: String, resolved: RecommendedLetter) -> some View {
+        let colors = theme.colors
+
+        CardView(padding: Spacing.lg) {
+            VStack(alignment: .leading, spacing: Spacing.md) {
+                HStack(spacing: Spacing.sm) {
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.system(size: 16))
+                        .foregroundStyle(colors.success)
+                    Text("RECOMMENDED NEXT STEP")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(colors.success)
+                }
+
+                Text(recommendation)
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+                    .background(colors.primary, in: .capsule)
+
+                Text(DisputeQuestionnaire.description(for: recommendation))
+                    .font(.system(size: 15))
+                    .lineSpacing(3)
+                    .foregroundStyle(colors.text)
+
+                if !resolved.rationale.isEmpty {
+                    HStack(alignment: .top, spacing: Spacing.sm) {
+                        Image(systemName: "info.circle.fill")
+                            .font(.system(size: 14))
+                            .foregroundStyle(colors.primary)
+                        Text(resolved.rationale)
+                            .font(.system(size: 13))
+                            .lineSpacing(2)
+                            .foregroundStyle(colors.text)
+                    }
+                    .padding(Spacing.md)
+                    .background(colors.infoLight, in: .rect(cornerRadius: Radius.md))
+                }
+
+                if resolved.isGeneratable, let letterType = resolved.letterType {
+                    Button {
+                        Haptics.medium()
+                        generateLetter(letterType: letterType)
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "doc.text.fill")
+                            Text("Generate \(letterType)")
+                        }
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(colors.primary)
+                        .clipShape(.rect(cornerRadius: Radius.md))
+                    }
+                    .buttonStyle(PressableButtonStyle())
+                    .accessibilityLabel("Generate \(letterType)")
+                } else if let guidance = resolved.guidance {
+                    Text(guidance)
+                        .font(.system(size: 14))
+                        .lineSpacing(3)
+                        .foregroundStyle(colors.text)
+
+                    Button {
+                        Haptics.light()
+                        dismiss()
+                    } label: {
+                        Text("Got it")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(colors.textSecondary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 13)
+                            .background(colors.surfaceAlt)
+                            .clipShape(.rect(cornerRadius: Radius.md))
+                    }
+                    .buttonStyle(PressableButtonStyle())
+                }
+
+                Button {
+                    Haptics.light()
+                    self.recommendation = nil
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.left")
+                        Text("Back to questions")
+                    }
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(colors.textSecondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                }
+                .buttonStyle(PressableButtonStyle())
+            }
+        }
+    }
+
+    /// Applies the answer to the current question and either resolves the
+    /// ladder or moves to the next rung. Answering "no" resolves immediately -
+    /// the unclimbed rung IS the recommendation.
+    private func advance() {
+        let question = questions[currentStep]
+        guard let value = answers[question.id] else { return }
+
+        if let rec = DisputeQuestionnaire.recommendationForAnswer(
+            questionId: question.id,
+            value: value,
+            answers: answers
+        ) {
+            recommendation = rec
+            return
+        }
+
+        if currentStep < questions.count - 1 {
+            currentStep += 1
+        } else {
+            recommendation = DisputeQuestionnaire.recommendation(for: answers)
+        }
+    }
+
+    // MARK: - Letter generation
+
+    /// The statute-specific body for each letter the ladder can recommend.
+    /// Previously every recommendation produced the same §1681i text, so a
+    /// validation request and a disclosure demand were mailed identically.
+    private func letterBody(for letterType: String) -> String {
+        switch letterType {
+        case "609 Letter":
+            return """
+            Under the Fair Credit Reporting Act (FCRA), 15 U.S.C. § 1681g, I am requesting full disclosure of my file, including the source of the disputed information and the verification documents relied upon.
+
+            Specifically, I am requesting:
+            1. Copies of any original signed documents bearing my signature
+            2. The name, address and telephone number of the furnisher
+            3. The method used to verify this account
+            4. A description of the procedure used to determine its accuracy
+
+            If you cannot produce verifiable proof of this account, I demand its immediate deletion from my credit file.
+            """
+        case "611 Letter":
+            return """
+            Under the Fair Credit Reporting Act (FCRA), 15 U.S.C. § 1681i(a)(7), I am requesting a description of the method of verification used to confirm this disputed account.
+
+            My previous dispute was returned as "verified." I am therefore entitled to know:
+            1. The business name and address of each furnisher contacted
+            2. The telephone number of each furnisher, if reasonably available
+            3. The specific documents reviewed during the reinvestigation
+            4. The name of the employee who conducted it
+
+            If you cannot provide this description within 15 days, the disputed item must be deleted.
+            """
+        case "623 Letter":
+            return """
+            Under the Fair Credit Reporting Act (FCRA), 15 U.S.C. § 1681s-2(b), I am disputing this account directly with you as the furnisher of the information.
+
+            You are required to conduct a reasonable investigation, review all relevant information provided, and report the results to every credit reporting agency to which you furnished this data.
+
+            Specifically, I dispute:
+            - The accuracy of the reported balance
+            - The reported account status and payment history
+            - The dates associated with this account
+
+            If the information cannot be verified as accurate, you must promptly modify, delete or permanently block its reporting.
+            """
+        case "809 Letter":
+            return """
+            Under the Fair Debt Collection Practices Act (FDCPA), 15 U.S.C. § 1692g, I am requesting validation of this alleged debt. This is not a refusal to pay; it is a request for verification made within my statutory rights.
+
+            Please provide:
+            1. Proof that I owe this specific debt to your company
+            2. The amount claimed and a complete accounting of it
+            3. The name and address of the original creditor
+            4. Proof that you are licensed to collect debts in my state
+
+            Until this debt is validated, you must cease all collection activity, including reporting it to any credit reporting agency.
+            """
+        case "Intent to Sue Creditor":
+            return """
+            This letter is formal notice of my intent to pursue legal action under the Fair Credit Reporting Act (FCRA), 15 U.S.C. § 1681n and § 1681o.
+
+            I have previously disputed this account and you have failed to conduct a reasonable investigation as required by 15 U.S.C. § 1681s-2(b). Continued reporting of information you have not verified is a willful violation.
+
+            Unless this account is deleted and written confirmation is provided within 30 days, I intend to file suit seeking statutory damages of up to $1,000 per violation, actual damages, and attorney's fees and costs.
+            """
+        case "Intent to Sue Debt Collector":
+            return """
+            This letter is formal notice of my intent to pursue legal action under the Fair Debt Collection Practices Act (FDCPA), 15 U.S.C. § 1692k, and the Fair Credit Reporting Act (FCRA).
+
+            I have previously requested validation of this debt. Continuing to collect on, or report, a debt you have not validated violates 15 U.S.C. § 1692g(b).
+
+            Unless collection activity ceases and this account is deleted from my credit file within 30 days, I intend to file suit seeking statutory damages of up to $1,000 per violation, actual damages, and attorney's fees and costs.
+            """
+        default:
+            return """
+            Under the Fair Credit Reporting Act (FCRA), 15 U.S.C. § 1681i, I am requesting that you investigate and verify this information. If you cannot verify it within 30 days, you are required by law to remove it from my credit report.
+            """
+        }
+    }
+
+    private func generateLetter(letterType: String) {
         let name = store.user.name
         let date = Format.mediumDate(Date())
         let creditor = creditorName.isEmpty ? "[CREDITOR NAME]" : creditorName
@@ -217,35 +414,20 @@ struct AIDisputeAssistantView: View {
         Date: \(date)
 
         \(creditor)
-        Re: Account #\(acct)
+        Re: Account #\(acct) — \(letterType)
 
         To Whom It May Concern,
 
         \(intro)
 
-        Under the Fair Credit Reporting Act (FCRA), 15 U.S.C. § 1681i, I am requesting that you investigate and verify the following information. If you cannot verify this information within 30 days, you are required by law to remove it from my credit report.
+        \(letterBody(for: letterType))
 
-        Specifically, I am disputing the following:
-        - The account is being reported inaccurately
-        - The balance is incorrect
-        - The account status is incorrect
-
-        Please investigate this matter and provide me with:
-        1. A copy of any documentation you have verifying this debt
-        2. The name and address of the original creditor
-        3. The date the account was opened
-        4. The original amount of the debt
-
-        If you cannot verify this information, I demand that you:
-        - Remove all negative reporting from all three credit bureaus
-        - Cease collection activities
-        - Provide written confirmation of the deletion
+        Please provide written confirmation of the action taken to the address above.
 
         Sincerely,
 
         \(name)
         """
-        currentStep = questions.count
     }
 }
 
