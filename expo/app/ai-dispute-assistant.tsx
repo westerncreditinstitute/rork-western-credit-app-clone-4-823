@@ -38,6 +38,12 @@ import DisputeTrackerEmbedded from "@/components/DisputeTrackerEmbedded";
 import { useDisputes } from "@/contexts/DisputesContext";
 import { useUser } from "@/contexts/UserContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
+import {
+  DISPUTE_QUESTIONS,
+  getRecommendation as resolveRecommendation,
+  getRecommendationDescription as describeRecommendation,
+  recommendationForAnswer,
+} from "@/lib/dispute-questionnaire";
 
 const DARK_LOGO_URL = "https://static.wixstatic.com/media/ec0146_ce8d0d3506564ee1841686216fee5650~mv2.png";
 
@@ -70,37 +76,13 @@ interface Dispute {
 
 
 
-const QUESTIONS = [
-  { id: "disputeType", title: "Are you disputing Original Creditor or Debt Collector?", options: [
-    { value: "originalCreditorOpen", label: "Original Creditor (Open Account)" },
-    { value: "originalCreditorClosed", label: "Original Creditor (Closed Account)" },
-    { value: "debtCollector", label: "Debt Collector" },
-  ]},
-  { id: "step1", title: "Did you dispute with the Credit Reporting Agency Online?", options: [
-    { value: "yes", label: "Yes" },
-    { value: "no", label: "No" },
-  ]},
-  { id: "step2", title: "Did you send a certified mail dispute to the information furnisher?", options: [
-    { value: "yes", label: "Yes" },
-    { value: "no", label: "No" },
-  ]},
-  { id: "step3", title: "Did you send an Intent to sue letter to the information furnisher?", options: [
-    { value: "yes", label: "Yes" },
-    { value: "no", label: "No" },
-  ]},
-  { id: "step4", title: "Did you request the method of verification from the Credit Reporting Agency?", options: [
-    { value: "yes", label: "Yes" },
-    { value: "no", label: "No" },
-  ]},
-  { id: "step5", title: "Did you send 609 Letter to the Credit Reporting Agency demanding removal?", options: [
-    { value: "yes", label: "Yes" },
-    { value: "no", label: "No" },
-  ]},
-  { id: "step6", title: "Did you try advanced dispute method for the Credit Reporting Agency?", options: [
-    { value: "yes", label: "Yes" },
-    { value: "no", label: "No" },
-  ]},
-];
+/**
+ * The escalation questions now live in `lib/dispute-questionnaire.ts` so the
+ * Equifax "Prepare Dispute Letter" path (My Agent -> Analyze My Report) asks
+ * exactly the same things before recommending a letter. Keeping a second copy
+ * here is what let the two flows drift apart in the first place.
+ */
+const QUESTIONS = DISPUTE_QUESTIONS;
 
 export default function AIDisputeAssistantScreen() {
   const router = useRouter();
@@ -277,57 +259,19 @@ export default function AIDisputeAssistantScreen() {
     setCurrentStep(3);
   }, [negativeAccounts]);
 
-  const getRecommendation = useCallback((accountAnswers: Record<string, string>): string => {
-    const disputeType = accountAnswers["disputeType"];
-
-    if (accountAnswers["step1"] === "no") return "Online Disputes";
-    
-    if (accountAnswers["step2"] === "no") {
-      if (disputeType === "originalCreditorClosed") return "623 Letter";
-      if (disputeType === "originalCreditorOpen") return "Open Account Dispute";
-      if (disputeType === "debtCollector") return "809 Letter";
-    }
-    
-    if (accountAnswers["step3"] === "no") {
-      if (disputeType === "originalCreditorOpen" || disputeType === "originalCreditorClosed") return "Intent to Sue Creditor";
-      if (disputeType === "debtCollector") return "Intent to Sue Debt Collector";
-    }
-    
-    if (accountAnswers["step4"] === "no") return "611 Letter";
-    if (accountAnswers["step5"] === "no") return "609 Letter";
-    if (accountAnswers["step6"] === "no") return "Hand Written Dispute Letter";
-    
-    return "Legal Action";
-  }, []);
+  const getRecommendation = useCallback(
+    (accountAnswers: Record<string, string>): string =>
+      resolveRecommendation(accountAnswers),
+    [],
+  );
 
   const handleAnswerSelect = useCallback((questionId: string, value: string) => {
     const newAnswers = { ...answers, [questionId]: value };
     setAnswers(newAnswers);
 
-    let shouldShowRecommendation = false;
-    let rec = "";
+    const rec = recommendationForAnswer(questionId, value, newAnswers);
 
-    if (questionId === "step1" && value === "no") {
-      rec = "Online Disputes";
-      shouldShowRecommendation = true;
-    } else if (questionId === "step2" && value === "no") {
-      rec = getRecommendation(newAnswers);
-      shouldShowRecommendation = true;
-    } else if (questionId === "step3" && value === "no") {
-      rec = getRecommendation(newAnswers);
-      shouldShowRecommendation = true;
-    } else if (questionId === "step4" && value === "no") {
-      rec = "611 Letter";
-      shouldShowRecommendation = true;
-    } else if (questionId === "step5" && value === "no") {
-      rec = "609 Letter";
-      shouldShowRecommendation = true;
-    } else if (questionId === "step6") {
-      rec = value === "no" ? "Hand Written Dispute Letter" : "Legal Action";
-      shouldShowRecommendation = true;
-    }
-
-    if (shouldShowRecommendation) {
+    if (rec) {
       setRecommendation(rec);
       setSelectedAccounts(prev => {
         const updated = [...prev];
@@ -341,7 +285,7 @@ export default function AIDisputeAssistantScreen() {
     } else {
       setCurrentQuestionIndex(prev => prev + 1);
     }
-  }, [answers, currentAccountIndex, getRecommendation]);
+  }, [answers, currentAccountIndex]);
 
   const proceedToNextAccount = useCallback(() => {
     if (currentAccountIndex < selectedAccounts.length - 1) {
@@ -678,21 +622,8 @@ export default function AIDisputeAssistantScreen() {
     }
   }, [disputes]);
 
-  const getRecommendationDescription = (rec: string): string => {
-    const descriptions: Record<string, string> = {
-      "Online Disputes": "We recommend you first dispute with the Credit Reporting Agency online. This is the quickest way to start the dispute process.",
-      "623 Letter": "We recommend sending a 623 Letter to the original creditor requesting verification and correction of inaccurate information.",
-      "Open Account Dispute": "We recommend sending an Open Account Dispute letter challenging the accuracy of the information for your open account.",
-      "809 Letter": "We recommend sending an 809 Letter to the debt collector requesting validation of the debt within 30 days.",
-      "Intent to Sue Creditor": "We recommend sending an Intent to Sue letter informing them of your intention to take legal action.",
-      "Intent to Sue Debt Collector": "We recommend sending an Intent to Sue letter to the debt collector.",
-      "611 Letter": "We recommend sending a 611 Letter to request the method of verification from the Credit Reporting Agency.",
-      "609 Letter": "We recommend sending a 609 Letter demanding removal and requesting all verification documents.",
-      "Hand Written Dispute Letter": "We recommend trying an advanced dispute method with a hand-written letter.",
-      "Legal Action": "You have exhausted all standard dispute options. Consider consulting with a consumer law attorney.",
-    };
-    return descriptions[rec] || "";
-  };
+  const getRecommendationDescription = (rec: string): string =>
+    describeRecommendation(rec);
 
   const renderStepIndicator = () => (
     <View style={styles.stepIndicator}>

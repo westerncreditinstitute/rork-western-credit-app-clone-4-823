@@ -44,6 +44,10 @@ import CreditRepairModal from "@/components/MyAgent/CreditRepairModal";
 import DisputeTrackerModal from "@/components/MyAgent/DisputeTrackerModal";
 import CreditAnalysisModal from "@/components/MyAgent/CreditAnalysisModal";
 import NegativeAccountsDashboard from "@/components/MyAgent/NegativeAccountsDashboard";
+import DisputeQuestionnaireModal, {
+  type QuestionnaireAccount,
+  type DisputeQuestionnaireResult,
+} from "@/components/MyAgent/DisputeQuestionnaireModal";
 
 // ============================================================
 // Constants
@@ -111,6 +115,12 @@ function MyAgentScreenInner({
   const [disputeTrackerVisible, setDisputeTrackerVisible] = useState(false);
   const [creditAnalysisVisible, setCreditAnalysisVisible] = useState(false);
   const [negativeDashboardVisible, setNegativeDashboardVisible] = useState(false);
+  const [questionnaireVisible, setQuestionnaireVisible] = useState(false);
+  // The account awaiting the escalation questionnaire. Set when a "Prepare
+  // Dispute Letter" button fires; cleared once the questions are answered (or
+  // abandoned) and the letter generator takes over.
+  const [questionnaireAccount, setQuestionnaireAccount] =
+    useState<QuestionnaireAccount | null>(null);
   const [creditRepairPrefill, setCreditRepairPrefill] = useState<{
     letterType?: string;
     creditorName?: string;
@@ -320,10 +330,21 @@ function MyAgentScreenInner({
     setCreditRepairVisible(true);
   }, []);
 
-  /** Jump from an analysis recommendation straight into letter generation.
-   *  The letter type is already auto-determined by the AI Dispute logic
-   *  (see determineLetterStrategyFromAccountType / analyzeCreditAccounts)
-   *  before this fires, so the user never has to pick one manually. */
+  /** Move from a negative account into the escalation questionnaire.
+   *
+   *  The letter type suggested by `determineLetterStrategyFromAccountType` /
+   *  `analyzeCreditAccounts` is derived purely from WHAT the item is
+   *  (collection, charge-off, ...). That is not enough to recommend a letter:
+   *  the correct one also depends on HOW FAR the user has already escalated.
+   *  Jumping straight into generation meant the agent could recommend a
+   *  method-of-verification request for a bureau that was never disputed, or
+   *  a second 609 for someone who already sent one. The questionnaire asks
+   *  first; the suggestion rides along as context. */
+  const openQuestionnaire = useCallback((account: QuestionnaireAccount) => {
+    setQuestionnaireAccount(account);
+    setTimeout(() => setQuestionnaireVisible(true), 300);
+  }, []);
+
   const handleAnalysisGenerateLetter = useCallback(
     (data: {
       letterType: string;
@@ -333,13 +354,18 @@ function MyAgentScreenInner({
       rationale?: string;
     }) => {
       setCreditAnalysisVisible(false);
-      setCreditRepairPrefill({ ...data, autoDetermined: true });
-      setTimeout(() => setCreditRepairVisible(true), 300);
+      openQuestionnaire({
+        creditorName: data.creditorName,
+        accountNumber: data.accountNumber,
+        furnisherAddress: data.furnisherAddress,
+        suggestedLetterType: data.letterType,
+        suggestedRationale: data.rationale,
+      });
     },
-    [],
+    [openQuestionnaire],
   );
 
-  /** Jump from the per-bureau dashboard straight into letter generation. */
+  /** Same handoff from the per-bureau dashboard. */
   const handleDashboardGenerateLetter = useCallback(
     (data: {
       letterType: string;
@@ -349,7 +375,30 @@ function MyAgentScreenInner({
       rationale?: string;
     }) => {
       setNegativeDashboardVisible(false);
-      setCreditRepairPrefill({ ...data, autoDetermined: true });
+      openQuestionnaire({
+        creditorName: data.creditorName,
+        accountNumber: data.accountNumber,
+        furnisherAddress: data.furnisherAddress,
+        suggestedLetterType: data.letterType,
+        suggestedRationale: data.rationale,
+      });
+    },
+    [openQuestionnaire],
+  );
+
+  /** The questionnaire resolved a letter: hand it to the letter generator. */
+  const handleQuestionnaireComplete = useCallback(
+    (result: DisputeQuestionnaireResult) => {
+      setQuestionnaireVisible(false);
+      setQuestionnaireAccount(null);
+      setCreditRepairPrefill({
+        letterType: result.letterType,
+        creditorName: result.creditorName,
+        accountNumber: result.accountNumber,
+        furnisherAddress: result.furnisherAddress,
+        rationale: result.rationale,
+        autoDetermined: true,
+      });
       setTimeout(() => setCreditRepairVisible(true), 300);
     },
     [],
@@ -839,6 +888,15 @@ function MyAgentScreenInner({
               visible={negativeDashboardVisible}
               onClose={() => setNegativeDashboardVisible(false)}
               onGenerateLetter={handleDashboardGenerateLetter}
+            />
+            <DisputeQuestionnaireModal
+              visible={questionnaireVisible}
+              account={questionnaireAccount}
+              onClose={() => {
+                setQuestionnaireVisible(false);
+                setQuestionnaireAccount(null);
+              }}
+              onComplete={handleQuestionnaireComplete}
             />
           </>
         ) : null}
