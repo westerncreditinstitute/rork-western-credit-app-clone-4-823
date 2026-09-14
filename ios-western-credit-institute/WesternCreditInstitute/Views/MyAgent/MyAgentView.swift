@@ -41,6 +41,7 @@ struct MyAgentView: View {
     @State private var surface: Surface = .chat
     @State private var showCreditRepair = false
     @State private var showCreditAnalysis = false
+    @State private var showCreditSummary = false
     @State private var showDisputeTracker = false
     @State private var showPlans = false
 
@@ -84,6 +85,20 @@ struct MyAgentView: View {
         }
         .sheet(isPresented: $showCreditAnalysis) {
             NavigationStack { CreditAnalysisView(userId: viewModel.userId) }
+        }
+        .sheet(isPresented: $showCreditSummary) {
+            NavigationStack {
+                CreditSummaryView(userId: viewModel.userId) {
+                    // Swap sheets rather than stacking: dismiss the summary,
+                    // then open the per-account breakdown once the first
+                    // dismissal has finished animating.
+                    showCreditSummary = false
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(350))
+                        showCreditAnalysis = true
+                    }
+                }
+            }
         }
         .sheet(isPresented: $showDisputeTracker) {
             NavigationStack { DisputeTrackerView() }
@@ -310,6 +325,7 @@ struct MyAgentView: View {
                         showsActions: hasAgentAccess,
                         onOpenChat: { withAnimation(.snappy(duration: 0.22)) { surface = .chat } },
                         onOpenCreditAnalysis: { showCreditAnalysis = true },
+                        onOpenCreditSummary: { showCreditSummary = true },
                         onOpenCreditRepair: { showCreditRepair = true },
                         onOpenDisputeTracker: { showDisputeTracker = true }
                     )

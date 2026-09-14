@@ -18,6 +18,7 @@ struct AgentProfileCardView: View {
     var showsActions: Bool = true
     var onOpenChat: () -> Void
     var onOpenCreditAnalysis: () -> Void
+    var onOpenCreditSummary: () -> Void
     var onOpenCreditRepair: () -> Void
     var onOpenDisputeTracker: () -> Void
 
@@ -276,6 +277,14 @@ struct AgentProfileCardView: View {
                 detail: "Your agent finds what to dispute",
                 tint: teal,
                 action: onOpenCreditAnalysis
+            ),
+            AgentAction(
+                id: "credit-summary",
+                symbol: "chart.bar.doc.horizontal",
+                label: "Credit Summary",
+                detail: "All three bureaus in one view",
+                tint: Color(hex: "#38BDF8"),
+                action: onOpenCreditSummary
             ),
             AgentAction(
                 id: "credit-repair",
