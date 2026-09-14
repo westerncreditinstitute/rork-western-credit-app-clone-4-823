@@ -17,6 +17,7 @@ struct AgentProfileCardView: View {
     /// Quick actions are hidden for free-tier users, matching the Expo card.
     var showsActions: Bool = true
     var onOpenChat: () -> Void
+    var onOpenCreditAnalysis: () -> Void
     var onOpenCreditRepair: () -> Void
     var onOpenDisputeTracker: () -> Void
 
@@ -274,7 +275,7 @@ struct AgentProfileCardView: View {
                 label: "Analyze My Credit Report",
                 detail: "Your agent finds what to dispute",
                 tint: teal,
-                action: onOpenChat
+                action: onOpenCreditAnalysis
             ),
             AgentAction(
                 id: "credit-repair",

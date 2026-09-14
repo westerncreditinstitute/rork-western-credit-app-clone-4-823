@@ -118,6 +118,38 @@ nonisolated final class AIAgentService: Sendable {
         }
     }
 
+    // MARK: - Credit analysis
+
+    /// Latest saved report per bureau, with each negative account and the
+    /// letter the backend's strategy table recommends for it.
+    ///
+    /// `aiAgents.getBureauDashboard` returns the newest upload for each of
+    /// Experian / Equifax / TransUnion, so this is the user's current picture
+    /// rather than a full history.
+    func fetchBureauDashboard(userId: String) async throws -> BureauDashboard {
+        guard isConfigured else { throw TRPCClientError.notConfigured }
+        let input = ["json": ["userId": userId]]
+        return try await client.query("aiAgents.getBureauDashboard", input: input)
+    }
+
+    private static func dashboardCacheKey(userId: String) -> String {
+        "wci.credit.dashboard.\(userId)"
+    }
+
+    /// Last-known analysis, so the screen paints instantly and still shows the
+    /// user's accounts when the server is unreachable.
+    func cachedDashboard(userId: String) -> BureauDashboard? {
+        guard let data = UserDefaults.standard.data(
+            forKey: Self.dashboardCacheKey(userId: userId)
+        ) else { return nil }
+        return try? JSONDecoder().decode(BureauDashboard.self, from: data)
+    }
+
+    func cacheDashboard(_ dashboard: BureauDashboard, userId: String) {
+        guard let data = try? JSONEncoder().encode(dashboard) else { return }
+        UserDefaults.standard.set(data, forKey: Self.dashboardCacheKey(userId: userId))
+    }
+
     // MARK: - Local cache
 
     private static func agentCacheKey(userId: String) -> String {

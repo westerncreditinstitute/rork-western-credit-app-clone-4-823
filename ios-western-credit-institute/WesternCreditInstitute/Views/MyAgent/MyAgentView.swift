@@ -40,6 +40,7 @@ struct MyAgentView: View {
     @State private var chatViewModel: AgentChatViewModel?
     @State private var surface: Surface = .chat
     @State private var showCreditRepair = false
+    @State private var showCreditAnalysis = false
     @State private var showDisputeTracker = false
     @State private var showPlans = false
 
@@ -80,6 +81,9 @@ struct MyAgentView: View {
         .sheet(isPresented: $showPlans) { SubscriptionPlansView() }
         .sheet(isPresented: $showCreditRepair) {
             NavigationStack { AIDisputeAssistantView() }
+        }
+        .sheet(isPresented: $showCreditAnalysis) {
+            NavigationStack { CreditAnalysisView(userId: viewModel.userId) }
         }
         .sheet(isPresented: $showDisputeTracker) {
             NavigationStack { DisputeTrackerView() }
@@ -305,6 +309,7 @@ struct MyAgentView: View {
                         assignedDateText: viewModel.assignedDateText,
                         showsActions: hasAgentAccess,
                         onOpenChat: { withAnimation(.snappy(duration: 0.22)) { surface = .chat } },
+                        onOpenCreditAnalysis: { showCreditAnalysis = true },
                         onOpenCreditRepair: { showCreditRepair = true },
                         onOpenDisputeTracker: { showDisputeTracker = true }
                     )

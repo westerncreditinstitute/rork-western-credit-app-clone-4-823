@@ -314,120 +314,21 @@ struct AIDisputeAssistantView: View {
 
     // MARK: - Letter generation
 
-    /// The statute-specific body for each letter the ladder can recommend.
-    /// Previously every recommendation produced the same §1681i text, so a
-    /// validation request and a disclosure demand were mailed identically.
-    private func letterBody(for letterType: String) -> String {
-        switch letterType {
-        case "609 Letter":
-            return """
-            Under the Fair Credit Reporting Act (FCRA), 15 U.S.C. § 1681g, I am requesting full disclosure of my file, including the source of the disputed information and the verification documents relied upon.
-
-            Specifically, I am requesting:
-            1. Copies of any original signed documents bearing my signature
-            2. The name, address and telephone number of the furnisher
-            3. The method used to verify this account
-            4. A description of the procedure used to determine its accuracy
-
-            If you cannot produce verifiable proof of this account, I demand its immediate deletion from my credit file.
-            """
-        case "611 Letter":
-            return """
-            Under the Fair Credit Reporting Act (FCRA), 15 U.S.C. § 1681i(a)(7), I am requesting a description of the method of verification used to confirm this disputed account.
-
-            My previous dispute was returned as "verified." I am therefore entitled to know:
-            1. The business name and address of each furnisher contacted
-            2. The telephone number of each furnisher, if reasonably available
-            3. The specific documents reviewed during the reinvestigation
-            4. The name of the employee who conducted it
-
-            If you cannot provide this description within 15 days, the disputed item must be deleted.
-            """
-        case "623 Letter":
-            return """
-            Under the Fair Credit Reporting Act (FCRA), 15 U.S.C. § 1681s-2(b), I am disputing this account directly with you as the furnisher of the information.
-
-            You are required to conduct a reasonable investigation, review all relevant information provided, and report the results to every credit reporting agency to which you furnished this data.
-
-            Specifically, I dispute:
-            - The accuracy of the reported balance
-            - The reported account status and payment history
-            - The dates associated with this account
-
-            If the information cannot be verified as accurate, you must promptly modify, delete or permanently block its reporting.
-            """
-        case "809 Letter":
-            return """
-            Under the Fair Debt Collection Practices Act (FDCPA), 15 U.S.C. § 1692g, I am requesting validation of this alleged debt. This is not a refusal to pay; it is a request for verification made within my statutory rights.
-
-            Please provide:
-            1. Proof that I owe this specific debt to your company
-            2. The amount claimed and a complete accounting of it
-            3. The name and address of the original creditor
-            4. Proof that you are licensed to collect debts in my state
-
-            Until this debt is validated, you must cease all collection activity, including reporting it to any credit reporting agency.
-            """
-        case "Intent to Sue Creditor":
-            return """
-            This letter is formal notice of my intent to pursue legal action under the Fair Credit Reporting Act (FCRA), 15 U.S.C. § 1681n and § 1681o.
-
-            I have previously disputed this account and you have failed to conduct a reasonable investigation as required by 15 U.S.C. § 1681s-2(b). Continued reporting of information you have not verified is a willful violation.
-
-            Unless this account is deleted and written confirmation is provided within 30 days, I intend to file suit seeking statutory damages of up to $1,000 per violation, actual damages, and attorney's fees and costs.
-            """
-        case "Intent to Sue Debt Collector":
-            return """
-            This letter is formal notice of my intent to pursue legal action under the Fair Debt Collection Practices Act (FDCPA), 15 U.S.C. § 1692k, and the Fair Credit Reporting Act (FCRA).
-
-            I have previously requested validation of this debt. Continuing to collect on, or report, a debt you have not validated violates 15 U.S.C. § 1692g(b).
-
-            Unless collection activity ceases and this account is deleted from my credit file within 30 days, I intend to file suit seeking statutory damages of up to $1,000 per violation, actual damages, and attorney's fees and costs.
-            """
-        default:
-            return """
-            Under the Fair Credit Reporting Act (FCRA), 15 U.S.C. § 1681i, I am requesting that you investigate and verify this information. If you cannot verify it within 30 days, you are required by law to remove it from my credit report.
-            """
-        }
-    }
-
+    /// Letter text comes from `DisputeLetterComposer`, shared with Analyze My
+    /// Credit Report so both screens produce identical wording — and so each
+    /// letter type keeps the statute it actually invokes.
     private func generateLetter(letterType: String) {
-        let name = store.user.name
-        let date = Format.mediumDate(Date())
-        let creditor = creditorName.isEmpty ? "[CREDITOR NAME]" : creditorName
-        let acct = accountNumber.isEmpty ? "[XXXX]" : accountNumber
-        let disputeType = answers["disputeType"] ?? "originalCreditorOpen"
-
-        let intro: String
-        switch disputeType {
-        case "originalCreditorOpen": intro = "I am writing to dispute information on my open account that is being reported inaccurately."
-        case "originalCreditorClosed": intro = "I am writing to dispute inaccurate information regarding my closed account."
-        case "debtCollector": intro = "I am writing to dispute a debt that you are attempting to collect, which I do not owe."
-        default: intro = "I am writing to dispute inaccurate information on my credit report."
-        }
-
-        generatedLetter = """
-        \(name)
-        \(store.user.email)
-        \(store.user.phone)
-
-        Date: \(date)
-
-        \(creditor)
-        Re: Account #\(acct) — \(letterType)
-
-        To Whom It May Concern,
-
-        \(intro)
-
-        \(letterBody(for: letterType))
-
-        Please provide written confirmation of the action taken to the address above.
-
-        Sincerely,
-
-        \(name)
-        """
+        generatedLetter = DisputeLetterComposer.compose(
+            letterType: letterType,
+            sender: DisputeLetterComposer.Sender(
+                name: store.user.name,
+                email: store.user.email,
+                phone: store.user.phone
+            ),
+            creditorName: creditorName,
+            accountNumber: accountNumber,
+            recipientKind: .from(answers["disputeType"])
+        )
     }
 }
 
