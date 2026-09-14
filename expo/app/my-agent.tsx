@@ -387,15 +387,14 @@ function MyAgentScreenInner({
   }, [myAgentQuery, refetchDisputes]);
 
   const handleLetterGenerated = useCallback(
-    (_disputeId?: string, saved?: boolean) => {
-      // Refresh dispute data after a letter is generated. When the save
-      // failed, CreditRepairModal already shows the failure inline, so
-      // there's nothing further to do here beyond skipping a pointless
-      // refetch (there's nothing new to fetch if nothing was saved).
-      if (saved === false) return;
-      refetchDisputes?.();
+    (_disputeId?: string, _saved?: boolean) => {
+      // No refetch here on purpose. CreditRepairModal now reconciles the
+      // server-created dispute with DisputesContext itself (fetching the new
+      // row, then refreshing the list and analytics), and this screen reads
+      // that same context - so refetching again would only duplicate the
+      // round-trip. Failed saves are surfaced inline by the modal.
     },
-    [refetchDisputes],
+    [],
   );
 
   // Open disputes count for the dashboard

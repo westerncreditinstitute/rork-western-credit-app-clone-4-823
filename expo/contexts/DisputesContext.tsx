@@ -59,6 +59,34 @@ interface DisputeAnalytics {
 // staleTime and after every mutation).
 const ALERTS_SENT_KEY_PREFIX = 'wci_dispute_alerts_sent_';
 
+/**
+ * TestingService persists a leaner local record than the Supabase-backed
+ * shape (no `lastUpdated`/`reminders`, and documents carry no `size`).
+ * Normalising here keeps every code path returning a real `Dispute`
+ * instead of casting partially-shaped objects through `as Dispute`.
+ */
+function testDisputeToDispute(test: {
+  id: string;
+  userId: string;
+  creditor: string;
+  accountNumber: string;
+  disputeType: string;
+  dateSent: string;
+  status: 'sent' | 'in-progress' | 'resolved' | 'rejected';
+  responseBy: string;
+  letterContent?: string;
+  timeline: TimelineItem[];
+  documents: { name: string; type: string; uploadDate: string }[];
+  updatedAt: string;
+}): Dispute {
+  return {
+    ...test,
+    lastUpdated: test.updatedAt,
+    reminders: [],
+    documents: test.documents.map((doc) => ({ ...doc, size: 0 })),
+  };
+}
+
 function daysUntil(dateStr: string): number {
   if (!dateStr) return Number.POSITIVE_INFINITY;
   const target = new Date(dateStr);
@@ -74,6 +102,12 @@ export const [DisputesProvider, useDisputes] = createContextHook(() => {
   const { preferences } = useNotifications();
   const [disputes, setDisputes] = useState<Dispute[]>([]);
   const [isTestingMode, setIsTestingMode] = useState(false);
+  // True while a post-write reconciliation with the server is in flight, so
+  // the Dispute Tracker can show "Syncing…" instead of looking frozen
+  // between a letter being generated and the refreshed list arriving.
+  const [isSyncing, setIsSyncing] = useState(false);
+  // When the dispute list was last successfully reconciled with the server.
+  const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
   // Tracks which (disputeId, alertType) pairs have already triggered a
   // notification this session/device, loaded from AsyncStorage once per
   // user so alerts survive app restarts without re-firing.
@@ -118,10 +152,12 @@ export const [DisputesProvider, useDisputes] = createContextHook(() => {
         if (isTestingMode && user?.id) {
           // Load disputes from TestingService in testing mode
           const testDisputes = await testingService.getTestDisputes(user.id);
-          setDisputes(testDisputes as any[]);
+          setDisputes(testDisputes.map(testDisputeToDispute));
+          setLastSyncedAt(Date.now());
         } else if (disputesQuery.data) {
           // Load from Supabase in production mode
           setDisputes(disputesQuery.data as Dispute[]);
+          setLastSyncedAt(Date.now());
         }
       } catch (error) {
         console.error('[DisputesContext] Error loading disputes:', error);
@@ -251,6 +287,91 @@ export const [DisputesProvider, useDisputes] = createContextHook(() => {
     })();
   }, [user?.id, disputesQuery.data, preferences?.disputeAlerts]);
 
+  /**
+   * Inserts or replaces a dispute in local state, keyed by id.
+   *
+   * New records go to the front because the server returns the list ordered
+   * by `date_sent` descending - appending would park a just-created dispute
+   * at the bottom of the tracker until the next refetch reordered it.
+   * Matching on id also makes this safe to call with a record that is
+   * already present (e.g. a server-created letter a refetch beat us to),
+   * so no dispute can ever appear twice.
+   */
+  const upsertDispute = useCallback((incoming: Dispute) => {
+    setDisputes((prev) => {
+      const index = prev.findIndex((d) => d.id === incoming.id);
+      if (index === -1) return [incoming, ...prev];
+      const next = [...prev];
+      next[index] = incoming;
+      return next;
+    });
+  }, []);
+
+  /**
+   * Reconciles the local list and analytics with the server.
+   *
+   * Exposed (and awaited) rather than fire-and-forget so callers can show a
+   * real progress state and know when the tracker is actually up to date.
+   */
+  const refreshDisputes = useCallback(async () => {
+    if (isTestingMode) {
+      if (!user?.id) return;
+      const testDisputes = await testingService.getTestDisputes(user.id);
+      setDisputes(testDisputes.map(testDisputeToDispute));
+      setLastSyncedAt(Date.now());
+      return;
+    }
+
+    setIsSyncing(true);
+    try {
+      await Promise.all([disputesQuery.refetch(), analyticsQuery.refetch()]);
+      setLastSyncedAt(Date.now());
+    } catch (error) {
+      // A failed refresh keeps whatever is already on screen; the sync
+      // indicator simply stops reporting "just now".
+      console.log('[DisputesContext] Refresh failed:', error);
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [isTestingMode, user?.id, disputesQuery, analyticsQuery]);
+
+  /**
+   * Pulls a dispute that the *server* created into the tracker.
+   *
+   * The AI agent's `generateLetter` mutation writes the dispute row directly
+   * in the backend, so nothing in this context ever learned about it and the
+   * letter stayed invisible until the 2-minute staleTime lapsed. Calling
+   * `createDispute` from that flow would insert a second, duplicate row -
+   * the record already exists, it only has to be fetched.
+   *
+   * Fetching the single row first makes the new letter appear immediately;
+   * the full refresh then reconciles ordering and the analytics counters.
+   */
+  const syncServerCreatedDispute = useCallback(async (disputeId?: string) => {
+    if (!user?.id || isTestingMode) {
+      await refreshDisputes();
+      return;
+    }
+
+    if (disputeId) {
+      setIsSyncing(true);
+      try {
+        const dispute = await trpcClient.disputes.getById.query({ id: disputeId });
+        if (dispute) {
+          upsertDispute(dispute as Dispute);
+        }
+      } catch (error) {
+        // Non-fatal: the full refresh below still picks the dispute up, it
+        // just takes a round-trip longer to appear.
+        console.log('[DisputesContext] Could not fetch server-created dispute:', error);
+      } finally {
+        setIsSyncing(false);
+      }
+    }
+
+    await refreshDisputes();
+  }, [user?.id, isTestingMode, upsertDispute, refreshDisputes]);
+
   const createDispute = useCallback(async (disputeData: {
     creditor: string;
     accountNumber: string;
@@ -284,13 +405,8 @@ export const [DisputesProvider, useDisputes] = createContextHook(() => {
           accountNumber: disputeData.accountNumber,
           disputeType: disputeData.disputeType,
         });
-        newDispute = {
-          ...testDispute,
-          lastUpdated: testDispute.updatedAt,
-          reminders: [],
-          documents: testDispute.documents.map((doc) => ({ ...doc, size: 0 })),
-        };
-        setDisputes(prev => [...prev, newDispute as Dispute]);
+        newDispute = testDisputeToDispute(testDispute);
+        upsertDispute(newDispute);
       } else {
         // Use Supabase for production
         newDispute = (await createDisputeMutation.mutateAsync({
@@ -299,11 +415,12 @@ export const [DisputesProvider, useDisputes] = createContextHook(() => {
         })) as Dispute;
         
         if (newDispute) {
-          setDisputes(prev => [...prev, newDispute as Dispute]);
+          // Show it immediately, then reconcile with the server so the
+          // analytics counters and ordering catch up too.
+          upsertDispute(newDispute);
         }
         
-        disputesQuery.refetch();
-        analyticsQuery.refetch();
+        await refreshDisputes();
       }
       
       return newDispute;
@@ -311,7 +428,7 @@ export const [DisputesProvider, useDisputes] = createContextHook(() => {
       console.error('Error creating dispute:', error);
       throw error;
     }
-  }, [user?.id, isTestingMode, createDisputeMutation, disputesQuery, analyticsQuery]);
+  }, [user?.id, isTestingMode, createDisputeMutation, upsertDispute, refreshDisputes]);
 
   const updateDispute = useCallback(async (id: string, updates: Partial<Dispute>) => {
     try {
@@ -319,16 +436,9 @@ export const [DisputesProvider, useDisputes] = createContextHook(() => {
       
       if (isTestingMode) {
         const testUpdated = await testingService.updateTestDispute(id, updates);
-        updatedDispute = testUpdated
-          ? {
-              ...testUpdated,
-              lastUpdated: testUpdated.updatedAt,
-              reminders: [],
-              documents: testUpdated.documents.map((doc) => ({ ...doc, size: 0 })),
-            }
-          : undefined;
+        updatedDispute = testUpdated ? testDisputeToDispute(testUpdated) : undefined;
         if (updatedDispute) {
-          setDisputes(prev => prev.map(d => d.id === id ? updatedDispute as Dispute : d));
+          upsertDispute(updatedDispute);
         }
       } else {
         updatedDispute = (await updateDisputeMutation.mutateAsync({
@@ -337,11 +447,10 @@ export const [DisputesProvider, useDisputes] = createContextHook(() => {
         })) as Dispute;
         
         if (updatedDispute) {
-          setDisputes(prev => prev.map(d => d.id === id ? updatedDispute as Dispute : d));
+          upsertDispute(updatedDispute);
         }
         
-        disputesQuery.refetch();
-        analyticsQuery.refetch();
+        await refreshDisputes();
       }
       
       return updatedDispute;
@@ -349,7 +458,7 @@ export const [DisputesProvider, useDisputes] = createContextHook(() => {
       console.error('Error updating dispute:', error);
       throw error;
     }
-  }, [isTestingMode, updateDisputeMutation, disputesQuery, analyticsQuery]);
+  }, [isTestingMode, updateDisputeMutation, upsertDispute, refreshDisputes]);
 
   const deleteDispute = useCallback(async (id: string) => {
     try {
@@ -361,15 +470,14 @@ export const [DisputesProvider, useDisputes] = createContextHook(() => {
       } else {
         await deleteDisputeMutation.mutateAsync({ id });
         setDisputes(prev => prev.filter(d => d.id !== id));
-        disputesQuery.refetch();
-        analyticsQuery.refetch();
+        await refreshDisputes();
       }
       return { success: true };
     } catch (error) {
       console.error('Error deleting dispute:', error);
       throw error;
     }
-  }, [isTestingMode, deleteDisputeMutation, disputesQuery, analyticsQuery]);
+  }, [isTestingMode, deleteDisputeMutation, refreshDisputes]);
 
   const addNote = useCallback(async (
     id: string, 
@@ -451,12 +559,20 @@ export const [DisputesProvider, useDisputes] = createContextHook(() => {
     disputes,
     analytics,
     isLoading: disputesQuery.isLoading,
+    /** True while a post-write reconciliation with the server is in flight. */
+    isSyncing: isSyncing || disputesQuery.isRefetching,
+    /** Epoch ms of the last successful server reconciliation, or null. */
+    lastSyncedAt,
     createDispute,
     updateDispute,
     deleteDispute,
     addNote,
     addDocument,
     addReminder,
+    /** Pulls a dispute created directly by the backend into the tracker. */
+    syncServerCreatedDispute,
+    /** Awaitable full reconciliation of the list and analytics. */
+    refreshDisputes,
     refetch: disputesQuery.refetch,
   };
 });

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import {
   View,
   Text,
@@ -8,6 +8,8 @@ import {
   TextInput,
   Alert,
   Platform,
+  RefreshControl,
+  ActivityIndicator,
 } from "react-native";
 import {
   Search,
@@ -22,6 +24,8 @@ import {
   AlertCircle,
   Copy,
   Printer,
+  RefreshCw,
+  Check,
 } from "lucide-react-native";
 import Colors from "@/constants/colors";
 import { useDisputes, Dispute } from "@/contexts/DisputesContext";
@@ -35,12 +39,53 @@ interface DisputeTrackerEmbeddedProps {
   onDisputeSelected?: (dispute: Dispute) => void;
 }
 
+/**
+ * Human-readable "how long ago" for the sync line. Deliberately coarse -
+ * the point is to reassure the user the list is current, not to display a
+ * stopwatch.
+ */
+function describeSyncAge(timestamp: number | null): string {
+  if (!timestamp) return "Not synced yet";
+  const seconds = Math.max(0, Math.round((Date.now() - timestamp) / 1000));
+  if (seconds < 10) return "Up to date";
+  if (seconds < 60) return `Updated ${seconds}s ago`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `Updated ${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  return `Updated ${hours}h ago`;
+}
+
 export default function DisputeTrackerEmbedded({
   showHeader = true,
   maxHeight = "100%",
   onDisputeSelected,
 }: DisputeTrackerEmbeddedProps) {
-  const { disputes, analytics, isLoading } = useDisputes();
+  const { disputes, analytics, isLoading, isSyncing, lastSyncedAt, refreshDisputes } =
+    useDisputes();
+
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  // Re-renders the relative sync timestamp so "Updated 5s ago" doesn't
+  // freeze on screen while the list sits idle.
+  const [, setSyncTick] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => setSyncTick((n) => n + 1), 30000);
+    return () => clearInterval(id);
+  }, []);
+
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await refreshDisputes();
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [refreshDisputes]);
+
+  const syncLabel = useMemo(
+    () => (isSyncing ? "Syncing…" : describeSyncAge(lastSyncedAt)),
+    [isSyncing, lastSyncedAt],
+  );
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<typeof STATUSES[number]>("all");
@@ -146,7 +191,27 @@ export default function DisputeTrackerEmbedded({
     <View style={[styles.container, { maxHeight }]}>
       {showHeader && (
         <>
-          <Text style={styles.title}>Dispute Tracker</Text>
+          <View style={styles.titleRow}>
+            <Text style={styles.title}>Dispute Tracker</Text>
+            {/* Sync status: proves the list reflects the server, and gives a
+                manual escape hatch when a refresh is wanted right now. */}
+            <TouchableOpacity
+              style={styles.syncPill}
+              onPress={handleRefresh}
+              disabled={isSyncing || isRefreshing}
+              accessibilityRole="button"
+              accessibilityLabel={`${syncLabel}. Tap to refresh disputes.`}
+            >
+              {isSyncing || isRefreshing ? (
+                <ActivityIndicator size="small" color={Colors.primary} />
+              ) : lastSyncedAt ? (
+                <Check color={Colors.success} size={13} />
+              ) : (
+                <RefreshCw color={Colors.textLight} size={13} />
+              )}
+              <Text style={styles.syncPillText}>{syncLabel}</Text>
+            </TouchableOpacity>
+          </View>
 
           {/* Analytics Summary */}
           <View style={styles.analyticsCard}>
@@ -215,7 +280,18 @@ export default function DisputeTrackerEmbedded({
       )}
 
       {/* Disputes List */}
-      <ScrollView style={styles.disputesList} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.disputesList}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor={Colors.primary}
+            colors={[Colors.primary]}
+          />
+        }
+      >
         {isLoading ? (
           <View style={styles.loadingState}>
             <Text style={styles.loadingText}>Loading disputes...</Text>
@@ -358,14 +434,37 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: "hidden",
   },
-  title: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: Colors.text,
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
+    gap: 12,
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: Colors.text,
+  },
+  syncPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    minHeight: 28,
+  },
+  syncPillText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Colors.textSecondary,
   },
   analyticsCard: {
     backgroundColor: Colors.surface,

@@ -2041,23 +2041,6 @@ const styles = StyleSheet.create({
   buttonDisabled: {
     opacity: 0.5,
   },
-  cloudSyncStatus: {
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
-  cloudSyncRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-  cloudSyncText: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: Colors.primary,
-  },
   viewTrackerButton: {
     flexDirection: "row",
     alignItems: "center",

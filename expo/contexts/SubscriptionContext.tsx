@@ -495,8 +495,11 @@ export const [SubscriptionProvider, useSubscription] = createContextHook(() => {
 
       console.log('[SubscriptionContext] Attempting to upgrade user to ACE-1:', userId);
 
-      // Call backend to create ACE-1 subscription with 7-day trial
-      const subscription = await trpc.subscriptions.create.mutate({
+      // Call backend to create ACE-1 subscription with 7-day trial.
+      // `trpc` here is the React-Query client, whose procedures expose
+      // hooks (useMutation) rather than a callable `.mutate` - the already
+      // declared `createSubscriptionMutation` is the imperative handle.
+      const subscription = await createSubscriptionMutation.mutateAsync({
         userId,
         tier: 'ace1_student',
         isInitialRegistration: false,
@@ -527,10 +530,17 @@ export const [SubscriptionProvider, useSubscription] = createContextHook(() => {
       console.log('[SubscriptionContext] ACE-1 upgrade completed successfully');
       return true;
     } catch (error) {
-      console.error('[SubscriptionContext] Error upgrading to ACE-1:', error);
+      // A server outage must not read as a hard upgrade failure - the same
+      // transport-aware treatment used elsewhere in this context.
+      const message = error instanceof Error ? error.message : String(error);
+      if (isTransportErrorMessage(message)) {
+        console.warn('[SubscriptionContext] ACE-1 upgrade could not reach the server:', message);
+      } else {
+        console.error('[SubscriptionContext] Error upgrading to ACE-1:', error);
+      }
       return false;
     }
-  }, [userId]);
+  }, [userId, createSubscriptionMutation]);
 
   const upgradeToCSOAffiliate = useCallback(async () => {
     try {

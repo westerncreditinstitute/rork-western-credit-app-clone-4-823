@@ -24,6 +24,7 @@ import {
 import Colors from "@/constants/colors";
 import { trpc } from "@/lib/trpc";
 import { useUser } from "@/contexts/UserContext";
+import { useDisputes } from "@/contexts/DisputesContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Clipboard from "expo-clipboard";
 
@@ -120,6 +121,10 @@ export default function CreditRepairModal({
 }: CreditRepairModalProps) {
   const { user } = useUser();
   const userId = user?.id || "";
+  // `generateLetter` writes the dispute row server-side, so the tracker has
+  // to be told the record exists - otherwise the letter stayed invisible
+  // until the disputes query went stale (up to two minutes later).
+  const { syncServerCreatedDispute } = useDisputes();
 
   const [letterType, setLetterType] = useState<string>("609 Letter");
   const [creditorName, setCreditorName] = useState("");
@@ -206,6 +211,13 @@ export default function CreditRepairModal({
         );
       } else {
         setSaveError(null);
+        // The dispute row was inserted by the backend, not through
+        // DisputesContext, so the tracker has no idea it exists yet. Pull it
+        // in now rather than letting the user stare at a tracker that is
+        // missing the letter they just generated. Note this deliberately
+        // does NOT call createDispute() — the row already exists and
+        // creating it again would duplicate every generated letter.
+        void syncServerCreatedDispute(data.disputeId);
       }
       onLetterGenerated?.(data.disputeId, data.success);
     },
