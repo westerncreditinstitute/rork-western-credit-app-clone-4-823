@@ -38,7 +38,31 @@ function isNetworkFailure(message: string): boolean {
     message.includes('Failed to fetch') ||
     message.includes('Network request failed') ||
     message.includes('timed out') ||
-    message.includes('fetch')
+    message.includes('fetch') ||
+    isUnreadableResponse(message)
+  );
+}
+
+/**
+ * True when the failure is tRPC failing to parse the response body.
+ *
+ * The API always answers with JSON, including for its own errors, so a parse
+ * failure is never the server rejecting credentials - it is an HTML error page
+ * or a truncated body from the hosting edge while the instance is asleep,
+ * redeploying, or rate limited.
+ *
+ * Without this, a server outage reached the generic error branch and the user
+ * was told their login had failed, when in fact it was never answered. The
+ * transport layer now converts these before they surface, but classifying
+ * them here too means no future transport path can turn an outage into a
+ * phantom credential error.
+ */
+function isUnreadableResponse(message: string): boolean {
+  return (
+    message.includes('JSON Parse error') ||
+    message.includes('Unexpected end of input') ||
+    message.includes('Unexpected character') ||
+    message.includes('is not valid JSON')
   );
 }
 

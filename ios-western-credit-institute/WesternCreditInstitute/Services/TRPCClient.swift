@@ -46,6 +46,24 @@ nonisolated final class TRPCClient: Sendable {
 
     /// Statuses worth retrying: gateway/cold-start/rate-limit responses.
     private static let retryableStatuses: Set<Int> = [408, 425, 429, 500, 502, 503, 504]
+
+    /// True when a response came from the hosting edge rather than from the app.
+    ///
+    /// tRPC always answers with JSON, including for its own application errors.
+    /// A non-OK response carrying HTML or plain text is therefore never the app
+    /// talking - it is the edge serving "Service Temporarily Unavailable",
+    /// "Site Not Found", or "No deployment found for domain" while the instance
+    /// is asleep, redeploying, or rate limited.
+    ///
+    /// Treating those as transport failures keeps an outage from surfacing as a
+    /// decode error, which on the sign-in screen reads like a rejected password.
+    private static func isInfrastructureFailure(_ http: HTTPURLResponse) -> Bool {
+        if retryableStatuses.contains(http.statusCode) { return true }
+        if (200..<300).contains(http.statusCode) { return false }
+
+        let contentType = (http.value(forHTTPHeaderField: "Content-Type") ?? "").lowercased()
+        return !contentType.contains("json")
+    }
     private static let maxAttempts = 5
     private static let baseDelay: UInt64 = 700_000_000
     private static let maxDelay: UInt64 = 8_000_000_000
@@ -190,12 +208,22 @@ nonisolated final class TRPCClient: Sendable {
                     continue
                 }
 
-                // A cold-starting or overloaded server answers with 5xx before
-                // tRPC ever sees the body - retry those instead of failing.
-                if Self.retryableStatuses.contains(http.statusCode) && attempt < Self.maxAttempts - 1 {
+                // A cold-starting, overloaded or undeployed server answers at
+                // the edge before tRPC ever sees the body - retry those instead
+                // of handing an HTML error page to the JSON decoder.
+                let infrastructureFailure = Self.isInfrastructureFailure(http)
+
+                if infrastructureFailure && attempt < Self.maxAttempts - 1 {
                     lastError = TRPCClientError.serverWaking
                     try await Task.sleep(for: .nanoseconds(Self.backoffDelay(attempt: attempt)))
                     continue
+                }
+
+                if infrastructureFailure {
+                    // Retries exhausted against an unhealthy server: report it as
+                    // a transport failure so the caller offers a retry rather
+                    // than blaming the user's input.
+                    throw TRPCClientError.serverWaking
                 }
 
                 // Any real HTTP answer proves the server is reachable - even an

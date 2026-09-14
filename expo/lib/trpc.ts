@@ -67,6 +67,34 @@ const getBaseUrl = () => {
 const RETRYABLE_STATUSES = new Set<number>([408, 425, 429, 500, 502, 503, 504]);
 
 /**
+ * Raised when the transport gives up. Carries the friendly copy and is
+ * rethrown untouched by the retry loop's catch block so a single failure is
+ * only ever recorded once.
+ */
+class TransportFailureError extends Error {}
+
+/**
+ * True when a response came from the hosting edge rather than from the app.
+ *
+ * tRPC always answers with JSON, including for its own application errors. A
+ * non-OK response carrying HTML or plain text is therefore never the app
+ * talking - it is the edge serving "Service Temporarily Unavailable", "Site
+ * Not Found", or "No deployment found for domain" while the instance is
+ * asleep, redeploying, or rate limited.
+ *
+ * These bodies must never reach the JSON parser: doing so turns a plain
+ * outage into "JSON Parse error: Unexpected character: <", which reads like a
+ * bug in the app and, on the login screen, like a rejected password.
+ */
+function isInfrastructureFailure(response: Response): boolean {
+  if (RETRYABLE_STATUSES.has(response.status)) return true;
+  if (response.ok) return false;
+
+  const contentType = response.headers?.get?.("content-type") ?? "";
+  return !contentType.toLowerCase().includes("json");
+}
+
+/**
  * Circuit breaker for transport failures.
  *
  * A server that is down must not be met with a full retry ladder per caller.
@@ -279,9 +307,12 @@ const fetchWithRetry = async (
       const response = await fetch(input, { ...init, signal: controller.signal });
       cleanup();
 
-      // A cold-starting or overloaded server answers with 5xx before tRPC ever
-      // sees the body. Retry those instead of surfacing a parse failure.
-      if (RETRYABLE_STATUSES.has(response.status) && attempt < maxAttempts - 1) {
+      // A cold-starting, overloaded or undeployed server answers at the edge
+      // before tRPC ever sees the body. Retry those instead of surfacing a
+      // parse failure.
+      const infrastructureFailure = isInfrastructureFailure(response);
+
+      if (infrastructureFailure && attempt < maxAttempts - 1) {
         // A rate-limited server states how long to wait; the client's own
         // backoff is far too short and would deepen the rate limit.
         const delay = retryAfterDelay(response) ?? backoffDelay(attempt, baseDelay);
@@ -294,17 +325,27 @@ const fetchWithRetry = async (
         continue;
       }
 
-      if (RETRYABLE_STATUSES.has(response.status)) {
+      if (infrastructureFailure) {
         // Retries exhausted against an unhealthy server - trip the breaker so
-        // the next wave of callers backs off instead of repeating this ladder.
+        // the next wave of callers backs off instead of repeating this ladder,
+        // and throw rather than handing an HTML error page to the JSON parser.
         recordTransportFailure();
-      } else {
-        recordTransportSuccess();
+        console.log(
+          `[tRPC] Giving up on ${target}: server answered ${response.status} ` +
+            "with a non-JSON body (hosting edge error, not an app response)",
+        );
+        throw new TransportFailureError(SERVER_WAKING_MESSAGE);
       }
 
+      recordTransportSuccess();
       return response;
     } catch (error) {
       cleanup();
+
+      // Already counted and already carries the friendly copy.
+      if (error instanceof TransportFailureError) {
+        throw error;
+      }
 
       // Caller cancelled (component unmounted, screen closed) - never retry.
       if (originalSignal?.aborted) {
