@@ -1,18 +1,38 @@
 import * as z from "zod";
 import { createTRPCRouter, publicProcedure } from "../create-context";
 
+/**
+ * Server-side mirror of `expo/constants/pricing.ts`.
+ *
+ * The backend cannot import from the app bundle, so these values are
+ * duplicated deliberately. If a price changes, it must change in BOTH files -
+ * and in `Pricing.swift` for iOS.
+ */
 const SUBSCRIPTION_FEES = {
   free: 0,
-  ace1_student: 25,
-  cso_affiliate: 49.99,
+  ace1_student: 49.99,
+  cso_affiliate: 50,
 };
 
 const REFERRAL_BONUSES = {
-  ace1_student: 25,
-  cso_affiliate_base: 0.50,
-  cso_affiliate_premium: 0.75,
-  sale_commission: 0.20,
+  /** ACE-1 referral paid to a referrer still on the free tier. */
+  ace1_from_free: 25,
+  /** ACE-1 referral paid to a referrer who is an ACE-1 student or CSO. */
+  ace1_from_enrolled: 50,
+  /** Flat bounty per ACE-2 / ACE-3 registration. */
+  advanced_course: 99.99,
+  /** Share of an ACE-4 bundle sale for a CSO Affiliate referrer. */
+  bundle_cso: 0.5,
+  /** Share of an ACE-4 bundle sale for a non-CSO referrer. */
+  bundle_standard: 0.25,
 };
+
+/** ACE-1 payout depends on whether the REFERRER is enrolled, not the referee. */
+function ace1BonusFor(referrerTier: string | undefined): number {
+  return referrerTier === "ace1_student" || referrerTier === "cso_affiliate"
+    ? REFERRAL_BONUSES.ace1_from_enrolled
+    : REFERRAL_BONUSES.ace1_from_free;
+}
 
 export const subscriptionsRouter = createTRPCRouter({
   getByUserId: publicProcedure
@@ -68,8 +88,10 @@ export const subscriptionsRouter = createTRPCRouter({
       const now = new Date().toISOString();
       const id = `subscriptions:${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       
-      // Calculate expiry: 7 days for ACE-1 (both initial registration and upgrades)
-      const trialDays = input.tier === 'ace1_student' ? 7 : 60;
+      // ACE-1 is free for 60 days after the certificate fee is paid. This is
+      // the access window, and is deliberately separate from the 7-day
+      // referral qualifying window used by `processReferralBonus`.
+      const trialDays = input.tier === 'ace1_student' ? 60 : 30;
       const expiryDate = new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000).toISOString();
 
       const subscription = {
@@ -106,7 +128,18 @@ export const subscriptionsRouter = createTRPCRouter({
       }
 
       if (input.referredBy && input.tier !== "free") {
-        await processReferralBonus(input.referredBy, input.userId, input.tier, endpoint, namespace, token);
+        // A referral must never block the subscription it was triggered by:
+        // the student has already paid, so a bookkeeping failure is logged
+        // and reconciled rather than surfaced as a failed enrollment.
+        try {
+          await processReferralBonus(input.referredBy, input.userId, input.tier, endpoint, namespace, token);
+        } catch (error) {
+          console.error(
+            "[subscriptions] Referral bonus failed for referrer",
+            input.referredBy,
+            error instanceof Error ? error.message : String(error),
+          );
+        }
       }
 
       const data = await response.json();
@@ -283,17 +316,40 @@ export const subscriptionsRouter = createTRPCRouter({
 
       const ace1Count = referrals.filter((r: any) => r.referralType === "ace1_student" && r.status === "active").length;
       const csoCount = referrals.filter((r: any) => r.referralType === "cso_affiliate" && r.status === "active").length;
+      const advancedCount = referrals.filter((r: any) => r.referralType === "advanced_course" && r.status === "active").length;
+      const bundleCount = referrals.filter((r: any) => r.referralType === "bundle" && r.status === "active").length;
       const totalEarned = referrals.reduce((sum: number, r: any) => sum + (r.totalEarned || 0), 0);
 
-      const residualRate = csoCount >= 100 ? 0.75 : 0.50;
+      // The referrer's own tier decides both the ACE-1 rate and the bundle
+      // split, so it is read here rather than assumed from the referral rows.
+      const subResponse = await fetch(`${endpoint}/sql`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+          "surreal-ns": namespace,
+          "surreal-db": "app",
+        },
+        body: JSON.stringify({
+          query: `SELECT tier FROM subscriptions WHERE userId = '${input.userId}' AND status = 'active' ORDER BY createdAt DESC LIMIT 1`,
+        }),
+      });
+
+      const subData = subResponse.ok ? await subResponse.json() : null;
+      const referrerTier = subData?.[0]?.result?.[0]?.tier ?? "free";
+      const isCSO = referrerTier === "cso_affiliate";
 
       return {
         ace1Referrals: ace1Count,
         csoReferrals: csoCount,
+        advancedCourseReferrals: advancedCount,
+        bundleReferrals: bundleCount,
         totalReferrals: referrals.length,
         totalEarned,
-        currentResidualRate: residualRate,
-        nextTierAt: csoCount >= 100 ? null : 100 - csoCount,
+        referrerTier,
+        ace1BonusRate: ace1BonusFor(referrerTier),
+        advancedCourseBounty: REFERRAL_BONUSES.advanced_course,
+        bundleCommissionRate: isCSO ? REFERRAL_BONUSES.bundle_cso : REFERRAL_BONUSES.bundle_standard,
       };
     }),
 });
@@ -325,8 +381,29 @@ async function processReferralBonus(
   const userData = await userResponse.json();
   const referredUser = userData[0]?.result?.[0] || { name: "Unknown", email: "" };
 
-  const bonusAmount = tier === "ace1_student" ? REFERRAL_BONUSES.ace1_student : 0;
-  const commissionRate = tier === "cso_affiliate" ? REFERRAL_BONUSES.cso_affiliate_base : 0;
+  // The payout is set by the REFERRER's tier, not the referee's: a free member
+  // earns $25 on an ACE-1 referral while an enrolled student or CSO earns $50.
+  const referrerResponse = await fetch(`${endpoint}/sql`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${token}`,
+      "surreal-ns": namespace,
+      "surreal-db": "app",
+    },
+    body: JSON.stringify({
+      query: `SELECT tier FROM subscriptions WHERE userId = '${referrerId}' AND status = 'active' ORDER BY createdAt DESC LIMIT 1`,
+    }),
+  });
+
+  const referrerData = referrerResponse.ok ? await referrerResponse.json() : null;
+  const referrerTier = referrerData?.[0]?.result?.[0]?.tier ?? "free";
+
+  const bonusAmount = tier === "ace1_student" ? ace1BonusFor(referrerTier) : 0;
+
+  // The bonus is only earned once the referred student keeps the account open
+  // past the 7-day window, so it is banked as pending until that date passes.
+  const qualifiesAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
   const referral = {
     id: referralId,
@@ -336,7 +413,8 @@ async function processReferralBonus(
     referredUserEmail: referredUser.email,
     referralType: tier,
     status: "active",
-    commissionRate,
+    referrerTierAtSignup: referrerTier,
+    qualifiesAt,
     totalEarned: bonusAmount,
     createdAt: now,
     updatedAt: now,
@@ -381,7 +459,7 @@ async function processReferralBonus(
         type: "referral_bonus",
         amount: bonusAmount,
         status: "pending",
-        description: `ACE-1 Student Referral Bonus - ${referredUser.name}`,
+        description: `ACE-1 Referral Bonus - ${referredUser.name}`,
         referenceId: referralId,
         referenceType: "subscription",
         createdAt: now,

@@ -607,7 +607,7 @@ struct HomeView: View {
                     Text("Unlock every ACE course")
                         .font(.system(size: 15, weight: .heavy))
                         .foregroundStyle(Color(hex: "#78350F"))
-                    Text("Plans from $25/mo — cancel anytime")
+                    Text("Start ACE-1 for \(Pricing.format(Pricing.certificateFee)) — then free \(Pricing.ace1FreeDays) days")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(Color(hex: "#78350F").opacity(0.75))
                 }

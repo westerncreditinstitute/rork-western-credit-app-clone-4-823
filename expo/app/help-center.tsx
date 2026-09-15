@@ -84,12 +84,12 @@ export default function HelpCenterScreen() {
         {
           id: "gs-3",
           question: "What courses are available?",
-          answer: "We offer the following courses:\n\n• ACE-1: Advanced Credit Repair - Master techniques to legally remove negative items from your credit report (7-day free trial, $99.99 certificate fee)\n\n• ACE-2: Advanced Credit Building - Learn to establish an 800+ FICO score in as little as 90 days ($499.98 + $99.99 cert fee, payment plan available)\n\n• ACE-3: Advanced Business Credit - Master business credit strategies for business growth ($499.98 + $99.99 cert fee, payment plan available)\n\n• ACE-4: Complete Bundle - All three courses at a discounted price of $1,299 (includes all certificates)\n\n• CSO Certification - FREE program for students who complete ACE-1, ACE-2, and ACE-3"
+          answer: "We offer the following courses:\n\n• ACE-1: Advanced Credit Repair - Master techniques to legally remove negative items from your credit report. $99.99 certificate fee, then FREE for 60 days. Keep your account past 60 days and it is $49.99/month.\n\n• ACE-2: Advanced Credit Building - Learn to establish an 800+ FICO score in as little as 90 days. $99.99 certificate fee + $100 enrollment fee, then $49.99/month. No free trial.\n\n• ACE-3: Advanced Business Credit - Master business credit strategies for business growth. $99.99 certificate fee + $100 enrollment fee, then $49.99/month. No free trial.\n\n• ACE-4: Complete ACE Bundle - A one-time payment of $1,299 for LIFETIME access to all three courses, all AI tools, all three certificates, the affiliate network and every future update. No monthly subscription, ever.\n\n• CSO Certification - FREE program for students who complete ACE-1, ACE-2, and ACE-3"
         },
         {
           id: "gs-4",
           question: "Is there a free trial?",
-          answer: "Yes! ACE-1 (Advanced Credit Repair) offers a 7-day FREE trial. You only pay the $99.99 certificate fee to enroll. This gives you full access to:\n\n• All course materials and video lectures\n• AI Credit Repair Coach\n• AI Dispute Assistant\n• AI Lawsuit Assistant\n• Cloud Dispute Tracker\n• Interactive Study Guide\n\nAfter 7 days, continue access for just $25/month."
+          answer: "Yes! ACE-1 (Advanced Credit Repair) is FREE for 60 days. You only pay the $99.99 certificate fee to enroll. This gives you full access to:\n\n• All course materials and video lectures\n• AI Credit Repair Coach\n• AI Dispute Assistant\n• AI Lawsuit Assistant\n• Cloud Dispute Tracker\n• Interactive Study Guide\n\nIf you keep your account past 60 days, it is $49.99/month to maintain your subscription.\n\nACE-2 and ACE-3 do not have a free trial. The ACE-4 bundle is a one-time payment with lifetime access."
         },
       ]
     },
@@ -170,12 +170,12 @@ export default function HelpCenterScreen() {
         {
           id: "ce-1",
           question: "How do I enroll in a course?",
-          answer: "To enroll in a course:\n\n1. Navigate to the 'Courses' tab\n2. Browse available courses or use the search function\n3. Tap on a course to view details\n4. Review course content, pricing, and features\n5. Tap 'Enroll Now' and follow the payment instructions\n\nFor ACE-1, you'll pay the $99.99 certificate fee to start your 7-day free trial. For ACE-2 and ACE-3, you can choose the auto-debit payment plan."
+          answer: "To enroll in a course:\n\n1. Navigate to the 'Courses' tab\n2. Browse available courses or use the search function\n3. Tap on a course to view details\n4. Review course content, pricing, and features\n5. Tap 'Enroll Now' and follow the payment instructions\n\nFor ACE-1, you'll pay the $99.99 certificate fee and then have 60 days free. For ACE-2 and ACE-3, you'll pay $199.99 up front ($99.99 certificate + $100 enrollment) and there is no free trial."
         },
         {
           id: "ce-2",
           question: "What payment options are available?",
-          answer: "Payment options vary by course:\n\n• ACE-1: $99.99 certificate fee (one-time), then $25/month after 7-day trial\n\n• ACE-2 & ACE-3: $99.99 enrollment fee + 3 monthly payments of $166.66 (auto-debit only). After completion, $25/month to continue access.\n\n• ACE-4 Bundle: $1,299 one-time payment (no payment plan)\n\n• CSO Certification: FREE for students who complete ACE-1, ACE-2, and ACE-3\n\nWe accept major credit cards, debit cards, and PayPal."
+          answer: "Payment options vary by course:\n\n• ACE-1: $99.99 certificate fee (one-time), free for 60 days, then $49.99/month to keep your subscription\n\n• ACE-2 & ACE-3: $99.99 certificate fee + $100 enrollment fee due at registration ($199.99 total), then $49.99/month to keep your subscription. No free trial.\n\n• ACE-4 Complete Bundle: $1,299 one time for lifetime access to all 3 courses, AI tools, certificates, the affiliate network and all future updates. No monthly subscription and no payment plan.\n\n• CSO Affiliate network membership: $50/month to stay listed on Hire a Pro\n\n• CSO Certification: FREE for students who complete ACE-1, ACE-2, and ACE-3\n\nWe accept major credit cards, debit cards, and PayPal."
         },
         {
           id: "ce-3",
@@ -185,7 +185,7 @@ export default function HelpCenterScreen() {
         {
           id: "ce-4",
           question: "Can I get a refund?",
-          answer: "Due to the nature of our digital educational content and immediate access granted upon enrollment, ALL SALES ARE FINAL. We do not offer refunds, exchanges, or credits for any purchases.\n\nWe encourage you to:\n• Review all course information before purchasing\n• Take advantage of the 7-day free trial for ACE-1\n• Contact support with any questions before enrolling\n\nPlease review our full Terms & Conditions for more details."
+          answer: "Due to the nature of our digital educational content and immediate access granted upon enrollment, ALL SALES ARE FINAL. We do not offer refunds, exchanges, or credits for any purchases.\n\nWe encourage you to:\n• Review all course information before purchasing\n• Take advantage of the 60 days of free access on ACE-1\n• Contact support with any questions before enrolling\n\nPlease review our full Terms & Conditions for more details."
         },
         {
           id: "ce-5",
@@ -241,7 +241,7 @@ export default function HelpCenterScreen() {
         {
           id: "sb-1",
           question: "What subscription plans are available?",
-          answer: "We offer the following subscription tiers:\n\n• Free Plan: Browse courses, limited access to features\n\n• ACE-1 Student ($25/month after 7-day trial):\n  - Full ACE-1 course access\n  - All AI tools (Coach, Dispute Assistant, Lawsuit Assistant)\n  - Cloud Dispute Tracker\n  - $25 referral bonus per student\n\n• CSO Affiliate ($49.99/month):\n  - All course content included\n  - 50-75% residual income on referrals\n  - 20% sales commission\n  - Listed in Hire A Pro marketplace\n  - Priority support"
+          answer: "We offer the following subscription tiers:\n\n• Free Plan: Browse courses, limited access to features. You can still refer people and earn $25 per ACE-1 referral.\n\n• ACE-1 Student ($49.99/month after 60 free days):\n  - Full ACE-1 course access\n  - All AI tools (Coach, Dispute Assistant, Lawsuit Assistant)\n  - Cloud Dispute Tracker\n  - $50 referral bonus per ACE-1 student (double the free rate)\n  - $99.99 per ACE-2/ACE-3 registration\n\n• CSO Affiliate ($50/month network membership):\n  - Everything in ACE-1 Student\n  - 50% commission on every ACE-4 bundle sale (vs 25% for non-CSOs)\n  - Listed in the Hire A Pro marketplace\n  - Paid client consultations\n  - Priority support"
         },
         {
           id: "sb-2",
@@ -256,7 +256,7 @@ export default function HelpCenterScreen() {
         {
           id: "sb-4",
           question: "When am I billed?",
-          answer: "Billing occurs as follows:\n\n• ACE-1: Certificate fee ($99.99) upon enrollment, then $25/month starting after your 7-day trial\n\n• ACE-2/ACE-3: Enrollment fee ($99.99) upon enrollment, then monthly installments on the same date each month for 3 months\n\n• CSO Affiliate: $49.99 on your subscription anniversary date each month\n\nAll renewals are automatic. You can view your next billing date in Profile > Subscription."
+          answer: "Billing occurs as follows:\n\n• ACE-1: Certificate fee ($99.99) upon enrollment, then $49.99/month starting after your 60 free days\n\n• ACE-2/ACE-3: $199.99 at registration ($99.99 certificate + $100 enrollment), then $49.99/month on the same date each month\n\n• ACE-4 Bundle: One payment of $1,299. Nothing recurring - lifetime access.\n\n• CSO Affiliate network: $50 on your membership anniversary date each month\n\nAll renewals are automatic. You can view your next billing date in Profile > Subscription."
         },
         {
           id: "sb-5",
@@ -274,7 +274,7 @@ export default function HelpCenterScreen() {
         {
           id: "er-1",
           question: "How does the referral program work?",
-          answer: "Our referral program allows you to earn money by referring new students:\n\n• ACE-1 Students: Earn $25 for every ACE-1 student referral who enrolls\n\n• CSO Affiliates: Earn 50-75% residual income on CSO referrals + 20% commission on all course sales\n\nTo refer someone:\n1. Go to Earnings > Refer & Earn\n2. Copy your unique referral link\n3. Share via social media, email, or text\n4. Earn when your referral enrolls"
+          answer: "Everyone can earn, including free members. What you earn depends on your own plan:\n\nACE-1 REFERRALS\n• $25 if you are on the Free plan\n• $50 if you are an ACE student or a CSO Affiliate\nPaid once your referral keeps their account open past 7 days.\n\nACE-2 OR ACE-3 REGISTRATIONS\n• $99.99 for each course that same person registers for. There is no trial on these courses, so it pays as soon as they register. If they take both, you get paid twice.\n\nACE-4 COMPLETE BUNDLE\n• 50% of the $1,299 sale ($649.50) if you are a CSO Affiliate\n• 25% of the sale ($324.75) if you are not\n\nOne person can pay you several times - the ACE-1 bonus, then again for every course they add.\n\nTo refer someone:\n1. Go to Earnings & Referrals\n2. Copy your unique referral link\n3. Share via social media, email, or text\n4. Earn when your referral signs up"
         },
         {
           id: "er-2",
@@ -288,8 +288,8 @@ export default function HelpCenterScreen() {
         },
         {
           id: "er-4",
-          question: "What is residual income for CSO Affiliates?",
-          answer: "CSO Affiliates earn residual income on their CSO referrals:\n\n• 50% residual income: Default rate for all CSO Affiliates\n• 75% residual income: Unlocked when you reach 100+ CSO referrals\n\nResidual income is recurring - you earn every month as long as your referral maintains their subscription. This creates a sustainable passive income stream."
+          question: "Why should I become a CSO Affiliate?",
+          answer: "The bundle commission is the difference. On the exact same $1,299 sale:\n\n• CSO Affiliate: 50% = $649.50\n• Everyone else: 25% = $324.75\n\nThat is $324.75 more on every single bundle you sell. Two bundles a month more than covers the $50 monthly network membership.\n\nA realistic full-time month as a CSO Affiliate:\n• 40 ACE-1 referrals × $50 = $2,000\n• 30 ACE-2/ACE-3 registrations × $99.99 = $2,999.70\n• 8 bundle sales × $649.50 = $5,196\n• Total: $10,195.70 per month\n\nCSO Affiliates are also listed publicly on the Hire a Pro page, where clients pay for consultations directly."
         },
         {
           id: "er-5",
@@ -317,7 +317,7 @@ export default function HelpCenterScreen() {
         {
           id: "hp-3",
           question: "How do I become listed in Hire A Pro?",
-          answer: "To be listed as a professional in Hire A Pro:\n\n1. Complete all ACE courses (ACE-1, ACE-2, ACE-3)\n2. Pass the CSO Certification exam\n3. Upgrade to CSO Affiliate subscription ($49.99/month)\n\nOnce certified, your profile automatically appears in the Hire A Pro marketplace with your specialties, bio, and rating."
+          answer: "To be listed as a professional in Hire A Pro:\n\n1. Complete all ACE courses (ACE-1, ACE-2, ACE-3)\n2. Pass the CSO Certification exam\n3. Join the CSO Affiliate network ($50/month)\n\nAll CSO Affiliate participants pay $50 per month to stay in the network and keep their Hire A Pro listing.\n\nOnce certified, your profile automatically appears in the Hire A Pro marketplace with your specialties, bio, and rating."
         },
         {
           id: "hp-4",

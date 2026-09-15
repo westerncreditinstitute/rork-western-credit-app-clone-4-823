@@ -328,8 +328,8 @@ struct AuthView: View {
                                 .foregroundStyle(colors.text)
 
                             Text(tier == .free
-                                 ? "Free — previews and weekly tips"
-                                 : "$25/mo — full courses, AI agent and disputes")
+                                 ? "Free — previews, weekly tips and \(Pricing.format(Pricing.referralAce1Free)) per referral"
+                                 : "\(Pricing.format(Pricing.certificateFee)) certificate, then free \(Pricing.ace1FreeDays) days")
                                 .font(.system(size: 12))
                                 .foregroundStyle(colors.textSecondary)
                                 .fixedSize(horizontal: false, vertical: true)

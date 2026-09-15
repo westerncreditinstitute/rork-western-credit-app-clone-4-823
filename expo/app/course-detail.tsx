@@ -10,6 +10,12 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import CertificationEligibility from "@/components/CertificationEligibility";
+import {
+  CERTIFICATE_FEE,
+  ENROLLMENT_FEE,
+  MONTHLY_SUBSCRIPTION,
+  formatPrice,
+} from "@/constants/pricing";
 
 import {
   Clock,
@@ -72,7 +78,10 @@ export default function CourseDetailScreen() {
   const isACE1Course = course.id === "3";
   const isACECourse = ["3", "4", "5", "9"].includes(course.id);
   const hasFreeTrialDays = course.freeTrialDays && course.freeTrialDays > 0;
-  const hasInstallmentPlan = course.monthlyInstallment && course.installmentMonths && !course.noPaymentPlan;
+  // ACE-2 and ACE-3 charge a certificate fee plus an enrollment fee up front,
+  // then the monthly subscription. There is no trial and no installment plan.
+  const hasEnrollmentFee = !!course.enrollmentFee && course.enrollmentFee > 0;
+  const dueToday = (course.certificationFee ?? 0) + (course.enrollmentFee ?? 0);
   const isBundle = course.isBundle === true;
   const isFreeWithRequirements = course.isFree && course.requiresCompletedCourses;
   const MOCK_USER_ID = "user_demo_123";
@@ -186,11 +195,11 @@ export default function CourseDetailScreen() {
     if (hasFreeTrialDays) {
       Alert.alert(
         "ACE-1 Free Trial",
-        `Start your credit repair journey FREE for ${course.freeTrialDays} days!\n\nYou only pay the ${course.certificationFee} certificate fee to enroll. After ${course.freeTrialDays} days, continue access for $25/month.`,
+        `Start your credit repair journey FREE for ${course.freeTrialDays} days!\n\nYou only pay the ${formatPrice(course.certificationFee ?? CERTIFICATE_FEE)} certificate fee to enroll. After ${course.freeTrialDays} days, keep your account for ${formatPrice(course.monthlyFee ?? MONTHLY_SUBSCRIPTION)}/month.`,
         [
           { text: "Cancel", style: "cancel" },
           {
-            text: `Pay ${course.certificationFee} Certificate Fee`,
+            text: `Pay ${formatPrice(course.certificationFee ?? CERTIFICATE_FEE)} Certificate Fee`,
             onPress: async () => {
               const success = await enrollInCourse(course.id, isACE1Course);
               if (success) {
@@ -205,24 +214,24 @@ export default function CourseDetailScreen() {
           },
         ]
       );
-    } else if (hasInstallmentPlan) {
+    } else if (hasEnrollmentFee) {
       const lockoutWarning = course.autoDebitOnly 
         ? "\n\n⚠️ IMPORTANT: If auto-debit payment fails, you will be immediately locked out of the course until payment is received."
         : "";
       
       Alert.alert(
-        "Enrollment - Auto-Debit Payment Plan",
-        `${course.title}\n\n✅ Enrollment Fee: ${course.certificationFee} (due today)\n\n💳 Course Fee: ${(course.monthlyInstallment || 0) * (course.installmentMonths || 3)}\nBroken into ${course.installmentMonths} monthly payments of ${course.monthlyInstallment?.toFixed(2)}/mo\n\n⚡ AUTO-DEBIT ONLY - No other payment options${lockoutWarning}`,
+        "Course Registration",
+        `${course.title}\n\n✅ Certificate Fee: ${formatPrice(course.certificationFee ?? CERTIFICATE_FEE)}\n✅ Enrollment Fee: ${formatPrice(course.enrollmentFee ?? ENROLLMENT_FEE)}\n\n💳 Due today: ${formatPrice(dueToday)}\n\nThen ${formatPrice(course.monthlyFee ?? MONTHLY_SUBSCRIPTION)}/month to keep your subscription.\n\nThere is no free trial for this course.${lockoutWarning}`,
         [
           { text: "Cancel", style: "cancel" },
           {
-            text: `Pay ${course.certificationFee} Now`,
+            text: `Pay ${formatPrice(dueToday)} Now`,
             onPress: async () => {
               const success = await enrollInCourse(course.id, false);
               if (success) {
                 Alert.alert(
                   "Enrollment Confirmed! 🎉",
-                  `Welcome to ${course.title}!\n\nYour enrollment fee of ${course.certificationFee} has been processed.\n\nYour first installment of ${course.monthlyInstallment?.toFixed(2)} will be charged in 30 days via auto-debit.\n\n⚠️ Remember: If any auto-debit payment fails, your course access will be locked until payment is received.`
+                  `Welcome to ${course.title}!\n\nYour ${formatPrice(dueToday)} payment has been processed.\n\nYour subscription of ${formatPrice(course.monthlyFee ?? MONTHLY_SUBSCRIPTION)}/month begins in 30 days.`
                 );
               } else {
                 Alert.alert("Error", "Failed to enroll. Please try again.");
@@ -589,35 +598,40 @@ export default function CourseDetailScreen() {
                 </Text>
                 <View style={styles.freeTrialPriceRow}>
                   <Text style={styles.freeTrialCertLabel}>Certificate Fee:</Text>
-                  <Text style={styles.freeTrialCertPrice}>${course.certificationFee}</Text>
+                  <Text style={styles.freeTrialCertPrice}>{formatPrice(course.certificationFee ?? CERTIFICATE_FEE)}</Text>
                 </View>
                 <Text style={styles.freeTrialNote}>
-                  After {course.freeTrialDays} days: $25/month to continue access
+                  After {course.freeTrialDays} days: {formatPrice(course.monthlyFee ?? MONTHLY_SUBSCRIPTION)}/month to keep your subscription
                 </Text>
               </View>
-            ) : hasInstallmentPlan ? (
+            ) : hasEnrollmentFee ? (
               <View style={styles.installmentPricing}>
                 <View style={styles.autoDebitBadge}>
                   <CreditCard color={Colors.surface} size={14} />
-                  <Text style={styles.autoDebitBadgeText}>AUTO-DEBIT ONLY</Text>
+                  <Text style={styles.autoDebitBadgeText}>NO FREE TRIAL</Text>
                 </View>
-                <Text style={styles.installmentTitle}>Payment Plan</Text>
+                <Text style={styles.installmentTitle}>Course Pricing</Text>
                 
                 <View style={styles.installmentRow}>
-                  <Text style={styles.installmentLabel}>Enrollment Fee (Today):</Text>
-                  <Text style={styles.installmentValue}>${course.certificationFee}</Text>
+                  <Text style={styles.installmentLabel}>Certificate Fee:</Text>
+                  <Text style={styles.installmentValue}>{formatPrice(course.certificationFee ?? CERTIFICATE_FEE)}</Text>
+                </View>
+
+                <View style={styles.installmentRow}>
+                  <Text style={styles.installmentLabel}>Enrollment Fee:</Text>
+                  <Text style={styles.installmentValue}>{formatPrice(course.enrollmentFee ?? ENROLLMENT_FEE)}</Text>
                 </View>
                 
                 <View style={styles.installmentDivider} />
                 
                 <View style={styles.installmentRow}>
-                  <Text style={styles.installmentLabelBold}>{course.installmentMonths} Monthly Payments:</Text>
-                  <Text style={styles.installmentValueBold}>${course.monthlyInstallment?.toFixed(2)}/mo</Text>
+                  <Text style={styles.installmentLabelBold}>Due Today:</Text>
+                  <Text style={styles.installmentValueBold}>{formatPrice(dueToday)}</Text>
                 </View>
                 
                 <View style={styles.installmentRow}>
-                  <Text style={styles.installmentLabel}>Total Course Cost:</Text>
-                  <Text style={styles.installmentValue}>${((course.monthlyInstallment || 0) * (course.installmentMonths || 3) + (course.certificationFee || 0)).toFixed(2)}</Text>
+                  <Text style={styles.installmentLabel}>Then, to keep access:</Text>
+                  <Text style={styles.installmentValue}>{formatPrice(course.monthlyFee ?? MONTHLY_SUBSCRIPTION)}/mo</Text>
                 </View>
                 
                 {course.autoDebitOnly && (
@@ -659,7 +673,14 @@ export default function CourseDetailScreen() {
 
                 <View style={styles.bundlePriceRow}>
                   <Text style={styles.bundlePriceLabel}>One-Time Payment:</Text>
-                  <Text style={styles.bundlePrice}>${course.price.toLocaleString()}</Text>
+                  <Text style={styles.bundlePrice}>{formatPrice(course.price)}</Text>
+                </View>
+
+                <View style={styles.bundleCertificates}>
+                  <CheckCircle color={Colors.secondary} size={16} />
+                  <Text style={styles.bundleCertText}>
+                    Lifetime access - no monthly subscription
+                  </Text>
                 </View>
                 
                 <View style={styles.noPaymentPlanNote}>
@@ -670,15 +691,15 @@ export default function CourseDetailScreen() {
             ) : (
               <View style={styles.pricingInfo}>
                 <Text style={styles.pricingLabel}>Course Fee</Text>
-                <Text style={styles.pricingAmount}>${course.price}</Text>
+                <Text style={styles.pricingAmount}>{formatPrice(course.price)}</Text>
                 {course.certificationFee && (
                   <>
                     <Text style={styles.pricingLabel}>Certificate Fee</Text>
-                    <Text style={styles.pricingAmount}>${course.certificationFee}</Text>
+                    <Text style={styles.pricingAmount}>{formatPrice(course.certificationFee)}</Text>
                     <View style={styles.totalDivider} />
                     <Text style={styles.totalLabel}>Total Investment</Text>
                     <Text style={styles.totalAmount}>
-                      ${course.price + course.certificationFee}
+                      {formatPrice(course.price + course.certificationFee)}
                     </Text>
                   </>
                 )}
@@ -698,12 +719,12 @@ export default function CourseDetailScreen() {
                     ? "Enroll Now - FREE"
                     : "Complete Required Courses"
                   : hasFreeTrialDays
-                  ? `Start Free Trial - ${course.certificationFee} Cert Fee`
-                  : hasInstallmentPlan
-                  ? `Enroll Now - ${course.certificationFee} Today`
+                  ? `Start Free Trial - ${formatPrice(course.certificationFee ?? CERTIFICATE_FEE)} Cert Fee`
+                  : hasEnrollmentFee
+                  ? `Enroll Now - ${formatPrice(dueToday)} Today`
                   : isBundle
-                  ? `Get Bundle - ${course.price.toLocaleString()}`
-                  : `Enroll Now - ${course.certificationFee ? course.price + course.certificationFee : course.price}`}
+                  ? `Get Lifetime Access - ${formatPrice(course.price)}`
+                  : `Enroll Now - ${formatPrice(course.certificationFee ? course.price + course.certificationFee : course.price)}`}
               </Text>
             </TouchableOpacity>
           </View>

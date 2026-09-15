@@ -1,0 +1,178 @@
+//
+//  Pricing.swift
+//  WesternCreditInstitute
+//
+
+import Foundation
+
+/// Single source of truth for every course price, subscription fee and referral
+/// payout in the app.
+///
+/// This is the iOS mirror of `expo/constants/pricing.ts`. The two files must be
+/// changed together - a price that only moves on one platform means the apps
+/// quote different numbers for the same product.
+nonisolated enum Pricing {
+
+    // MARK: - Course pricing
+
+    /// Certificate fee, charged once at enrollment for every ACE course.
+    static let certificateFee: Double = 99.99
+
+    /// Enrollment fee, charged once for ACE-2 and ACE-3 only. ACE-1 has none.
+    static let enrollmentFee: Double = 100
+
+    /// Monthly subscription that keeps any ACE course active.
+    static let monthlySubscription: Double = 49.99
+
+    /// ACE-1 is free for this many days; the subscription starts afterwards.
+    static let ace1FreeDays: Int = 60
+
+    /// One-time price for the Complete ACE Bundle (ACE-4), lifetime access.
+    static let bundlePrice: Double = 1299
+
+    /// Monthly dues to stay in the CSO network and keep a Hire a Pro listing.
+    static let csoMonthlyFee: Double = 50
+
+    /// Due today to start ACE-1: certificate only, then free for 60 days.
+    static let ace1DueToday: Double = certificateFee
+
+    /// Due today to start ACE-2 or ACE-3: certificate + enrollment, no trial.
+    static let ace23DueToday: Double = certificateFee + enrollmentFee
+
+    // MARK: - Referral program
+
+    /// A referral qualifies once the referred student keeps the account open
+    /// past this many days.
+    static let referralQualifyingDays: Int = 7
+
+    /// ACE-1 referral payout when the referrer is on the free tier.
+    static let referralAce1Free: Double = 25
+
+    /// ACE-1 referral payout when the referrer is an ACE-1 student or CSO.
+    static let referralAce1Enrolled: Double = 50
+
+    /// Flat bounty each time a referred student registers ACE-2 or ACE-3.
+    static let referralAce23Bounty: Double = 99.99
+
+    /// Share of an ACE-4 bundle sale paid to a CSO Affiliate referrer.
+    static let bundleCommissionCSO: Double = 0.5
+
+    /// Share of an ACE-4 bundle sale paid to a non-CSO referrer.
+    static let bundleCommissionStandard: Double = 0.25
+
+    /// Dollar value of one bundle sale to a CSO Affiliate.
+    static let bundlePayoutCSO: Double = bundlePrice * bundleCommissionCSO
+
+    /// Dollar value of one bundle sale to a non-CSO referrer.
+    static let bundlePayoutStandard: Double = bundlePrice * bundleCommissionStandard
+
+    /// Extra earned per bundle by being a CSO rather than a standard referrer.
+    static let bundleCSOAdvantage: Double = bundlePayoutCSO - bundlePayoutStandard
+
+    /// ACE-1 referral payout for a given referrer tier.
+    ///
+    /// Enrolled students earn double what free members earn - that gap is the
+    /// strongest argument for enrolling, so it is computed once here.
+    static func ace1ReferralBonus(for tier: SubscriptionTier) -> Double {
+        tier == .free ? referralAce1Free : referralAce1Enrolled
+    }
+
+    /// Commission rate on an ACE-4 bundle sale for a given referrer tier.
+    static func bundleCommissionRate(for tier: SubscriptionTier) -> Double {
+        tier == .csoAffiliate ? bundleCommissionCSO : bundleCommissionStandard
+    }
+
+    /// Dollar payout on one ACE-4 bundle sale for a given referrer tier.
+    static func bundleCommission(for tier: SubscriptionTier) -> Double {
+        bundlePrice * bundleCommissionRate(for: tier)
+    }
+
+    /// Projects a month of referral income at a given tier.
+    static func projectMonthlyEarnings(
+        tier: SubscriptionTier,
+        ace1Referrals: Int,
+        advancedCourseRegistrations: Int,
+        bundleSales: Int
+    ) -> Double {
+        let ace1 = Double(ace1Referrals) * ace1ReferralBonus(for: tier)
+        let advanced = Double(advancedCourseRegistrations) * referralAce23Bounty
+        let bundles = Double(bundleSales) * bundleCommission(for: tier)
+        return ace1 + advanced + bundles
+    }
+
+    /// Formats a price, dropping the cents on whole-dollar amounts.
+    static func format(_ amount: Double) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.currencyCode = "USD"
+        formatter.locale = Locale(identifier: "en_US")
+        let hasCents = amount.truncatingRemainder(dividingBy: 1) != 0
+        formatter.minimumFractionDigits = hasCents ? 2 : 0
+        formatter.maximumFractionDigits = 2
+        return formatter.string(from: NSNumber(value: amount)) ?? "$\(amount)"
+    }
+
+    /// Formats a commission rate as a whole-number percentage.
+    static func formatRate(_ rate: Double) -> String {
+        "\(Int(rate * 100))%"
+    }
+}
+
+/// A worked earnings example shown on the Earnings screen.
+nonisolated struct EarningsScenario: Identifiable, Hashable, Sendable {
+    let id: String
+    let label: String
+    let caption: String
+    let ace1Referrals: Int
+    let advancedCourseRegistrations: Int
+    let bundleSales: Int
+
+    /// Monthly total this scenario produces at CSO Affiliate rates.
+    var csoTotal: Double {
+        Pricing.projectMonthlyEarnings(
+            tier: .csoAffiliate,
+            ace1Referrals: ace1Referrals,
+            advancedCourseRegistrations: advancedCourseRegistrations,
+            bundleSales: bundleSales
+        )
+    }
+
+    /// Monthly total this scenario produces at the given tier's rates.
+    func total(for tier: SubscriptionTier) -> Double {
+        Pricing.projectMonthlyEarnings(
+            tier: tier,
+            ace1Referrals: ace1Referrals,
+            advancedCourseRegistrations: advancedCourseRegistrations,
+            bundleSales: bundleSales
+        )
+    }
+
+    /// Examples sized so the third clears $10,000/mo at CSO rates. All totals
+    /// are computed, never hardcoded, so the screen is arithmetically honest.
+    static let all: [EarningsScenario] = [
+        EarningsScenario(
+            id: "starter",
+            label: "Getting started",
+            caption: "A few referrals a week from your own network.",
+            ace1Referrals: 10,
+            advancedCourseRegistrations: 4,
+            bundleSales: 1
+        ),
+        EarningsScenario(
+            id: "builder",
+            label: "Building momentum",
+            caption: "Posting consistently and following up with your students.",
+            ace1Referrals: 25,
+            advancedCourseRegistrations: 15,
+            bundleSales: 3
+        ),
+        EarningsScenario(
+            id: "pro",
+            label: "Full-time affiliate",
+            caption: "Treating your affiliate business like a real business.",
+            ace1Referrals: 40,
+            advancedCourseRegistrations: 30,
+            bundleSales: 8
+        ),
+    ]
+}

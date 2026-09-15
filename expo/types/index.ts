@@ -43,11 +43,15 @@ export interface Course {
   lessons: number;
   price: number;
   certificationFee?: number;
+  /** One-time enrollment fee charged on top of the certificate (ACE-2/ACE-3). */
+  enrollmentFee?: number;
   freeTrialDays?: number;
   monthlyInstallment?: number;
   installmentMonths?: number;
   /** Recurring subscription price for courses billed monthly (ACE tiers). */
   monthlyFee?: number;
+  /** One-time purchase granting permanent access with no recurring fee (ACE-4). */
+  isLifetime?: boolean;
   renewalFee?: number;
   limitedTimeOffer?: boolean;
   image: string;

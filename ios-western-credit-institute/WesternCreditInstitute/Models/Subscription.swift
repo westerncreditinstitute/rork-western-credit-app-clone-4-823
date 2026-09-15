@@ -23,8 +23,8 @@ nonisolated enum SubscriptionTier: String, CaseIterable, Identifiable, Hashable,
     var monthlyFee: Double {
         switch self {
         case .free: return 0
-        case .ace1Student: return 25
-        case .csoAffiliate: return 49.99
+        case .ace1Student: return Pricing.monthlySubscription
+        case .csoAffiliate: return Pricing.csoMonthlyFee
         }
     }
 
@@ -35,23 +35,31 @@ nonisolated enum SubscriptionTier: String, CaseIterable, Identifiable, Hashable,
                 "Weekly credit tips",
                 "Course previews",
                 "Community read access",
+                "\(Pricing.format(Pricing.referralAce1Free)) per ACE-1 referral",
             ]
         case .ace1Student:
             return [
                 "Full course access",
-                "$25 per ACE-1 referral",
-                "AI Coach (60 days)",
+                "Free for \(Pricing.ace1FreeDays) days",
+                "\(Pricing.format(Pricing.referralAce1Enrolled)) per ACE-1 referral",
+                "\(Pricing.format(Pricing.referralAce23Bounty)) per ACE-2/ACE-3 referral",
                 "Cloud dispute tracker",
             ]
         case .csoAffiliate:
             return [
-                "Full course access",
-                "50-75% residual income",
-                "20% sales commission",
+                "Everything in ACE-1 Student",
+                "\(Pricing.formatRate(Pricing.bundleCommissionCSO)) commission on bundle sales",
+                "\(Pricing.format(Pricing.referralAce23Bounty)) per ACE-2/ACE-3 referral",
                 "Listed in Hire A Pro",
             ]
         }
     }
+
+    /// ACE-1 referral payout at this tier.
+    var ace1ReferralBonus: Double { Pricing.ace1ReferralBonus(for: self) }
+
+    /// Dollar payout on a single ACE-4 bundle sale at this tier.
+    var bundleCommission: Double { Pricing.bundleCommission(for: self) }
 }
 
 nonisolated struct CreditTip: Identifiable, Hashable, Sendable {

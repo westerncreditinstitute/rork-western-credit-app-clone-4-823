@@ -17,6 +17,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { GraduationCap, Mail, User, Phone, ArrowRight, CheckCircle, Shield, Lock, Eye, EyeOff, Tag } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
+import {
+  ACE1_FREE_DAYS,
+  CERTIFICATE_FEE,
+  REFERRAL_ACE1_ENROLLED,
+  REFERRAL_ACE1_FREE,
+  formatPrice,
+} from '@/constants/pricing';
 import { useRouter } from 'expo-router';
 
 const { width, height } = Dimensions.get('window');
@@ -229,6 +236,9 @@ export default function RegisterScreen() {
                   <Text style={styles.tierFeature}>✓ Weekly tips</Text>
                   <Text style={styles.tierFeature}>✓ Community access</Text>
                   <Text style={styles.tierFeature}>✓ Basic resources</Text>
+                  <Text style={styles.tierFeature}>
+                    ✓ {formatPrice(REFERRAL_ACE1_FREE)} per referral
+                  </Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -240,12 +250,19 @@ export default function RegisterScreen() {
                 >
                   <View style={styles.tierHeader}>
                     <Text style={styles.tierName}>ACE-1 Student</Text>
-                    <Text style={styles.tierPrice}>Free Trial</Text>
+                    <Text style={styles.tierPrice}>
+                      {formatPrice(CERTIFICATE_FEE)}
+                    </Text>
                   </View>
                   <Text style={styles.tierFeature}>✓ Full course access</Text>
                   <Text style={styles.tierFeature}>✓ AI Credit Coach</Text>
                   <Text style={styles.tierFeature}>✓ AI Dispute Assistant</Text>
-                  <Text style={styles.tierFeature}>✓ 7-day trial (no payment)</Text>
+                  <Text style={styles.tierFeature}>
+                    ✓ Certificate fee, then free {ACE1_FREE_DAYS} days
+                  </Text>
+                  <Text style={styles.tierFeature}>
+                    ✓ {formatPrice(REFERRAL_ACE1_ENROLLED)} per referral
+                  </Text>
                 </TouchableOpacity>
               </Animated.View>
             )}

@@ -24,18 +24,18 @@ struct EarningsView: View {
 
         VStack(spacing: 0) {
             ScreenHeader(
-                title: "Earnings",
-                subtitle: store.isFree ? "Unlock earning potential" : "Track your income"
+                title: "Earnings & Referrals",
+                subtitle: store.isFree ? "You can start earning today" : "Track your income"
             )
 
             ScrollView {
                 if store.isFree {
-                    lockedState
+                    freeState
                 } else {
                     VStack(spacing: Spacing.lg) {
                         summaryCards
                         referralCard
-                        if store.isCSO { residualTierCard }
+                        ReferralProgramBreakdownView(tier: store.tier)
                         typeFilter
                         historySection
                     }
@@ -56,56 +56,69 @@ struct EarningsView: View {
         }
     }
 
-    // MARK: - Locked (free tier)
+    // MARK: - Free tier
 
-    private var lockedState: some View {
+    /// The referral program is open to every member, including the free tier -
+    /// a free member earns on an ACE-1 referral, just at half the enrolled
+    /// rate. So this explains the program rather than paywalling it, and uses
+    /// the rate gap itself as the argument for upgrading.
+    private var freeState: some View {
         VStack(spacing: Spacing.lg) {
-            CardView(padding: Spacing.lg) {
-                VStack(spacing: Spacing.md) {
-                    Image(systemName: "crown.fill")
-                        .font(.system(size: 32, weight: .semibold))
-                        .foregroundStyle(theme.colors.warning)
-                        .frame(width: 82, height: 82)
-                        .background(theme.colors.warning.opacity(0.14))
-                        .clipShape(.circle)
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                Image(systemName: "gift.fill")
+                    .font(.system(size: 26, weight: .semibold))
+                    .foregroundStyle(.white)
 
-                    Text("Upgrade to Start Earning")
-                        .font(.system(size: 22, weight: .heavy))
-                        .foregroundStyle(theme.colors.text)
-                        .multilineTextAlignment(.center)
+                Text("Earn \(Pricing.format(Pricing.referralAce1Free)) per referral, starting now")
+                    .font(.system(size: 22, weight: .heavy))
+                    .foregroundStyle(.white)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                    Text("Subscribe to ACE-1 Student or CSO Affiliate to unlock the referral program and start earning money!")
-                        .font(.system(size: 14))
-                        .foregroundStyle(theme.colors.textSecondary)
-                        .multilineTextAlignment(.center)
+                Text("You do not need to be enrolled to get paid. Share your link, and when someone signs up for ACE-1 and stays past their first \(Pricing.referralQualifyingDays) days, that is \(Pricing.format(Pricing.referralAce1Free)) to you.")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.white.opacity(0.82))
+                    .fixedSize(horizontal: false, vertical: true)
 
-                    VStack(spacing: Spacing.sm) {
-                        ForEach([SubscriptionTier.ace1Student, .csoAffiliate]) { plan in
-                            planRow(plan)
-                        }
-                    }
-
-                    Button {
-                        Haptics.medium()
-                        showPlans = true
-                    } label: {
-                        Text("View Plans")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, Spacing.md)
-                            .background(
-                                LinearGradient(
-                                    colors: theme.colors.gradientPrimary,
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
-                            .clipShape(.rect(cornerRadius: Radius.md))
-                    }
-                    .buttonStyle(PressableButtonStyle())
-                }
+                Text("Enroll in ACE-1 and the same referral pays \(Pricing.format(Pricing.referralAce1Enrolled)) instead.")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(Color(hex: "#6EE7B7"))
+                    .fixedSize(horizontal: false, vertical: true)
             }
+            .padding(Spacing.lg)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                LinearGradient(
+                    colors: theme.colors.gradientHeader,
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .clipShape(.rect(cornerRadius: Radius.lg))
+            .shadow(color: theme.colors.shadow, radius: 12, y: 5)
+
+            referralCard
+
+            ReferralProgramBreakdownView(tier: store.tier)
+
+            Button {
+                Haptics.medium()
+                showPlans = true
+            } label: {
+                Text("View Plans & Upgrade")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, Spacing.md)
+                    .background(
+                        LinearGradient(
+                            colors: theme.colors.gradientPrimary,
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .clipShape(.rect(cornerRadius: Radius.md))
+            }
+            .buttonStyle(PressableButtonStyle())
         }
         .padding(Spacing.md)
     }
@@ -207,7 +220,7 @@ struct EarningsView: View {
                     Text("Refer & Earn")
                         .font(.system(size: 16, weight: .heavy))
                         .foregroundStyle(.white)
-                    Text("Earn $25 for every ACE-1 student")
+                    Text("\(Pricing.format(store.ace1ReferralBonus)) per ACE-1 student you refer")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(.white.opacity(0.75))
                 }
@@ -276,38 +289,6 @@ struct EarningsView: View {
         )
         .clipShape(.rect(cornerRadius: Radius.lg))
         .shadow(color: theme.colors.shadow, radius: 12, y: 5)
-    }
-
-    // MARK: - Residual tier
-
-    private var residualTierCard: some View {
-        CardView {
-            VStack(alignment: .leading, spacing: Spacing.sm) {
-                HStack {
-                    HStack(spacing: Spacing.sm) {
-                        Image(systemName: "target")
-                            .foregroundStyle(theme.colors.accent)
-                        Text("Residual Tier")
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundStyle(theme.colors.text)
-                    }
-                    Spacer()
-                    BadgeView(text: "\(store.residualRate)% rate", variant: .success)
-                }
-
-                Text("\(store.csoReferrals) active referrals")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(theme.colors.textSecondary)
-
-                ProgressBarView(progress: min(100, store.csoReferrals), height: 8, tint: theme.colors.accent)
-
-                Text(store.referralsToNextTier > 0
-                     ? "\(store.referralsToNextTier) more referrals to unlock the 75% residual tier."
-                     : "You've unlocked the maximum 75% residual tier!")
-                    .font(.system(size: 12))
-                    .foregroundStyle(theme.colors.textLight)
-            }
-        }
     }
 
     // MARK: - Filter + history

@@ -24,22 +24,31 @@ import {
   Gift,
   Briefcase,
   Crown,
-  Target,
-  Award,
+  Package,
   ArrowRight,
 } from "lucide-react-native";
 
 import { useTheme } from "@/contexts/ThemeContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { currentUser, earnings } from "@/mocks/data";
-import { Card, Badge, Button, ProgressBar } from "@/components/ui";
+import { Card, Badge, Button } from "@/components/ui";
+import ReferralProgramBreakdown from "@/components/earnings/ReferralProgramBreakdown";
+import {
+  BUNDLE_PAYOUT_CSO,
+  REFERRAL_ACE1_ENROLLED,
+  REFERRAL_ACE1_FREE,
+  REFERRAL_ACE23_BOUNTY,
+  ace1ReferralBonus,
+  bundleCommission,
+  formatPrice,
+} from "@/constants/pricing";
 
 type EarningType = "all" | "referral" | "commission" | "residual" | "coaching";
 
 export default function EarningsScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
-  const { isFree, isACE1, isCSO } = useSubscription();
+  const { isFree, isCSO, tier } = useSubscription();
   
   const [selectedType, setSelectedType] = useState<EarningType>("all");
   const [refreshing, setRefreshing] = useState(false);
@@ -80,10 +89,6 @@ export default function EarningsScreen() {
       ? earnings
       : earnings.filter((e) => e.type === selectedType);
 
-  const csoReferrals = 45;
-  const residualRate = csoReferrals >= 100 ? 75 : 50;
-  const nextTierAt = 100 - csoReferrals;
-
   const earningTypeConfig = {
     referral: { icon: Users, color: colors.info, label: "Referral" },
     commission: { icon: DollarSign, color: colors.secondary, label: "Commission" },
@@ -114,12 +119,16 @@ export default function EarningsScreen() {
 
   const styles = createStyles(colors, isDark);
 
+  // The referral program is open to every member, including the free tier -
+  // a free member earns on an ACE-1 referral, just at half the enrolled rate.
+  // So this screen explains the program to everyone rather than paywalling it,
+  // and uses the rate gap itself as the argument for upgrading.
   if (isFree) {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Earnings</Text>
-          <Text style={styles.headerSubtitle}>Unlock earning potential</Text>
+          <Text style={styles.headerTitle}>Earnings & Referrals</Text>
+          <Text style={styles.headerSubtitle}>You can start earning today</Text>
         </View>
 
         <ScrollView
@@ -127,49 +136,58 @@ export default function EarningsScreen() {
           contentContainerStyle={styles.contentContainer}
           showsVerticalScrollIndicator={false}
         >
-          <Card variant="elevated" padding="lg" style={styles.lockedCard}>
-            <View style={styles.lockedIconWrap}>
-              <Crown color={colors.warning} size={40} />
-            </View>
-            <Text style={styles.lockedTitle}>Upgrade to Start Earning</Text>
-            <Text style={styles.lockedDescription}>
-              Subscribe to ACE-1 Student or CSO Affiliate to unlock the referral program and start earning money!
+          <LinearGradient
+            colors={colors.gradient.primary as [string, string]}
+            style={styles.freeHero}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            <Gift color={colors.white} size={28} />
+            <Text style={styles.freeHeroTitle}>
+              Earn {formatPrice(REFERRAL_ACE1_FREE)} per referral, starting now
             </Text>
-            
-            <View style={styles.planComparison}>
-              <Card variant="outlined" padding="md" style={styles.planCard}>
-                <Text style={styles.planTitle}>ACE-1 Student</Text>
-                <Text style={styles.planPrice}>$25/mo</Text>
-                <View style={styles.planFeatures}>
-                  <Text style={styles.planFeature}>• Full course access</Text>
-                  <Text style={styles.planFeature}>• $25 per ACE-1 referral</Text>
-                  <Text style={styles.planFeature}>• AI Coach (60 days)</Text>
-                </View>
-              </Card>
-              
-              <Card variant="elevated" padding="md" style={[styles.planCard, styles.planCardHighlight]}>
-                <Badge text="BEST VALUE" variant="success" size="sm" style={styles.popularBadge} />
-                <Text style={styles.planTitle}>CSO Affiliate</Text>
-                <Text style={styles.planPrice}>$49.99/mo</Text>
-                <View style={styles.planFeatures}>
-                  <Text style={styles.planFeature}>• Full course access</Text>
-                  <Text style={styles.planFeature}>• 50-75% residual income</Text>
-                  <Text style={styles.planFeature}>• 20% sales commission</Text>
-                  <Text style={styles.planFeature}>• Listed in Hire A Pro</Text>
-                </View>
-              </Card>
-            </View>
+            <Text style={styles.freeHeroText}>
+              You do not need to be enrolled to get paid. Share your link, and
+              when someone signs up for ACE-1 and stays past their first 7 days,
+              that is {formatPrice(REFERRAL_ACE1_FREE)} to you.
+            </Text>
+            <Text style={styles.freeHeroKicker}>
+              Enroll in ACE-1 and the same referral pays{" "}
+              {formatPrice(REFERRAL_ACE1_ENROLLED)} instead.
+            </Text>
+          </LinearGradient>
 
-            <Button
-              title="View Plans"
-              onPress={() => router.push("/subscription-plans" as any)}
-              variant="primary"
-              size="lg"
-              fullWidth
-              icon={<ArrowRight color={colors.white} size={18} />}
-              iconPosition="right"
-            />
+          <Card variant="default" padding="lg" style={styles.referralSection}>
+            <View style={styles.sectionHeader}>
+              <Gift color={colors.secondary} size={22} />
+              <Text style={styles.sectionTitle}>Your Referral Link</Text>
+            </View>
+            <View style={styles.referralLinkBox}>
+              <Text style={styles.referralLink} numberOfLines={1}>
+                {referralLink}
+              </Text>
+              <View style={styles.referralActions}>
+                <TouchableOpacity style={styles.copyButton} onPress={handleCopyLink}>
+                  <Copy color={colors.primary} size={18} />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.shareButton} onPress={handleShare}>
+                  <Share2 color={colors.white} size={18} />
+                </TouchableOpacity>
+              </View>
+            </View>
           </Card>
+
+          <ReferralProgramBreakdown tier={tier} />
+
+          <Button
+            title="View Plans & Upgrade"
+            onPress={() => router.push("/subscription-plans" as any)}
+            variant="primary"
+            size="lg"
+            fullWidth
+            icon={<ArrowRight color={colors.white} size={18} />}
+            iconPosition="right"
+          />
 
           <View style={{ height: 100 }} />
         </ScrollView>
@@ -180,7 +198,7 @@ export default function EarningsScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Earnings</Text>
+        <Text style={styles.headerTitle}>Earnings & Referrals</Text>
         <Text style={styles.headerSubtitle}>Track your income</Text>
       </View>
 
@@ -235,8 +253,8 @@ export default function EarningsScreen() {
           </View>
           <Text style={styles.referralDescription}>
             {isCSO
-              ? "Earn 50-75% residual income on CSO referrals + 20% commission on all sales!"
-              : "Earn $25 for every ACE-1 student you refer who enrolls in a course."}
+              ? `You earn ${formatPrice(REFERRAL_ACE1_ENROLLED)} per ACE-1 referral, ${formatPrice(REFERRAL_ACE23_BOUNTY)} per ACE-2/ACE-3 registration, and ${formatPrice(BUNDLE_PAYOUT_CSO)} on every bundle sale.`
+              : `You earn ${formatPrice(ace1ReferralBonus(tier))} per ACE-1 referral, ${formatPrice(REFERRAL_ACE23_BOUNTY)} per ACE-2/ACE-3 registration, and ${formatPrice(bundleCommission(tier))} on every bundle sale.`}
           </Text>
           <View style={styles.referralLinkBox}>
             <Text style={styles.referralLink} numberOfLines={1}>
@@ -259,80 +277,49 @@ export default function EarningsScreen() {
           </View>
         </Card>
 
-        {isCSO && (
-          <Card variant="default" padding="lg" style={styles.residualSection}>
-            <View style={styles.sectionHeader}>
-              <Target color={colors.accent} size={22} />
-              <Text style={styles.sectionTitle}>Residual Income Tier</Text>
-            </View>
-            
-            <View style={styles.tierCard}>
-              <View style={styles.tierHeader}>
-                <View style={styles.tierInfo}>
-                  <Text style={styles.currentTierLabel}>Current Rate</Text>
-                  <Text style={[styles.currentTierValue, { color: colors.accent }]}>{residualRate}%</Text>
-                </View>
-                <View style={styles.tierProgress}>
-                  <Text style={styles.tierProgressLabel}>CSO Referrals</Text>
-                  <Text style={styles.tierProgressValue}>{csoReferrals}/100</Text>
-                </View>
-              </View>
-              
-              <ProgressBar 
-                progress={(csoReferrals / 100) * 100} 
-                height={10}
-                variant="default"
-              />
-              
-              {nextTierAt > 0 && (
-                <View style={styles.nextTierInfo}>
-                  <Award color={colors.warning} size={16} />
-                  <Text style={styles.nextTierText}>
-                    {nextTierAt} more CSO referrals to unlock 75% residual!
-                  </Text>
-                </View>
-              )}
-            </View>
-          </Card>
-        )}
+        <ReferralProgramBreakdown tier={tier} />
 
         <View style={styles.incomeTypesSection}>
           <Text style={styles.incomeTypesTitle}>Income Streams</Text>
           <View style={styles.incomeTypesGrid}>
-            {isACE1 && (
-              <Card variant="default" padding="md" style={styles.incomeTypeCard}>
-                <View style={[styles.incomeTypeIcon, { backgroundColor: colors.info + "20" }]}>
-                  <Users color={colors.info} size={22} />
-                </View>
-                <Text style={styles.incomeTypeTitle}>ACE-1 Referrals</Text>
-                <Text style={styles.incomeTypeDesc}>$25 per student</Text>
-              </Card>
-            )}
-            
+            <Card variant="default" padding="md" style={styles.incomeTypeCard}>
+              <View style={[styles.incomeTypeIcon, { backgroundColor: colors.info + "20" }]}>
+                <Users color={colors.info} size={22} />
+              </View>
+              <Text style={styles.incomeTypeTitle}>ACE-1 Referrals</Text>
+              <Text style={styles.incomeTypeDesc}>
+                {formatPrice(ace1ReferralBonus(tier))} per student
+              </Text>
+            </Card>
+
+            <Card variant="default" padding="md" style={styles.incomeTypeCard}>
+              <View style={[styles.incomeTypeIcon, { backgroundColor: colors.accent + "20" }]}>
+                <TrendingUp color={colors.accent} size={22} />
+              </View>
+              <Text style={styles.incomeTypeTitle}>ACE-2 / ACE-3</Text>
+              <Text style={styles.incomeTypeDesc}>
+                {formatPrice(REFERRAL_ACE23_BOUNTY)} each
+              </Text>
+            </Card>
+
+            <Card variant="default" padding="md" style={styles.incomeTypeCard}>
+              <View style={[styles.incomeTypeIcon, { backgroundColor: colors.warning + "20" }]}>
+                <Package color={colors.warning} size={22} />
+              </View>
+              <Text style={styles.incomeTypeTitle}>Bundle Sales</Text>
+              <Text style={styles.incomeTypeDesc}>
+                {formatPrice(bundleCommission(tier))} each
+              </Text>
+            </Card>
+
             {isCSO && (
-              <>
-                <Card variant="default" padding="md" style={styles.incomeTypeCard}>
-                  <View style={[styles.incomeTypeIcon, { backgroundColor: colors.info + "20" }]}>
-                    <Users color={colors.info} size={22} />
-                  </View>
-                  <Text style={styles.incomeTypeTitle}>CSO Residual</Text>
-                  <Text style={styles.incomeTypeDesc}>{residualRate}% monthly</Text>
-                </Card>
-                <Card variant="default" padding="md" style={styles.incomeTypeCard}>
-                  <View style={[styles.incomeTypeIcon, { backgroundColor: colors.secondary + "20" }]}>
-                    <DollarSign color={colors.secondary} size={22} />
-                  </View>
-                  <Text style={styles.incomeTypeTitle}>Sales Commission</Text>
-                  <Text style={styles.incomeTypeDesc}>20% on sales</Text>
-                </Card>
-                <Card variant="default" padding="md" style={styles.incomeTypeCard}>
-                  <View style={[styles.incomeTypeIcon, { backgroundColor: colors.accent + "20" }]}>
-                    <TrendingUp color={colors.accent} size={22} />
-                  </View>
-                  <Text style={styles.incomeTypeTitle}>Consultations</Text>
-                  <Text style={styles.incomeTypeDesc}>$74.99 each</Text>
-                </Card>
-              </>
+              <Card variant="default" padding="md" style={styles.incomeTypeCard}>
+                <View style={[styles.incomeTypeIcon, { backgroundColor: colors.secondary + "20" }]}>
+                  <DollarSign color={colors.secondary} size={22} />
+                </View>
+                <Text style={styles.incomeTypeTitle}>Consultations</Text>
+                <Text style={styles.incomeTypeDesc}>$74.99 each</Text>
+              </Card>
             )}
             
             <Card variant="default" padding="md" style={styles.incomeTypeCard}>
@@ -581,6 +568,29 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   referralSection: {
     marginBottom: 20,
+  },
+  freeHero: {
+    borderRadius: 24,
+    padding: 24,
+    marginBottom: 20,
+    gap: 10,
+  },
+  freeHeroTitle: {
+    fontSize: 22,
+    fontWeight: "800" as const,
+    color: colors.white,
+    letterSpacing: -0.4,
+  },
+  freeHeroText: {
+    fontSize: 14,
+    color: "rgba(255,255,255,0.82)",
+    lineHeight: 21,
+  },
+  freeHeroKicker: {
+    fontSize: 14,
+    fontWeight: "700" as const,
+    color: colors.secondary,
+    lineHeight: 21,
   },
   sectionHeader: {
     flexDirection: "row",

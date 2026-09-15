@@ -25,6 +25,18 @@ import { LinearGradient } from "expo-linear-gradient";
 
 import Colors from "@/constants/colors";
 import { useSubscription } from "@/contexts/SubscriptionContext";
+import {
+  ACE1_FREE_DAYS,
+  ACE23_DUE_TODAY,
+  BUNDLE_PAYOUT_CSO,
+  BUNDLE_PRICE,
+  CERTIFICATE_FEE,
+  ENROLLMENT_FEE,
+  MONTHLY_SUBSCRIPTION,
+  REFERRAL_ACE1_ENROLLED,
+  REFERRAL_ACE23_BOUNTY,
+  formatPrice,
+} from "@/constants/pricing";
 
 type PlanType = "ace1_course";
 
@@ -48,41 +60,61 @@ const plans: Plan[] = [
   {
     id: "ace1_course",
     name: "ACE-1 Course",
-    subtitle: "7-Day Free Trial",
-    price: 99.99,
+    subtitle: `Free for ${ACE1_FREE_DAYS} Days`,
+    price: CERTIFICATE_FEE,
     priceLabel: "Certificate Fee Only",
     badge: "BEST START",
     features: [
-      { text: "Full ACE-1 Course Access (7 days)", included: true },
+      { text: `Full ACE-1 course access, free for ${ACE1_FREE_DAYS} days`, included: true },
       { text: "AI Credit Repair Coach", included: true },
       { text: "AI Dispute Assistant", included: true },
       { text: "Lawsuit Assistant", included: true },
       { text: "Cloud Dispute Tracker", included: true },
       { text: "Certificate of Completion", included: true },
-      { text: "$25 Referral Bonus per Student", included: true },
-      { text: "Renew for $25/mo after trial", included: true },
+      { text: `${formatPrice(REFERRAL_ACE1_ENROLLED)} referral bonus per student`, included: true },
+      { text: `${formatPrice(REFERRAL_ACE23_BOUNTY)} per ACE-2/ACE-3 referral`, included: true },
+      {
+        text: `${formatPrice(MONTHLY_SUBSCRIPTION)}/mo after ${ACE1_FREE_DAYS} days`,
+        included: true,
+      },
     ],
   },
 ];
 
-const courseOptions = [
+interface CourseOption {
+  id: string;
+  name: string;
+  description: string;
+  image: string;
+  /** Certificate fee, charged on every ACE course except the bundle. */
+  certFee?: number;
+  /** Extra one-time enrollment fee (ACE-2 / ACE-3 only). */
+  enrollmentFee?: number;
+  /** Days of free access before billing starts (ACE-1 only). */
+  freeTrialDays?: number;
+  /** Recurring subscription that keeps the course active. */
+  monthlyPrice?: number;
+  /** One-time lifetime price (ACE-4 bundle only). */
+  oneTimePrice?: number;
+  autoDebitOnly?: boolean;
+}
+
+const courseOptions: CourseOption[] = [
   {
     id: "ace1",
     name: "ACE-1: Advanced Credit Repair",
-    price: 499.99,
-    certFee: 99.99,
-    freeTrialDays: 7,
+    certFee: CERTIFICATE_FEE,
+    freeTrialDays: ACE1_FREE_DAYS,
+    monthlyPrice: MONTHLY_SUBSCRIPTION,
     description: "Master advanced credit repair techniques",
     image: "https://images.unsplash.com/photo-1554224154-26032ffc0d07?w=600&h=400&fit=crop",
   },
   {
     id: "ace2",
     name: "ACE-2: Advanced Credit Building",
-    price: 499.98,
-    certFee: 99.99,
-    monthlyPayment: 166.66,
-    paymentMonths: 3,
-    renewalPrice: 25,
+    certFee: CERTIFICATE_FEE,
+    enrollmentFee: ENROLLMENT_FEE,
+    monthlyPrice: MONTHLY_SUBSCRIPTION,
     autoDebitOnly: true,
     description: "Build an 800+ FICO score in 90 days",
     image: "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=600&h=400&fit=crop",
@@ -90,14 +122,19 @@ const courseOptions = [
   {
     id: "ace3",
     name: "ACE-3: Advanced Business Credit",
-    price: 499.98,
-    certFee: 99.99,
-    monthlyPayment: 166.66,
-    paymentMonths: 3,
-    renewalPrice: 25,
+    certFee: CERTIFICATE_FEE,
+    enrollmentFee: ENROLLMENT_FEE,
+    monthlyPrice: MONTHLY_SUBSCRIPTION,
     autoDebitOnly: true,
     description: "Master business credit strategies",
     image: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=600&h=400&fit=crop",
+  },
+  {
+    id: "ace4",
+    name: "ACE-4: Complete ACE Bundle",
+    oneTimePrice: BUNDLE_PRICE,
+    description: "All 3 courses, lifetime access, no subscription",
+    image: "https://images.unsplash.com/photo-1573164713988-8665fc963095?w=600&h=400&fit=crop",
   },
 ];
 
@@ -141,9 +178,16 @@ export default function SubscriptionPlansScreen() {
     if (!course) return;
 
     const isACE1 = courseId === "ace1";
+    const isBundle = courseId === "ace4";
+    const dueToday = isBundle
+      ? course.oneTimePrice ?? BUNDLE_PRICE
+      : (course.certFee ?? 0) + (course.enrollmentFee ?? 0);
+
     const message = isACE1
-      ? `ACE-1 is FREE for 7 days! You only pay the $${course.certFee} certificate fee to enroll. After 7 days, continue access for $25/month.`
-      : `${course.name} costs $${course.price} + $${course.certFee} certificate fee (Total: $${course.price + course.certFee}).`;
+      ? `Pay the ${formatPrice(course.certFee ?? CERTIFICATE_FEE)} certificate fee to enroll, then ACE-1 is FREE for ${ACE1_FREE_DAYS} days. Keep your account past ${ACE1_FREE_DAYS} days and it is ${formatPrice(MONTHLY_SUBSCRIPTION)}/month.`
+      : isBundle
+      ? `One payment of ${formatPrice(dueToday)} for LIFETIME access to all 3 courses, AI tools, certificates, the affiliate network and every future update. No monthly subscription, ever.`
+      : `${course.name}\n\nCertificate fee: ${formatPrice(course.certFee ?? CERTIFICATE_FEE)}\nEnrollment fee: ${formatPrice(course.enrollmentFee ?? ENROLLMENT_FEE)}\n\nDue today: ${formatPrice(dueToday)}\nThen ${formatPrice(MONTHLY_SUBSCRIPTION)}/month to keep your subscription.\n\nThere is no free trial for this course.`;
 
     Alert.alert(
       "Course Registration",
@@ -151,7 +195,7 @@ export default function SubscriptionPlansScreen() {
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: isACE1 ? `Pay $${course.certFee}` : `Pay $${course.price + course.certFee}`,
+          text: `Pay ${formatPrice(dueToday)}`,
           onPress: async () => {
             if (isACE1) {
               setIsProcessing(true);
@@ -163,7 +207,7 @@ export default function SubscriptionPlansScreen() {
                   console.log('[SubscriptionPlans] ACE-1 upgrade successful');
                   Alert.alert(
                     "Successfully Enrolled!", 
-                    "You are now enrolled in ACE-1! Your 7-day free trial is active.",
+                    `You are now enrolled in ACE-1! Your ${ACE1_FREE_DAYS} days of free access are active.`,
                     [{ text: "OK", onPress: () => router.back() }]
                   );
                 } else {
@@ -322,10 +366,15 @@ export default function SubscriptionPlansScreen() {
                   <Zap color={Colors.surface} size={14} />
                   <Text style={styles.ace1BadgeText}>SPECIAL OFFER</Text>
                 </View>
-                <Text style={styles.ace1HighlightTitle}>ACE-1 Free for 7 Days!</Text>
+                <Text style={styles.ace1HighlightTitle}>
+                  ACE-1 Free for {ACE1_FREE_DAYS} Days!
+                </Text>
                 <Text style={styles.ace1HighlightText}>
-                  Start your credit repair journey with just the $99.99 certificate fee. 
-                  Get full access to all course materials and AI tools.
+                  Start your credit repair journey with just the{" "}
+                  {formatPrice(CERTIFICATE_FEE)} certificate fee. Get full access to
+                  all course materials and AI tools, then{" "}
+                  {formatPrice(MONTHLY_SUBSCRIPTION)}/month to keep your
+                  subscription.
                 </Text>
               </LinearGradient>
             </View>
@@ -351,23 +400,41 @@ export default function SubscriptionPlansScreen() {
                           </Text>
                         </View>
                         <Text style={styles.certFeeText}>
-                          ${course.certFee} cert fee to enroll
+                          {formatPrice(course.certFee ?? CERTIFICATE_FEE)} cert fee to enroll
                         </Text>
+                        <View style={styles.renewalInfo}>
+                          <Text style={styles.renewalText}>
+                            Then {formatPrice(course.monthlyPrice ?? MONTHLY_SUBSCRIPTION)}/mo
+                          </Text>
+                        </View>
                       </>
-                    ) : course.monthlyPayment ? (
+                    ) : course.oneTimePrice ? (
                       <View style={styles.monthlyPricingContainer}>
                         <View style={styles.monthlyBadge}>
                           <DollarSign color={Colors.primary} size={12} />
                           <Text style={styles.monthlyBadgeText}>
-                            ${course.monthlyPayment}/mo × {course.paymentMonths} months
+                            {formatPrice(course.oneTimePrice)} one time
                           </Text>
                         </View>
                         <Text style={styles.certFeeText}>
-                          + ${course.certFee} cert fee
+                          Lifetime access — no subscription
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={styles.monthlyPricingContainer}>
+                        <View style={styles.monthlyBadge}>
+                          <DollarSign color={Colors.primary} size={12} />
+                          <Text style={styles.monthlyBadgeText}>
+                            {formatPrice(ACE23_DUE_TODAY)} due today
+                          </Text>
+                        </View>
+                        <Text style={styles.certFeeText}>
+                          {formatPrice(course.certFee ?? CERTIFICATE_FEE)} cert +{" "}
+                          {formatPrice(course.enrollmentFee ?? ENROLLMENT_FEE)} enrollment
                         </Text>
                         <View style={styles.renewalInfo}>
                           <Text style={styles.renewalText}>
-                            Then ${course.renewalPrice}/mo to continue
+                            Then {formatPrice(course.monthlyPrice ?? MONTHLY_SUBSCRIPTION)}/mo
                           </Text>
                         </View>
                         {course.autoDebitOnly && (
@@ -376,11 +443,6 @@ export default function SubscriptionPlansScreen() {
                           </View>
                         )}
                       </View>
-                    ) : (
-                      <>
-                        <Text style={styles.coursePrice}>${course.price}</Text>
-                        <Text style={styles.certFeeSmall}>+ ${course.certFee} cert</Text>
-                      </>
                     )}
                   </View>
                 </View>
@@ -402,8 +464,12 @@ export default function SubscriptionPlansScreen() {
           <DollarSign color={Colors.secondary} size={24} />
           <Text style={styles.guaranteeTitle}>Earn While You Learn</Text>
           <Text style={styles.guaranteeText}>
-            Start earning referral bonuses immediately. CSO Affiliates can earn up to 
-            $10,000+ per month through our comprehensive income program.
+            Start earning referral bonuses immediately — even on the free plan.
+            Enrolled students earn {formatPrice(REFERRAL_ACE1_ENROLLED)} per ACE-1
+            referral and {formatPrice(REFERRAL_ACE23_BOUNTY)} per ACE-2/ACE-3
+            registration, and CSO Affiliates keep{" "}
+            {formatPrice(BUNDLE_PAYOUT_CSO)} on every bundle sale — a realistic
+            path past $10,000 per month.
           </Text>
         </View>
 

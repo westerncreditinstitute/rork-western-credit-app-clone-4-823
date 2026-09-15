@@ -32,6 +32,13 @@ import {
 
 import { useTheme } from "@/contexts/ThemeContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
+import {
+  BUNDLE_PAYOUT_CSO,
+  REFERRAL_ACE1_ENROLLED,
+  REFERRAL_ACE1_FREE,
+  REFERRAL_ACE23_BOUNTY,
+  formatPrice,
+} from "@/constants/pricing";
 import { Card, Badge, Button } from "@/components/ui";
 
 type TransactionType = "referral_bonus" | "residual_income" | "commission" | "payout" | "consultation";
@@ -56,25 +63,25 @@ const mockTransactions: WalletTransaction[] = [
   {
     id: "1",
     type: "referral_bonus",
-    amount: 25,
+    amount: REFERRAL_ACE1_ENROLLED,
     status: "completed",
-    description: "ACE-1 Student Referral - Sarah Johnson",
+    description: "ACE-1 Referral - Sarah Johnson",
     createdAt: "2025-01-08T10:30:00Z",
   },
   {
     id: "2",
-    type: "residual_income",
-    amount: 24.99,
+    type: "commission",
+    amount: REFERRAL_ACE23_BOUNTY,
     status: "pending",
-    description: "CSO Affiliate Residual Income (50%) - January 2025",
+    description: "ACE-2 Registration Bonus - Sarah Johnson",
     createdAt: "2025-01-07T00:00:00Z",
   },
   {
     id: "3",
     type: "commission",
-    amount: 79.99,
+    amount: BUNDLE_PAYOUT_CSO,
     status: "completed",
-    description: "20% Commission - ACE-1 Course Sale",
+    description: "50% Commission - Complete ACE Bundle Sale",
     createdAt: "2025-01-05T14:22:00Z",
   },
   {
@@ -96,9 +103,9 @@ const mockTransactions: WalletTransaction[] = [
   {
     id: "6",
     type: "referral_bonus",
-    amount: 25,
+    amount: REFERRAL_ACE1_ENROLLED,
     status: "completed",
-    description: "ACE-1 Student Referral - James Wilson",
+    description: "ACE-1 Referral - James Wilson",
     createdAt: "2024-12-25T11:00:00Z",
   },
 ];
@@ -283,21 +290,25 @@ export default function WalletScreen() {
                 <Users color={colors.info} size={20} />
               </View>
               <Text style={styles.earningLabel}>ACE-1 Referrals</Text>
-              <Text style={styles.earningAmount}>$25 each</Text>
+              <Text style={styles.earningAmount}>
+                {formatPrice(REFERRAL_ACE1_FREE)}-{formatPrice(REFERRAL_ACE1_ENROLLED)}
+              </Text>
             </Card>
             <Card variant="default" padding="md" style={styles.earningCard}>
               <View style={[styles.earningIcon, { backgroundColor: colors.accent + "20" }]}>
                 <TrendingUp color={colors.accent} size={20} />
               </View>
-              <Text style={styles.earningLabel}>CSO Residual</Text>
-              <Text style={styles.earningAmount}>50-75%</Text>
+              <Text style={styles.earningLabel}>ACE-2 / ACE-3</Text>
+              <Text style={styles.earningAmount}>
+                {formatPrice(REFERRAL_ACE23_BOUNTY)} each
+              </Text>
             </Card>
             <Card variant="default" padding="md" style={styles.earningCard}>
               <View style={[styles.earningIcon, { backgroundColor: colors.secondary + "20" }]}>
                 <DollarSign color={colors.secondary} size={20} />
               </View>
-              <Text style={styles.earningLabel}>Sales Commission</Text>
-              <Text style={styles.earningAmount}>20%</Text>
+              <Text style={styles.earningLabel}>Bundle Sales</Text>
+              <Text style={styles.earningAmount}>25-50%</Text>
             </Card>
             <Card variant="default" padding="md" style={styles.earningCard}>
               <View style={[styles.earningIcon, { backgroundColor: colors.primary + "20" }]}>

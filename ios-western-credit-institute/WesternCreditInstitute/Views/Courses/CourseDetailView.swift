@@ -283,15 +283,36 @@ struct CourseDetailView: View {
                 HStack(spacing: Spacing.sm) {
                     Image(systemName: "creditcard.fill")
                         .foregroundStyle(theme.colors.info)
-                    Text("Payment plan")
+                    Text(current.isLifetime ? "One-time payment" : "Pricing")
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(theme.colors.text)
                 }
 
-                if let installment = current.monthlyInstallment, let months = current.installmentMonths {
-                    Text("\(Format.currency(installment)) / month for \(months) months (auto debit only)")
+                if current.isLifetime {
+                    Text("\(Pricing.format(current.price)) once for lifetime access. No monthly subscription, ever.")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(theme.colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    if let cert = current.certificationFee {
+                        pricingLine("Certificate fee", Pricing.format(cert))
+                    }
+                    if let enrollment = current.enrollmentFee {
+                        pricingLine("Enrollment fee", Pricing.format(enrollment))
+                    }
+                    pricingLine("Due today", Pricing.format(current.dueToday), emphasized: true)
+
+                    if let days = current.freeTrialDays {
+                        Text("Then free for \(days) days. Keep your account past \(days) days and it is \(Pricing.format(current.monthlyFee ?? Pricing.monthlySubscription)) per month.")
+                            .font(.system(size: 13))
+                            .foregroundStyle(theme.colors.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        Text("Then \(Pricing.format(current.monthlyFee ?? Pricing.monthlySubscription)) per month to keep your subscription. There is no free trial for this course.")
+                            .font(.system(size: 13))
+                            .foregroundStyle(theme.colors.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
 
                 if let policy = current.autoDebitLockoutPolicy {
@@ -300,6 +321,19 @@ struct CourseDetailView: View {
                         .foregroundStyle(theme.colors.textLight)
                 }
             }
+        }
+    }
+
+    private func pricingLine(_ label: String, _ value: String, emphasized: Bool = false) -> some View {
+        HStack {
+            Text(label)
+                .font(.system(size: 13, weight: emphasized ? .bold : .regular))
+                .foregroundStyle(emphasized ? theme.colors.text : theme.colors.textSecondary)
+            Spacer(minLength: Spacing.sm)
+            Text(value)
+                .font(.system(size: 13, weight: emphasized ? .heavy : .semibold))
+                .foregroundStyle(emphasized ? theme.colors.text : theme.colors.textSecondary)
+                .monospacedDigit()
         }
     }
 
@@ -313,14 +347,14 @@ struct CourseDetailView: View {
                         .font(.system(size: 22, weight: .heavy))
                         .foregroundStyle(theme.colors.success)
                 } else {
-                    Text(Format.compactCurrency(current.price))
+                    Text(Pricing.format(current.dueToday))
                         .font(.system(size: 22, weight: .heavy))
                         .foregroundStyle(theme.colors.text)
-                    if let fee = current.certificationFee {
-                        Text("+ \(Format.compactCurrency(fee)) certificate")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(theme.colors.textLight)
-                    }
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                    Text(enrollCaption(current))
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(theme.colors.textLight)
                 }
             }
 
@@ -373,11 +407,22 @@ struct CourseDetailView: View {
         return "Enroll Now"
     }
 
+    /// Caption under the enroll-bar price, naming what the charge covers.
+    private func enrollCaption(_ current: Course) -> String {
+        if current.isLifetime { return "one time — lifetime access" }
+        if let days = current.freeTrialDays { return "certificate — free \(days) days" }
+        if current.hasEnrollmentFee { return "certificate + enrollment" }
+        return "due today"
+    }
+
     private func enrollPriceLabel(_ current: Course) -> String {
         if current.isFree { return "Enroll in \(current.title) for free?" }
-        if let fee = current.certificationFee, current.freeTrialDays != nil {
-            return "Start your free trial and pay the \(Format.currency(fee)) certificate fee?"
+        if current.isLifetime {
+            return "Buy \(current.title) for \(Pricing.format(current.price))? This is a one-time payment for lifetime access — there is no monthly subscription."
         }
-        return "Enroll in \(current.title) for \(Format.currency(current.price))?"
+        if let days = current.freeTrialDays {
+            return "Pay the \(Pricing.format(current.dueToday)) certificate fee and get \(days) days free? After that it is \(Pricing.format(current.monthlyFee ?? Pricing.monthlySubscription)) per month."
+        }
+        return "Enroll in \(current.title) for \(Pricing.format(current.dueToday)) today, then \(Pricing.format(current.monthlyFee ?? Pricing.monthlySubscription)) per month? There is no free trial for this course."
     }
 }

@@ -17,6 +17,7 @@ import { Search, Filter, Clock, BookOpen, CheckCircle, Zap, X, Tag } from "lucid
 import { useTheme } from "@/contexts/ThemeContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { courses as mockCourses } from "@/mocks/data";
+import { formatPrice } from "@/constants/pricing";
 import { Course } from "@/types";
 import { Card, Badge, ProgressBar, EmptyState } from "@/components/ui";
 import { SkeletonCard } from "@/components/ui/Skeleton";
@@ -138,12 +139,18 @@ export default function CoursesScreen() {
               </View>
             ) : (
               <View style={styles.priceContainer}>
-                <Text style={[styles.coursePrice, { color: colors.primary }]}>${course.price}</Text>
-                {course.certificationFee && (
-                  <Text style={[styles.certificationFee, { color: colors.textLight }]}>
-                    +${course.certificationFee} cert
-                  </Text>
-                )}
+                <Text style={[styles.coursePrice, { color: colors.primary }]}>
+                  {formatPrice(
+                    (course.certificationFee ?? 0) + (course.enrollmentFee ?? 0) || course.price
+                  )}
+                </Text>
+                <Text style={[styles.certificationFee, { color: colors.textLight }]}>
+                  {course.isLifetime
+                    ? "lifetime access"
+                    : course.enrollmentFee
+                    ? "cert + enrollment"
+                    : "to enroll"}
+                </Text>
               </View>
             )}
           </View>

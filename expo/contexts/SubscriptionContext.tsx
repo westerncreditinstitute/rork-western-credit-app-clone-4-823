@@ -4,6 +4,17 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { trpc, isTransportErrorMessage } from '@/lib/trpc';
 import { useAuth } from '@/contexts/AuthContext';
+import {
+  ACE1_FREE_DAYS,
+  CSO_MONTHLY_FEE,
+  MONTHLY_SUBSCRIPTION,
+  REFERRAL_ACE1_ENROLLED,
+  REFERRAL_ACE1_FREE,
+  REFERRAL_ACE23_BOUNTY,
+  ace1ReferralBonus,
+  bundleCommission,
+  bundleCommissionRate,
+} from '@/constants/pricing';
 
 export type SubscriptionTier = 'free' | 'ace1_student' | 'cso_affiliate';
 
@@ -57,32 +68,34 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
   {
     id: 'ace1_student',
     name: 'ACE-1 Student',
-    price: 25,
+    price: MONTHLY_SUBSCRIPTION,
     features: [
       'Full course access',
-      'AI Credit Coach (60 days)',
+      `Free for ${ACE1_FREE_DAYS} days`,
+      'AI Credit Coach',
       'AI Dispute Assistant',
       'Cloud dispute tracker',
-      '$25 per ACE-1 referral',
+      `$${REFERRAL_ACE1_ENROLLED} per ACE-1 referral`,
+      `$${REFERRAL_ACE23_BOUNTY} per ACE-2/ACE-3 referral`,
       'Certificate of completion',
     ],
-    referralBonus: '$25 per referral',
+    referralBonus: `$${REFERRAL_ACE1_ENROLLED} per referral`,
   },
   {
     id: 'cso_affiliate',
     name: 'CSO Affiliate',
-    price: 49.99,
+    price: CSO_MONTHLY_FEE,
     features: [
       'Everything in ACE-1 Student',
-      'All ACE courses included',
-      '50-75% residual income',
-      '20% sales commission',
+      `$${REFERRAL_ACE1_ENROLLED} per ACE-1 referral`,
+      `$${REFERRAL_ACE23_BOUNTY} per ACE-2/ACE-3 referral`,
+      '50% commission on bundle sales',
       'Listed in Hire A Pro',
       'Priority support',
       'CSO certification path',
     ],
-    referralBonus: '$25 + residual',
-    residualRate: '50-75%',
+    referralBonus: `$${REFERRAL_ACE1_ENROLLED} + 50% bundles`,
+    residualRate: '50%',
   },
 ];
 
@@ -351,7 +364,9 @@ export const [SubscriptionProvider, useSubscription] = createContextHook(() => {
       // Update subscription for paid courses
       const isPaidCourse = PAID_COURSE_IDS.includes(courseId);
       if (isPaidCourse && tier === 'free') {
-        const trialDays = isACE1Course ? 7 : 30;
+        // ACE-1 is free for 60 days after the certificate fee. Other courses
+        // bill monthly from enrollment, so they get a standard 30-day cycle.
+        const trialDays = isACE1Course ? ACE1_FREE_DAYS : 30;
         const newTier: SubscriptionTier = 'ace1_student';
         
         setTier(newTier);
@@ -365,7 +380,7 @@ export const [SubscriptionProvider, useSubscription] = createContextHook(() => {
         const expiryKey = getStorageKey(SUBSCRIPTION_EXPIRY_KEY, userId || undefined);
         await AsyncStorage.setItem(expiryKey, expiry.toISOString());
         
-        console.log('[Subscription] Updated tier to ace1_student with', trialDays, 'day trial');
+        console.log('[Subscription] Updated tier to ace1_student with', trialDays, 'free days');
 
         // Create subscription in database
         if (userId) {
@@ -443,7 +458,7 @@ export const [SubscriptionProvider, useSubscription] = createContextHook(() => {
         // Update tier if any paid courses are enrolled
         const hasPaidCourse = currentEnrolled.some(id => PAID_COURSE_IDS.includes(id));
         if (hasPaidCourse && tier === 'free') {
-          await updateTier('ace1_student', 7);
+          await updateTier('ace1_student', ACE1_FREE_DAYS);
           console.log('[Subscription] Updated tier due to enrolled paid courses');
         }
       }
@@ -495,7 +510,7 @@ export const [SubscriptionProvider, useSubscription] = createContextHook(() => {
 
       console.log('[SubscriptionContext] Attempting to upgrade user to ACE-1:', userId);
 
-      // Call backend to create ACE-1 subscription with 7-day trial.
+      // Call backend to create the ACE-1 subscription with its free period.
       // `trpc` here is the React-Query client, whose procedures expose
       // hooks (useMutation) rather than a callable `.mutate` - the already
       // declared `createSubscriptionMutation` is the imperative handle.
@@ -512,9 +527,9 @@ export const [SubscriptionProvider, useSubscription] = createContextHook(() => {
 
       console.log('[SubscriptionContext] Subscription created:', subscription);
 
-      // Set expiry to 7 days from now
+      // Free access runs for 60 days before the subscription starts.
       const expiry = new Date();
-      expiry.setDate(expiry.getDate() + 7);
+      expiry.setDate(expiry.getDate() + ACE1_FREE_DAYS);
       
       // Update local state
       setExpiryDate(expiry);
@@ -585,16 +600,31 @@ export const [SubscriptionProvider, useSubscription] = createContextHook(() => {
   const canAccessEarnings = isPremium;
   const canAccessHirePro = isCSO && !isExpired;
 
+  /**
+   * ACE-1 referral payout for the signed-in user.
+   *
+   * Everyone can refer - free members included - which is why this returns a
+   * value rather than 0 for the free tier. Enrolling doubles the payout, and
+   * that gap is the strongest reason to upgrade.
+   */
   const getReferralBonus = useCallback((): number => {
-    if (isCSO) return 25;
-    if (isACE1) return 25;
-    return 0;
-  }, [isCSO, isACE1]);
+    return ace1ReferralBonus(tier);
+  }, [tier]);
 
-  const getResidualRate = useCallback((csoReferrals: number = 0): number => {
-    if (!isCSO) return 0;
-    return csoReferrals >= 100 ? 75 : 50;
-  }, [isCSO]);
+  /** Flat bounty per ACE-2 or ACE-3 registration by a referred student. */
+  const getAdvancedCourseBounty = useCallback((): number => {
+    return REFERRAL_ACE23_BOUNTY;
+  }, []);
+
+  /** Share of an ACE-4 bundle sale: 50% for a CSO, 25% for everyone else. */
+  const getBundleCommissionRate = useCallback((): number => {
+    return bundleCommissionRate(tier);
+  }, [tier]);
+
+  /** Dollar payout on a single ACE-4 bundle sale at the current tier. */
+  const getBundleCommission = useCallback((): number => {
+    return bundleCommission(tier);
+  }, [tier]);
 
   return {
     tier,
@@ -618,7 +648,9 @@ export const [SubscriptionProvider, useSubscription] = createContextHook(() => {
     canAccessEarnings,
     canAccessHirePro,
     getReferralBonus,
-    getResidualRate,
+    getAdvancedCourseBounty,
+    getBundleCommissionRate,
+    getBundleCommission,
     plans: SUBSCRIPTION_PLANS,
     refetch: subscriptionQuery.refetch,
     isCSOCertified,

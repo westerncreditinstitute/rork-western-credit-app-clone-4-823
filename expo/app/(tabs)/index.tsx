@@ -41,6 +41,12 @@ import {
 
 import { useTheme } from "@/contexts/ThemeContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
+import {
+  CSO_MONTHLY_FEE,
+  MONTHLY_SUBSCRIPTION,
+  REFERRAL_ACE1_ENROLLED,
+  formatPrice,
+} from "@/constants/pricing";
 import { useUser } from "@/contexts/UserContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { courses, notifications } from "@/mocks/data";
@@ -654,12 +660,16 @@ export default function HomeScreen() {
                   <View style={styles.planOptions}>
                     <View style={styles.planOption}>
                       <Text style={styles.planName}>ACE-1 Student</Text>
-                      <Text style={styles.planPrice}>$25/mo</Text>
+                      <Text style={styles.planPrice}>
+                        {formatPrice(MONTHLY_SUBSCRIPTION)}/mo
+                      </Text>
                     </View>
                     <View style={styles.planDivider} />
                     <View style={styles.planOption}>
                       <Text style={styles.planName}>CSO Affiliate</Text>
-                      <Text style={styles.planPrice}>$49.99/mo</Text>
+                      <Text style={styles.planPrice}>
+                        {formatPrice(CSO_MONTHLY_FEE)}/mo
+                      </Text>
                     </View>
                   </View>
                   <View style={styles.upgradeButton}>
@@ -737,9 +747,9 @@ export default function HomeScreen() {
                   <View style={styles.promoContent}>
                     <Text style={styles.promoTitle}>Refer & Earn Program</Text>
                     <Text style={styles.promoDescription}>
-                      {tier === "ace1_student"
-                        ? "Earn $25 for every ACE-1 student you refer!"
-                        : "Earn 50% residual on CSO referrals + 20% sales commission!"}
+                      {tier === "cso_affiliate"
+                        ? `Earn ${formatPrice(REFERRAL_ACE1_ENROLLED)} per ACE-1 referral and 50% of every bundle sale!`
+                        : `Earn ${formatPrice(REFERRAL_ACE1_ENROLLED)} for every ACE-1 student you refer!`}
                     </Text>
                     <View style={styles.promoButton}>
                       <Text style={styles.promoButtonText}>Learn More</Text>

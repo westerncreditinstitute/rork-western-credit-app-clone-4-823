@@ -298,6 +298,18 @@ final class AppStore {
     }
 
     var csoReferrals: Int { 45 }
-    var residualRate: Int { csoReferrals >= 100 ? 75 : 50 }
-    var referralsToNextTier: Int { max(0, 100 - csoReferrals) }
+
+    /// ACE-1 referral payout at the signed-in user's tier.
+    ///
+    /// Free members earn too - at half the enrolled rate - so this is never 0.
+    var ace1ReferralBonus: Double { Pricing.ace1ReferralBonus(for: tier) }
+
+    /// Flat bounty per ACE-2 or ACE-3 registration by a referred student.
+    var advancedCourseBounty: Double { Pricing.referralAce23Bounty }
+
+    /// Dollar payout on a single ACE-4 bundle sale at the current tier.
+    var bundleCommission: Double { Pricing.bundleCommission(for: tier) }
+
+    /// Share of an ACE-4 bundle sale kept at the current tier.
+    var bundleCommissionRate: Double { Pricing.bundleCommissionRate(for: tier) }
 }

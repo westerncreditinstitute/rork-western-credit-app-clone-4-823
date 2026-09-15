@@ -24,6 +24,7 @@ import {
   Beaker,
 } from "lucide-react-native";
 import Colors from "@/constants/colors";
+import { ACE1_FREE_DAYS, CERTIFICATE_FEE, formatPrice } from "@/constants/pricing";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useUser } from "@/contexts/UserContext";
 
@@ -258,7 +259,8 @@ export default function MoreScreen() {
             </Text>
             <Text style={styles.upgradeDescription}>
               Enroll in ACE-1 to get your personal AI agent, dispute letter
-              generation, and dispute tracking — just $25/month.
+              generation, and dispute tracking — {formatPrice(CERTIFICATE_FEE)}{" "}
+              certificate fee, then free for {ACE1_FREE_DAYS} days.
             </Text>
           </View>
           <ChevronRight color={Colors.accent} size={20} />

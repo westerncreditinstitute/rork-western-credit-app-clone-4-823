@@ -42,6 +42,13 @@ import {
 
 import { useTheme, ThemeMode } from "@/contexts/ThemeContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
+import {
+  CSO_MONTHLY_FEE,
+  MONTHLY_SUBSCRIPTION,
+  REFERRAL_ACE1_ENROLLED,
+  REFERRAL_ACE23_BOUNTY,
+  formatPrice,
+} from "@/constants/pricing";
 import { useUser } from "@/contexts/UserContext";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -179,11 +186,11 @@ export default function ProfileScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     Alert.alert(
       "Renew ACE-1 Subscription",
-      "Renew your ACE-1 subscription for $25/month to continue accessing all features.",
+      `Renew your ACE-1 subscription for ${formatPrice(MONTHLY_SUBSCRIPTION)}/month to continue accessing all features.`,
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Renew - $25/mo",
+          text: `Renew - ${formatPrice(MONTHLY_SUBSCRIPTION)}/mo`,
           onPress: async () => {
             const success = await renewSubscription();
             if (success) {
@@ -210,11 +217,11 @@ export default function ProfileScreen() {
 
     Alert.alert(
       "Upgrade to CSO Affiliate",
-      "Become a CSO Affiliate for $49.99/month and unlock:\n\n• All ACE courses included\n• 50-75% residual income\n• 20% sales commission\n• Listed in Hire A Pro\n• Priority support",
+      `Become a CSO Affiliate for ${formatPrice(CSO_MONTHLY_FEE)}/month and unlock:\n\n• ${formatPrice(REFERRAL_ACE1_ENROLLED)} per ACE-1 referral\n• ${formatPrice(REFERRAL_ACE23_BOUNTY)} per ACE-2/ACE-3 registration\n• 50% commission on every bundle sale\n• Listed in Hire A Pro\n• Priority support`,
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Upgrade - $49.99/mo",
+          text: `Upgrade - ${formatPrice(CSO_MONTHLY_FEE)}/mo`,
           onPress: async () => {
             const success = await upgradeToCSOAffiliate();
             if (success) {
@@ -510,7 +517,9 @@ export default function ProfileScreen() {
                 activeOpacity={0.8}
               >
                 <RefreshCw color={colors.white} size={18} />
-                <Text style={styles.subscriptionButtonText}>Renew Subscription - $25/mo</Text>
+                <Text style={styles.subscriptionButtonText}>
+                  Renew Subscription - {formatPrice(MONTHLY_SUBSCRIPTION)}/mo
+                </Text>
               </TouchableOpacity>
             )}
 
@@ -592,7 +601,7 @@ export default function ProfileScreen() {
                     </Text>
                   </View>
                 </View>
-                <Text style={styles.csoPrice}>$49.99/mo</Text>
+                <Text style={styles.csoPrice}>{formatPrice(CSO_MONTHLY_FEE)}/mo</Text>
               </View>
 
               {!canAccessCSOAffiliate && (

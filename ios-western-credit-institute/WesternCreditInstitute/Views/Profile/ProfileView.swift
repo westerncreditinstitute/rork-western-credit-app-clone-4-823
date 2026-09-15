@@ -450,9 +450,9 @@ nonisolated enum LegalDocument: String, Identifiable, Sendable {
         case .terms:
             return [
                 ("Enrollment", "Course enrollment grants a single-user, non-transferable licence to the course materials. Sharing account credentials or redistributing materials terminates your access without refund."),
-                ("Payments & auto debit", "ACE-2 and ACE-3 installment plans are auto debit only. If an auto debit payment fails, access to the course is suspended immediately until payment is received."),
+                ("Payments & auto debit", "ACE-2 and ACE-3 require the certificate fee plus the enrollment fee at registration, then a monthly subscription billed by auto debit only. If an auto debit payment fails, access to the course is suspended immediately until payment is received. The Complete ACE Bundle is a one-time payment with lifetime access and no recurring billing."),
                 ("Certificates & certification", "Certificates of completion require finishing all course modules and paying any applicable certificate fee. CSO Certification additionally requires passing the CSOA exam."),
-                ("Affiliate earnings", "Referral bonuses, residual income and commissions are paid monthly on balances above the $25 minimum. Fraudulent or self-referred signups are voided."),
+                ("Affiliate earnings", "Referral bonuses and commissions are paid monthly on balances above the $25 minimum. An ACE-1 referral qualifies only once the referred student keeps their account open past 7 days. Fraudulent or self-referred signups are voided."),
                 ("No legal advice", "Western Credit Institute provides education, not legal or financial advice. Outcomes vary and no specific credit score result is guaranteed."),
             ]
         case .privacy:

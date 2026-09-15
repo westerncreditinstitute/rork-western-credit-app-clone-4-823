@@ -242,16 +242,22 @@ struct CourseCard: View {
             BadgeView(text: "FREE", variant: .success)
         } else {
             VStack(alignment: .trailing, spacing: 0) {
-                Text(Format.compactCurrency(course.price))
+                Text(Pricing.format(course.dueToday))
                     .font(.system(size: 17, weight: .heavy))
                     .foregroundStyle(colors.primary)
-                if let fee = course.certificationFee {
-                    Text("+\(Format.compactCurrency(fee)) cert")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(colors.textLight)
-                }
+                Text(priceCaption)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(colors.textLight)
             }
         }
+    }
+
+    /// Explains what the headline number covers, so a course billed up front
+    /// is never mistaken for the full lifetime cost.
+    private var priceCaption: String {
+        if course.isLifetime { return "lifetime access" }
+        if course.hasEnrollmentFee { return "cert + enrollment" }
+        return "to enroll"
     }
 
     private func metaItem(symbol: String, text: String) -> some View {
