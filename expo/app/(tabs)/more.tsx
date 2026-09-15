@@ -36,12 +36,16 @@ interface MenuItem {
   route: string;
   badge?: string;
   requiresACE1?: boolean;
+  /** Interactive Coach: sold with ACE-2, ACE-3 and the ACE-4 bundle. */
+  requiresCoachAccess?: boolean;
   requiresAdmin?: boolean;
+  /** Label shown on the LOCKED badge, e.g. "ACE-2+". */
+  lockedLabel?: string;
 }
 
 export default function MoreScreen() {
   const router = useRouter();
-  const { tier } = useSubscription();
+  const { tier, canAccessInteractiveCoach } = useSubscription();
   const { user } = useUser();
 
   // Dev/testing bypass: set EXPO_PUBLIC_UNLOCK_ACE1=true in your Rork Secrets
@@ -54,6 +58,7 @@ export default function MoreScreen() {
     unlockForTesting || tier === "ace1_student" || tier === "cso_affiliate";
   const isAdmin =
     unlockForTesting || user?.role === "CSO" || user?.role === "Affiliate";
+  const coachUnlocked = unlockForTesting || canAccessInteractiveCoach;
 
   // ============================================================
   // Menu groups
@@ -102,11 +107,12 @@ export default function MoreScreen() {
     },
     {
       id: "interactive-coach",
-      label: "AI Credit Coach",
-      description: "Video avatar coach for credit repair guidance",
+      label: "Interactive Coach",
+      description: "Video avatar coach — included with ACE-2, ACE-3 and the bundle",
       icon: <Crown color={Colors.primary} size={24} />,
       route: "/interactive-coach",
-      requiresACE1: true,
+      requiresCoachAccess: true,
+      lockedLabel: "ACE-2+",
     },
     {
       id: "lawsuit-assistant",
@@ -172,7 +178,10 @@ export default function MoreScreen() {
   // ============================================================
 
   const renderMenuItem = (item: MenuItem) => {
-    const locked = item.requiresACE1 && !isACE1;
+    const locked = Boolean(
+      (item.requiresACE1 && !isACE1) ||
+        (item.requiresCoachAccess && !coachUnlocked)
+    );
 
     return (
       <TouchableOpacity
@@ -203,7 +212,7 @@ export default function MoreScreen() {
                   ]}
                 >
                   <Text style={styles.badgeText}>
-                    {locked ? "LOCKED" : item.badge}
+                    {locked ? item.lockedLabel ?? "LOCKED" : item.badge}
                   </Text>
                 </View>
               )}

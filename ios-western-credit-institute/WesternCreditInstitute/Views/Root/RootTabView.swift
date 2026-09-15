@@ -11,9 +11,13 @@ import SwiftUI
 struct RootTabView: View {
     @Environment(ThemeManager.self) private var theme
     @Environment(AppStore.self) private var store
+    @Environment(AuthStore.self) private var auth
 
     @State private var selection: AppTab = .home
     @State private var showGame = false
+    /// Course chosen from the post-registration offer, opened once the offer
+    /// has finished dismissing so the two presentations never stack.
+    @State private var offerCourse: Course?
 
     var body: some View {
         let colors = theme.colors
@@ -75,6 +79,29 @@ struct RootTabView: View {
             .padding(.bottom, 4)
         }
         .background(colors.background)
+        // Presented once, right after registration. Everyone signs up free,
+        // so this is where the paid courses get explained.
+        .fullScreenCover(
+            isPresented: Binding(
+                get: { auth.shouldPresentUpgradeOffer },
+                set: { if !$0 { auth.consumeUpgradeOffer() } }
+            )
+        ) {
+            UpgradeOfferView { courseId in
+                offerCourse = store.courses.first { $0.id == courseId }
+            }
+        }
+        .sheet(item: $offerCourse) { course in
+            NavigationStack {
+                CourseDetailView(course: course)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button("Done") { offerCourse = nil }
+                        }
+                    }
+            }
+            .tint(theme.colors.primary)
+        }
     }
 
     /// Wraps each tab in its own stack with shared brand chrome and destinations.

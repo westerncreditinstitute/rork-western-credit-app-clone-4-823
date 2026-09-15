@@ -42,6 +42,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import Colors from "@/constants/colors";
 import { courses } from "@/mocks/data";
 import { trpc } from "@/lib/trpc";
+import { useSubscription } from "@/contexts/SubscriptionContext";
 import BunnyVideoPlayer from "@/components/BunnyVideoPlayer";
 
 interface VideoItem {
@@ -191,6 +192,7 @@ export default function SectionDetailScreen() {
     sectionId: string;
   }>();
   const router = useRouter();
+  const { canAccessInteractiveCoach } = useSubscription();
   const [activeVideoIndex, setActiveVideoIndex] = useState<number | null>(null);
   const [showNotes, setShowNotes] = useState(false);
   const [noteInput, setNoteInput] = useState("");
@@ -508,21 +510,50 @@ export default function SectionDetailScreen() {
             <TouchableOpacity
               style={styles.aiToolCard}
               activeOpacity={0.8}
-              onPress={() => router.push("/interactive-coach" as any)}
+              onPress={() => {
+                if (canAccessInteractiveCoach) {
+                  router.push("/interactive-coach" as any);
+                  return;
+                }
+                Alert.alert(
+                  "Included with ACE-2 and above",
+                  "The Interactive Coach covers score building and business credit strategy, so it comes with ACE-2, ACE-3 or the Complete ACE Bundle.",
+                  [
+                    { text: "Not now", style: "cancel" },
+                    {
+                      text: "View courses",
+                      onPress: () => router.push("/subscription-plans" as any),
+                    },
+                  ]
+                );
+              }}
             >
               <View style={styles.aiToolHeader}>
                 <View style={[styles.aiToolIconContainer, { backgroundColor: Colors.primary }]}>
-                  <MessageCircle color={Colors.surface} size={22} />
+                  {canAccessInteractiveCoach ? (
+                    <MessageCircle color={Colors.surface} size={22} />
+                  ) : (
+                    <Lock color={Colors.surface} size={22} />
+                  )}
                 </View>
                 <View style={styles.aiToolHeaderText}>
                   <View style={styles.aiToolTitleRow}>
-                    <Text style={styles.aiToolTitle}>AI Credit Repair Coach</Text>
-                    <View style={[styles.aiToolBadge, { backgroundColor: Colors.secondary }]}>
-                      <Text style={styles.aiToolBadgeText}>Step 2</Text>
+                    <Text style={styles.aiToolTitle}>Interactive Coach</Text>
+                    <View
+                      style={[
+                        styles.aiToolBadge,
+                        canAccessInteractiveCoach && { backgroundColor: Colors.secondary },
+                      ]}
+                    >
+                      <Text style={styles.aiToolBadgeText}>
+                        {canAccessInteractiveCoach ? "Step 2" : "ACE-2+"}
+                      </Text>
                     </View>
                   </View>
                   <Text style={styles.aiToolSubtitle}>
-                    Get personalized guidance through the credit repair process
+                    {canAccessInteractiveCoach
+                      ? "Get personalized guidance through the credit repair process"
+                      : "Included with ACE-2, ACE-3 and the Complete ACE Bundle"}
                   </Text>
                 </View>
               </View>
@@ -541,7 +572,9 @@ export default function SectionDetailScreen() {
                 </View>
               </View>
               <View style={[styles.aiToolAction, { backgroundColor: Colors.primary }]}>
-                <Text style={styles.aiToolActionText}>Open AI Coach</Text>
+                <Text style={styles.aiToolActionText}>
+                  {canAccessInteractiveCoach ? "Open Interactive Coach" : "See ACE-2 and above"}
+                </Text>
                 <Play color={Colors.surface} size={14} fill={Colors.surface} />
               </View>
             </TouchableOpacity>

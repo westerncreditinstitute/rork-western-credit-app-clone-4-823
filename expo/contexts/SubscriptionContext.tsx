@@ -15,6 +15,11 @@ import {
   bundleCommission,
   bundleCommissionRate,
 } from '@/constants/pricing';
+import {
+  type AgentScope,
+  canAccessInteractiveCoach,
+  deriveAgentScope,
+} from '@/constants/agent-access';
 
 export type SubscriptionTier = 'free' | 'ace1_student' | 'cso_affiliate';
 
@@ -601,6 +606,22 @@ export const [SubscriptionProvider, useSubscription] = createContextHook(() => {
   const canAccessHirePro = isCSO && !isExpired;
 
   /**
+   * What the user's AI Credit Repair Agent is allowed to discuss, derived
+   * from the courses they actually own rather than their billing tier - two
+   * students on the same tier can own different courses.
+   */
+  const agentScope: AgentScope = useMemo(
+    () => deriveAgentScope(enrolledCourses),
+    [enrolledCourses]
+  );
+
+  /** The Interactive Coach is an ACE-2 / ACE-3 / ACE-4 tool. */
+  const canAccessInteractiveCoachTool = useMemo(
+    () => canAccessInteractiveCoach(enrolledCourses),
+    [enrolledCourses]
+  );
+
+  /**
    * ACE-1 referral payout for the signed-in user.
    *
    * Everyone can refer - free members included - which is why this returns a
@@ -647,6 +668,8 @@ export const [SubscriptionProvider, useSubscription] = createContextHook(() => {
     canAccessAIDispute,
     canAccessEarnings,
     canAccessHirePro,
+    agentScope,
+    canAccessInteractiveCoach: canAccessInteractiveCoachTool,
     getReferralBonus,
     getAdvancedCourseBounty,
     getBundleCommissionRate,

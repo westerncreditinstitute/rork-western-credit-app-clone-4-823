@@ -29,6 +29,10 @@ final class AgentChatViewModel {
     let userId: String
     let agent: AIAgent
 
+    /// Courses this student owns, forwarded so the server can scope the
+    /// agent's subject matter if its own enrollment lookup is unavailable.
+    var enrolledCourseIds: [String] = []
+
     private(set) var messages: [AgentChatMessage] = []
     private(set) var connection: Connection = .connecting
     private(set) var isSending = false
@@ -179,7 +183,8 @@ final class AgentChatViewModel {
                 userId: userId,
                 agentId: agent.id,
                 message: text,
-                history: Array(context)
+                history: Array(context),
+                enrolledCourseIds: enrolledCourseIds
             )
 
             if reply.messages.isEmpty {

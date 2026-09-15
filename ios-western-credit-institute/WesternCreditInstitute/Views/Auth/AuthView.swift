@@ -29,7 +29,7 @@ struct AuthView: View {
 
         var callToAction: String {
             switch self {
-            case .register: return "Create Account"
+            case .register: return "Create Free Account"
             case .login: return "Sign In"
             }
         }
@@ -45,7 +45,6 @@ struct AuthView: View {
     @State private var confirmPassword = ""
     @State private var phone = ""
     @State private var promoCode = ""
-    @State private var desiredTier: SubscriptionTier = .free
     @State private var showPassword = false
 
     @FocusState private var focusedField: Field?
@@ -196,7 +195,7 @@ struct AuthView: View {
                     autocapitalization: .characters
                 )
 
-                tierPicker
+                freeAccountSummary
             }
 
             submitButton
@@ -302,52 +301,52 @@ struct AuthView: View {
         }
     }
 
-    private var tierPicker: some View {
+    /// What a new member gets for free.
+    ///
+    /// Replaces the old plan picker: everyone registers free and courses are
+    /// offered straight after signup, so there is nothing to choose here and
+    /// no paywall standing between a visitor and an account.
+    private var freeAccountSummary: some View {
         let colors = theme.colors
+        let perks = [
+            "Weekly credit tips and insights",
+            "Community forum access",
+            "Basic credit resources",
+            "\(Pricing.format(Pricing.referralAce1Free)) for every ACE-1 student you refer",
+        ]
 
         return VStack(alignment: .leading, spacing: Spacing.sm) {
-            Text("Choose your plan")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(colors.textSecondary)
-
-            ForEach([SubscriptionTier.free, .ace1Student]) { tier in
-                let selected = desiredTier == tier
-
-                Button {
-                    desiredTier = tier
-                    Haptics.selection()
-                } label: {
-                    HStack(spacing: Spacing.sm + 2) {
-                        Image(systemName: selected ? "largecircle.fill.circle" : "circle")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(selected ? colors.accent : colors.textLight)
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(tier.label)
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundStyle(colors.text)
-
-                            Text(tier == .free
-                                 ? "Free — previews, weekly tips and \(Pricing.format(Pricing.referralAce1Free)) per referral"
-                                 : "\(Pricing.format(Pricing.certificateFee)) certificate, then free \(Pricing.ace1FreeDays) days")
-                                .font(.system(size: 12))
-                                .foregroundStyle(colors.textSecondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-
-                        Spacer(minLength: 0)
-                    }
-                    .padding(Spacing.sm + 4)
-                    .background(selected ? colors.accent.opacity(0.08) : colors.surfaceAlt)
-                    .clipShape(.rect(cornerRadius: Radius.md))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: Radius.md)
-                            .stroke(selected ? colors.accent.opacity(0.5) : colors.border, lineWidth: 1)
-                    }
-                }
-                .buttonStyle(PressableButtonStyle())
+            HStack(spacing: Spacing.xs + 2) {
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(colors.accent)
+                Text("Your free account includes")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(colors.textSecondary)
             }
+
+            ForEach(perks, id: \.self) { perk in
+                HStack(alignment: .top, spacing: Spacing.sm) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(colors.success)
+                    Text(perk)
+                        .font(.system(size: 13))
+                        .foregroundStyle(colors.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                }
+            }
+
+            Text("Courses can be added any time after you sign up.")
+                .font(.system(size: 12))
+                .foregroundStyle(colors.textLight)
+                .padding(.top, 2)
         }
+        .padding(Spacing.sm + 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(colors.surfaceAlt)
+        .clipShape(.rect(cornerRadius: Radius.md))
     }
 
     private var submitButton: some View {
@@ -448,13 +447,15 @@ struct AuthView: View {
                 Haptics.error()
             }
         case .register:
+            // Everyone registers on the free tier; the course offer is
+            // presented once the account exists.
             let success = await auth.register(
                 name: name,
                 email: email,
                 password: password,
                 confirmPassword: confirmPassword,
                 phone: phone,
-                desiredTier: desiredTier,
+                desiredTier: .free,
                 promoCode: promoCode
             )
             if success {

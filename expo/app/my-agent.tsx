@@ -31,6 +31,7 @@ import { useUser } from "@/contexts/UserContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useDisputes } from "@/contexts/DisputesContext";
 import { trpc, isTransportErrorMessage } from "@/lib/trpc";
+import { AGENT_NOT_INCLUDED_MESSAGE, agentScopeLabel } from "@/constants/agent-access";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { useAgentChat, type TriggeredLetter } from "@/hooks/useAgentChat";
 
@@ -105,7 +106,7 @@ function MyAgentScreenInner({
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user } = useUser();
-  const { tier } = useSubscription();
+  const { tier, enrolledCourses, agentScope } = useSubscription();
   const { disputes, refetch: refetchDisputes } = useDisputes();
 
   const userId = user?.id || "";
@@ -426,6 +427,7 @@ function MyAgentScreenInner({
     userId,
     agentId: agent?.id,
     enabled: isACE1 && !!agent,
+    enrolledCourseIds: enrolledCourses,
     onLetterGenerated: handleLetterFromAgent,
     onDisputeDataChanged: handleDisputeDataChanged,
     onRequestCreditAnalysis: handleTriggerCreditAnalysis,
@@ -461,6 +463,16 @@ function MyAgentScreenInner({
 
   if (!isACE1) {
     return <LockedView router={router} insets={insets} embedded={embedded} />;
+  }
+
+  // ACE-3 is a business credit course, and this agent is a consumer credit
+  // specialist. Rather than hand an ACE-3-only student an agent that would
+  // refuse every question, explain the mismatch and point at the courses
+  // that do include one.
+  if (!agentScope.hasAccess) {
+    return (
+      <NoAgentView router={router} insets={insets} embedded={embedded} />
+    );
   }
 
   // ============================================================
@@ -605,6 +617,9 @@ function MyAgentScreenInner({
           ? "Online"
           : "Reconnecting…";
 
+  /** What this agent is cleared to talk about, from the courses owned. */
+  const scopeLabel = agentScopeLabel(agentScope);
+
   return (
     <>
       {!embedded && <Stack.Screen options={{ headerShown: false }} />}
@@ -657,7 +672,7 @@ function MyAgentScreenInner({
                 {agent?.agent_name ?? "My Agent"}
               </Text>
               <Text style={styles.identityStatus} numberOfLines={1}>
-                {agent ? statusLabel : "AI Dispute Assistant"}
+                {agent ? `${statusLabel} · ${scopeLabel}` : scopeLabel}
               </Text>
             </View>
           </View>
@@ -1044,6 +1059,97 @@ function LockedView({
             accessibilityLabel="Enroll in ACE-1 course to unlock My Agent"
           >
             <Text style={styles.enrollButtonText}>Enroll in ACE-1 Course</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </>
+  );
+}
+
+// ============================================================
+// No Agent View — ACE-3-only students
+// ============================================================
+
+/**
+ * Shown when a student is enrolled but owns no course that includes an
+ * agent (in practice, ACE-3 on its own).
+ *
+ * This is deliberately NOT the locked upsell screen: these people already
+ * paid us, so the copy explains the mismatch honestly instead of implying
+ * they are missing a subscription.
+ */
+function NoAgentView({
+  router,
+  insets,
+  embedded = false,
+}: {
+  router: ReturnType<typeof useRouter>;
+  insets: ReturnType<typeof useSafeAreaInsets>;
+  embedded?: boolean;
+}) {
+  return (
+    <>
+      {!embedded && <Stack.Screen options={{ headerShown: false }} />}
+      <View
+        style={[styles.container, { paddingTop: embedded ? 0 : insets.top }]}
+      >
+        <View style={styles.header}>
+          {embedded ? (
+            <View style={{ width: 40 }} />
+          ) : (
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => router.back()}
+              accessibilityRole="button"
+              accessibilityLabel="Go back"
+            >
+              <ArrowLeft color={Colors.text} size={24} />
+            </TouchableOpacity>
+          )}
+          <View style={styles.headerCenter}>
+            <Bot size={20} color={Colors.textLight} />
+            <Text style={styles.headerTitle}>My Agent</Text>
+          </View>
+          <View style={{ width: 40 }} />
+        </View>
+
+        <View style={styles.lockedContainer}>
+          <View style={styles.lockedIconWrap}>
+            <Bot size={48} color={Colors.primary} />
+          </View>
+          <Text style={styles.lockedTitle}>
+            No agent for this course
+          </Text>
+          <Text style={styles.lockedDesc}>{AGENT_NOT_INCLUDED_MESSAGE}</Text>
+
+          <View style={styles.lockedFeatures}>
+            <View style={styles.lockedFeatureRow}>
+              <FileText size={16} color={Colors.accent} />
+              <Text style={styles.lockedFeatureText}>
+                ACE-1 — disputes, letters and negative item removal
+              </Text>
+            </View>
+            <View style={styles.lockedFeatureRow}>
+              <TrendingUp size={16} color={Colors.accent} />
+              <Text style={styles.lockedFeatureText}>
+                ACE-2 — score building toward 800+
+              </Text>
+            </View>
+            <View style={styles.lockedFeatureRow}>
+              <Sparkles size={16} color={Colors.accent} />
+              <Text style={styles.lockedFeatureText}>
+                ACE-4 Bundle — an agent with no topic limits at all
+              </Text>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={styles.enrollButton}
+            onPress={() => router.push("/subscription-plans")}
+            accessibilityRole="button"
+            accessibilityLabel="View courses that include an AI agent"
+          >
+            <Text style={styles.enrollButtonText}>View Courses</Text>
           </TouchableOpacity>
         </View>
       </View>

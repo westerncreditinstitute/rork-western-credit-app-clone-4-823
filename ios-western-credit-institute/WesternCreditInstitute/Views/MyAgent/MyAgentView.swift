@@ -60,11 +60,19 @@ struct MyAgentView: View {
         store.tier == .ace1Student || store.tier == .csoAffiliate
     }
 
+    /// What this student's agent is cleared to discuss, from courses owned.
+    private var agentScope: AgentScope { store.agentScope }
+
     var body: some View {
         ZStack {
             Group {
                 if !hasAgentAccess {
                     LockedAgentView { showPlans = true }
+                } else if !agentScope.hasAccess {
+                    // ACE-3 is a business credit course and this agent is a
+                    // consumer credit specialist. Explain the mismatch rather
+                    // than hand over an agent that would refuse every question.
+                    NoAgentIncludedView { showPlans = true }
                 } else {
                     content
                 }
@@ -104,14 +112,16 @@ struct MyAgentView: View {
             NavigationStack { DisputeTrackerView() }
         }
         .task {
-            guard hasAgentAccess else { return }
+            guard hasAgentAccess, agentScope.hasAccess else { return }
             await viewModel.load()
         }
         .onChange(of: viewModel.agent?.id) { _, agentId in
             // The conversation can only start once an agent is assigned.
             guard let agentId, let agent = viewModel.agent else { return }
             if chatViewModel?.agent.id != agentId {
-                chatViewModel = AgentChatViewModel(userId: viewModel.userId, agent: agent)
+                let model = AgentChatViewModel(userId: viewModel.userId, agent: agent)
+                model.enrolledCourseIds = Array(store.enrolledCourseIds)
+                chatViewModel = model
             }
         }
     }
@@ -157,7 +167,9 @@ struct MyAgentView: View {
                     .foregroundStyle(theme.colors.text)
                     .lineLimit(1)
 
-                Text(chatViewModel?.statusLabel ?? viewModel.agent?.status.label ?? "")
+                // The scope rides alongside the connection status so the
+                // student always knows what this agent is able to cover.
+                Text(headerStatusLine)
                     .font(.system(size: 11))
                     .foregroundStyle(theme.colors.textSecondary)
                     .lineLimit(1)
@@ -174,6 +186,12 @@ struct MyAgentView: View {
                 .fill(theme.colors.border)
                 .frame(height: 0.5)
         }
+    }
+
+    /// Connection status plus the agent's subject remit.
+    private var headerStatusLine: String {
+        let status = chatViewModel?.statusLabel ?? viewModel.agent?.status.label ?? ""
+        return status.isEmpty ? agentScope.label : "\(status) · \(agentScope.label)"
     }
 
     private var avatar: some View {
@@ -551,6 +569,83 @@ private struct LockedAgentView: View {
                     onEnroll()
                 } label: {
                     Text("Enroll in ACE-1 Course")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, Spacing.md)
+                        .background(theme.colors.primary, in: .rect(cornerRadius: Radius.lg, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .padding(.top, Spacing.md)
+            }
+            .padding(.horizontal, Spacing.lg)
+            .padding(.vertical, Spacing.xl)
+        }
+    }
+}
+
+// MARK: - No Agent Included
+
+/// Shown when a student is enrolled but owns no course that includes an
+/// agent (in practice, ACE-3 on its own).
+///
+/// Deliberately not the locked upsell screen: these people already paid us,
+/// so the copy explains the mismatch honestly instead of implying they are
+/// missing a subscription.
+private struct NoAgentIncludedView: View {
+    @Environment(ThemeManager.self) private var theme
+
+    let onBrowseCourses: () -> Void
+
+    private let options: [(symbol: String, text: String)] = [
+        ("doc.text.fill", "ACE-1 — disputes, letters and negative item removal"),
+        ("chart.line.uptrend.xyaxis", "ACE-2 — score building toward 800+"),
+        ("sparkles", "ACE-4 Bundle — an agent with no topic limits at all"),
+    ]
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: Spacing.md) {
+                Image(systemName: "person.crop.circle.badge.questionmark")
+                    .font(.system(size: 38, weight: .semibold))
+                    .foregroundStyle(theme.colors.primary)
+                    .frame(width: 80, height: 80)
+                    .background(theme.colors.primary.opacity(0.12), in: .circle)
+
+                Text("No agent for this course")
+                    .font(.system(size: 22, weight: .bold))
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(theme.colors.text)
+
+                Text(AgentScope.notIncludedMessage)
+                    .font(.system(size: 14))
+                    .lineSpacing(4)
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(theme.colors.textSecondary)
+
+                VStack(alignment: .leading, spacing: Spacing.md) {
+                    ForEach(options, id: \.text) { option in
+                        HStack(spacing: Spacing.sm + 2) {
+                            Image(systemName: option.symbol)
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(theme.colors.accent)
+                                .frame(width: 22)
+                            Text(option.text)
+                                .font(.system(size: 14))
+                                .foregroundStyle(theme.colors.text)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer(minLength: 0)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, Spacing.sm)
+
+                Button {
+                    Haptics.light()
+                    onBrowseCourses()
+                } label: {
+                    Text("View Courses")
                         .font(.system(size: 16, weight: .bold))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)

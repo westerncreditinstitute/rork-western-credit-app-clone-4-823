@@ -312,4 +312,16 @@ final class AppStore {
 
     /// Share of an ACE-4 bundle sale kept at the current tier.
     var bundleCommissionRate: Double { Pricing.bundleCommissionRate(for: tier) }
+
+    // MARK: - Course entitlements
+
+    /// What the user's AI Credit Repair Agent may discuss, derived from the
+    /// courses they actually own rather than their billing tier - two
+    /// students on the same tier can own different courses.
+    var agentScope: AgentScope { AgentScope.derive(from: enrolledCourseIds) }
+
+    /// The Interactive Coach is an ACE-2 / ACE-3 / ACE-4 tool.
+    var canAccessInteractiveCoach: Bool {
+        CourseEntitlements.canAccessInteractiveCoach(enrolledCourseIds: enrolledCourseIds)
+    }
 }

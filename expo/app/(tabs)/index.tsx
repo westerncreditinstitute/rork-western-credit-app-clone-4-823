@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useEffect } from "react";
+import React, { useMemo, useRef, useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -41,6 +41,8 @@ import {
 
 import { useTheme } from "@/contexts/ThemeContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
+import UpgradeOfferModal from "@/components/UpgradeOfferModal";
+import { consumeUpgradeOfferPending } from "@/lib/upgrade-offer";
 import {
   CSO_MONTHLY_FEE,
   MONTHLY_SUBSCRIPTION,
@@ -62,7 +64,16 @@ const { width } = Dimensions.get("window");
 export default function HomeScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
-  const { tier, isFree, isPremium, canAccessAIDispute, syncInitialEnrollments, isEnrolled } = useSubscription();
+  const {
+    tier,
+    isFree,
+    isPremium,
+    canAccessAIDispute,
+    canAccessInteractiveCoach,
+    syncInitialEnrollments,
+    isEnrolled,
+  } = useSubscription();
+  const [showUpgradeOffer, setShowUpgradeOffer] = useState(false);
   const { user } = useUser();
   const { user: authUser } = useAuth();
   const isGameAdmin = authUser?.role?.toLowerCase() === "admin";
@@ -80,6 +91,26 @@ export default function HomeScreen() {
       syncInitialEnrollments(mockEnrolledIds);
     }
   }, [syncInitialEnrollments]);
+
+  // Present the course offer once, on the first home screen a brand new
+  // member sees. The flag is cleared as it is read, so it never reappears.
+  useEffect(() => {
+    let active = true;
+    consumeUpgradeOfferPending()
+      .then((pending) => {
+        if (active && pending) setShowUpgradeOffer(true);
+      })
+      .catch(() => {
+        // Losing the upsell is never worth interrupting the home screen.
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleCloseUpgradeOffer = useCallback(() => {
+    setShowUpgradeOffer(false);
+  }, []);
 
   const enrolledCourses = courses.filter((c) => c.enrolled || isEnrolled(c.id));
   const unreadNotifications = notifications.filter((n) => !n.read).length;
@@ -474,37 +505,47 @@ export default function HomeScreen() {
               </LinearGradient>
             </TouchableOpacity>
 
-            {/* Interactive Coach */}
+            {/* Interactive Coach - ACE-2, ACE-3 and ACE-4 only */}
             <TouchableOpacity
               activeOpacity={0.9}
               style={styles.toolCardWrapper}
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                if (canAccessAIDispute) {
+                if (canAccessInteractiveCoach) {
                   router.push("/interactive-coach" as any);
                 } else {
-                  router.push("/subscription-plans" as any);
+                  Alert.alert(
+                    "Included with ACE-2 and above",
+                    "The Interactive Coach teaches score building and business credit strategy, so it comes with ACE-2, ACE-3 or the Complete ACE Bundle. Would you like to see those courses?",
+                    [
+                      { text: "Not now", style: "cancel" },
+                      {
+                        text: "View courses",
+                        onPress: () => router.push("/subscription-plans" as any),
+                      },
+                    ]
+                  );
                 }
               }}
             >
               <LinearGradient
-                colors={canAccessAIDispute ? ['#2E2A1A', '#3E3016'] as [string, string] : ['#2D2D3A', '#1F1F2A'] as [string, string]}
+                colors={canAccessInteractiveCoach ? ['#2E2A1A', '#3E3016'] as [string, string] : ['#2D2D3A', '#1F1F2A'] as [string, string]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.toolCardCompact}
               >
-                <View style={[styles.toolIconWrapCompact, { backgroundColor: 'rgba(245, 158, 11, 0.15)' }, !canAccessAIDispute && styles.toolIconLocked]}>
-                  {canAccessAIDispute ? (
+                <View style={[styles.toolIconWrapCompact, { backgroundColor: 'rgba(245, 158, 11, 0.15)' }, !canAccessInteractiveCoach && styles.toolIconLocked]}>
+                  {canAccessInteractiveCoach ? (
                     <Video color="#F59E0B" size={24} />
                   ) : (
                     <Lock color={colors.textLight} size={24} />
                   )}
                 </View>
-                <Text style={[styles.toolTitleCompact, !canAccessAIDispute && styles.toolTitleLocked]} numberOfLines={2}>Interactive Coach</Text>
-                {!canAccessAIDispute && (
+                <Text style={[styles.toolTitleCompact, !canAccessInteractiveCoach && styles.toolTitleLocked]} numberOfLines={2}>Interactive Coach</Text>
+                {!canAccessInteractiveCoach && (
                   <View style={styles.premiumBadgeSmall}>
                     <Crown color={colors.warning} size={10} />
-                    <Text style={styles.premiumBadgeTextSmall}>ACE-1</Text>
+                    <Text style={styles.premiumBadgeTextSmall}>ACE-2+</Text>
                   </View>
                 )}
               </LinearGradient>
@@ -767,6 +808,11 @@ export default function HomeScreen() {
 
         <View style={{ height: 100 }} />
       </ScrollView>
+
+      <UpgradeOfferModal
+        visible={showUpgradeOffer}
+        onClose={handleCloseUpgradeOffer}
+      />
     </View>
   );
 }

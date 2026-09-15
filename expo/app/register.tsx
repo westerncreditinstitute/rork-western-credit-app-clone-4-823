@@ -17,13 +17,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { GraduationCap, Mail, User, Phone, ArrowRight, CheckCircle, Shield, Lock, Eye, EyeOff, Tag } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
-import {
-  ACE1_FREE_DAYS,
-  CERTIFICATE_FEE,
-  REFERRAL_ACE1_ENROLLED,
-  REFERRAL_ACE1_FREE,
-  formatPrice,
-} from '@/constants/pricing';
+import { REFERRAL_ACE1_FREE, formatPrice } from '@/constants/pricing';
+import { markUpgradeOfferPending } from '@/lib/upgrade-offer';
 import { useRouter } from 'expo-router';
 
 const { width, height } = Dimensions.get('window');
@@ -38,7 +33,6 @@ export default function RegisterScreen() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [phone, setPhone] = useState('');
-  const [selectedTier, setSelectedTier] = useState<'free' | 'ace1_student'>('free');
   const [promoCode, setPromoCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -110,20 +104,24 @@ export default function RegisterScreen() {
     
     try {
       if (mode === 'register') {
+        // Everyone registers free. Courses are sold afterwards through the
+        // upgrade offer, so there is no plan to pick before an account
+        // exists - and no way to get stuck at a paywall before signing up.
         const result = await register({
           name: name.trim(),
           email: email.trim(),
           password: password,
           phone: phone.trim() || undefined,
-          desiredTier: selectedTier,
+          desiredTier: 'free',
           promoCode: promoCode.trim() || undefined,
         });
 
         if (result.success) {
-          const tier = (result as any).tier || selectedTier || 'free';
-          const durationDays = selectedTier === 'ace1_student' ? 7 : undefined;
-          await updateTier(tier, durationDays);
-          console.log('[Register] User registered as', tier, 'subscriber');
+          await updateTier('free');
+          // Tells the home screen to present the upgrade offer once, on the
+          // first screen the new member lands on.
+          await markUpgradeOfferPending();
+          console.log('[Register] User registered on the free tier');
         } else {
           setError(result.error || 'Registration failed');
         }
@@ -148,6 +146,7 @@ export default function RegisterScreen() {
     'Weekly Credit Tips & Insights',
     'Community Forum Access',
     'Basic Credit Resources',
+    `${formatPrice(REFERRAL_ACE1_FREE)} for every ACE-1 student you refer`,
   ];
 
   return (
@@ -212,60 +211,6 @@ export default function RegisterScreen() {
                 Master Your Credit. Transform Your Future.
               </Text>
             </Animated.View>
-
-            {mode === 'register' && (
-              <Animated.View
-                style={[
-                  styles.tiersContainer,
-                  { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
-                ]}
-              >
-                <Text style={styles.tiersTitle}>Choose Your Plan</Text>
-                
-                <TouchableOpacity
-                  style={[
-                    styles.tierCard,
-                    selectedTier === 'free' && styles.tierCardSelected,
-                  ]}
-                  onPress={() => setSelectedTier('free')}
-                >
-                  <View style={styles.tierHeader}>
-                    <Text style={styles.tierName}>Free</Text>
-                    <Text style={styles.tierPrice}>$0</Text>
-                  </View>
-                  <Text style={styles.tierFeature}>✓ Weekly tips</Text>
-                  <Text style={styles.tierFeature}>✓ Community access</Text>
-                  <Text style={styles.tierFeature}>✓ Basic resources</Text>
-                  <Text style={styles.tierFeature}>
-                    ✓ {formatPrice(REFERRAL_ACE1_FREE)} per referral
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.tierCard,
-                    selectedTier === 'ace1_student' && styles.tierCardSelected,
-                  ]}
-                  onPress={() => setSelectedTier('ace1_student')}
-                >
-                  <View style={styles.tierHeader}>
-                    <Text style={styles.tierName}>ACE-1 Student</Text>
-                    <Text style={styles.tierPrice}>
-                      {formatPrice(CERTIFICATE_FEE)}
-                    </Text>
-                  </View>
-                  <Text style={styles.tierFeature}>✓ Full course access</Text>
-                  <Text style={styles.tierFeature}>✓ AI Credit Coach</Text>
-                  <Text style={styles.tierFeature}>✓ AI Dispute Assistant</Text>
-                  <Text style={styles.tierFeature}>
-                    ✓ Certificate fee, then free {ACE1_FREE_DAYS} days
-                  </Text>
-                  <Text style={styles.tierFeature}>
-                    ✓ {formatPrice(REFERRAL_ACE1_ENROLLED)} per referral
-                  </Text>
-                </TouchableOpacity>
-              </Animated.View>
-            )}
 
             <Animated.View
               style={[
@@ -434,10 +379,7 @@ export default function RegisterScreen() {
                   ) : (
                     <>
                       <Text style={styles.submitText}>
-                        {mode === 'register' 
-                          ? (selectedTier === 'ace1_student' ? 'Start ACE-1 Trial' : 'Get Started Free')
-                          : 'Sign In'
-                        }
+                        {mode === 'register' ? 'Create Free Account' : 'Sign In'}
                       </Text>
                       <ArrowRight size={20} color="#0A1628" />
                     </>
@@ -452,7 +394,6 @@ export default function RegisterScreen() {
                   setError('');
                   setPassword('');
                   setConfirmPassword('');
-                  setSelectedTier('free');
                   setPromoCode('');
                 }}
               >

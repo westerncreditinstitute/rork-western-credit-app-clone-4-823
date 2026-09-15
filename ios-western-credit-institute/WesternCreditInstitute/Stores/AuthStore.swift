@@ -33,6 +33,14 @@ final class AuthStore {
     /// Explains why the user was returned to sign-in after a session expired.
     private(set) var expiryNotice: String?
 
+    /// True from a successful registration until the course offer is shown.
+    ///
+    /// Everyone registers on the free tier, so this is the one moment to
+    /// explain what the paid courses are. Held here rather than in the view
+    /// because the sign-in screen is torn down the instant the session
+    /// exists - the offer has to be presented by the shell that replaces it.
+    private(set) var shouldPresentUpgradeOffer = false
+
     private let service = AuthService.shared
     private let sessionStore = AuthSessionStore.shared
 
@@ -115,11 +123,17 @@ final class AuthStore {
                 promoCode: promoCode
             )
             adopt(account)
+            shouldPresentUpgradeOffer = true
             return true
         } catch {
             errorMessage = Self.message(for: error, action: .register)
             return false
         }
+    }
+
+    /// Marks the post-registration course offer as shown, so it appears once.
+    func consumeUpgradeOffer() {
+        shouldPresentUpgradeOffer = false
     }
 
     /// Clears the session and returns to the sign-in screen.

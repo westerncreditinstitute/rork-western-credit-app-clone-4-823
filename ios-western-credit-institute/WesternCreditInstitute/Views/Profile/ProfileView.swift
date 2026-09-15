@@ -21,6 +21,7 @@ struct ProfileView: View {
     @State private var showPaymentMethods = false
     @State private var showDisputeAssistant = false
     @State private var showCreditCoach = false
+    @State private var showCoachUpgradePrompt = false
     @State private var showLawsuitAssistant = false
     @State private var showDisputeTracker = false
     @State private var showChallenges = false
@@ -56,6 +57,12 @@ struct ProfileView: View {
         .sheet(isPresented: $showPaymentMethods) { NavigationStack { PaymentMethodsView() } }
         .sheet(isPresented: $showDisputeAssistant) { NavigationStack { AIDisputeAssistantView() } }
         .sheet(isPresented: $showCreditCoach) { AICreditCoachView() }
+        .alert("Included with ACE-2 and above", isPresented: $showCoachUpgradePrompt) {
+            Button("Not now", role: .cancel) {}
+            Button("View courses") { showPlans = true }
+        } message: {
+            Text("The Interactive Coach covers score building and business credit strategy, so it comes with ACE-2, ACE-3 or the Complete ACE Bundle.")
+        }
         .sheet(isPresented: $showLawsuitAssistant) { NavigationStack { LawsuitAssistantView() } }
         .sheet(isPresented: $showDisputeTracker) { NavigationStack { DisputeTrackerView() } }
         .sheet(isPresented: $showChallenges) { NavigationStack { ChallengesView() } }
@@ -288,8 +295,22 @@ struct ProfileView: View {
                         showDisputeAssistant = true
                     }
                     rowDivider
-                    menuRow(symbol: "person.wave.2.fill", tint: theme.colors.accent, title: "AI Credit Coach", subtitle: "Interactive avatar coach") {
-                        showCreditCoach = true
+                    // The Interactive Coach ships with ACE-2, ACE-3 and the
+                    // bundle. ACE-1 students see it locked rather than hidden,
+                    // so the row doubles as a sales surface.
+                    menuRow(
+                        symbol: store.canAccessInteractiveCoach ? "person.wave.2.fill" : "lock.fill",
+                        tint: theme.colors.accent,
+                        title: "Interactive Coach",
+                        subtitle: store.canAccessInteractiveCoach
+                            ? "Interactive avatar coach"
+                            : "Included with ACE-2, ACE-3 and the bundle"
+                    ) {
+                        if store.canAccessInteractiveCoach {
+                            showCreditCoach = true
+                        } else {
+                            showCoachUpgradePrompt = true
+                        }
                     }
                     rowDivider
                     menuRow(symbol: "scale.3d.fill", tint: theme.colors.error, title: "Lawsuit Assistant", subtitle: "Check violation grounds") {

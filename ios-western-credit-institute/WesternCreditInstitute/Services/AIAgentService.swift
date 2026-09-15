@@ -62,7 +62,8 @@ nonisolated final class AIAgentService: Sendable {
         userId: String,
         agentId: Int,
         message: String,
-        history: [AgentChatMessage]
+        history: [AgentChatMessage],
+        enrolledCourseIds: [String] = []
     ) async throws -> AgentChatReply {
         guard isConfigured else { throw TRPCClientError.notConfigured }
 
@@ -72,12 +73,16 @@ nonisolated final class AIAgentService: Sendable {
             .suffix(10)
             .map { ["role": $0.role.rawValue, "content": $0.content] }
 
+        // `enrolledCourseIds` only backs up the server's own entitlement
+        // lookup. The server prefers its own data and ignores this whenever
+        // it can read it, so a tampered client can't widen the agent's scope.
         let input: [String: Any] = [
             "json": [
                 "userId": userId,
                 "agentId": agentId,
                 "message": message,
                 "history": contextTurns,
+                "enrolledCourseIds": enrolledCourseIds,
             ] as [String: Any]
         ]
         return try await client.mutate("aiAgents.chat", input: input)

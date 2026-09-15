@@ -2,6 +2,11 @@ import * as z from "zod";
 import { createTRPCRouter, publicProcedure } from "../create-context";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { EquifaxAnalytics } from "@/lib/analytics/equifax-analytics";
+import {
+  type AgentScope,
+  buildScopeInstruction,
+  deriveAgentScope,
+} from "@/constants/agent-access";
 // Server-only client: bypasses RLS when SUPABASE_SERVICE_ROLE_KEY is set,
 // and transparently falls back to the anon client when it isn't. Aliased to
 // `supabase` so every query below reads naturally.
@@ -1109,10 +1114,59 @@ async function fetchAnalysesPerBureau(userId: string): Promise<
 // Helper: Call AI backend (OpenAI-compatible)
 // ============================================================
 
+/**
+ * Reads the courses a user is actually enrolled in from the progress store.
+ *
+ * Returns null when the store is unconfigured or unreachable, so callers can
+ * tell "this user owns nothing" apart from "we could not find out" - the two
+ * must behave differently, or an outage would silence every agent.
+ */
+async function fetchEnrolledCourseIds(userId: string): Promise<string[] | null> {
+  const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
+  const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
+  const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
+
+  if (!endpoint || !namespace || !token) return null;
+
+  try {
+    const response = await fetch(`${endpoint}/sql`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        "surreal-ns": namespace,
+        "surreal-db": "app",
+      },
+      body: JSON.stringify({
+        query: `SELECT courseId, enrolled FROM progress WHERE userId = '${userId.replace(/'/g, "")}'`,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error("[AI Agents] Enrollment lookup failed:", response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    const rows = data?.[0]?.result;
+    if (!Array.isArray(rows)) return null;
+
+    return rows
+      .filter((r: { enrolled?: boolean }) => r?.enrolled)
+      .map((r: { courseId?: string }) => String(r?.courseId ?? ""))
+      .filter(Boolean);
+  } catch (error) {
+    console.error("[AI Agents] Enrollment lookup error:", error);
+    return null;
+  }
+}
+
 async function callAIBackend(params: {
   messages: { role: string; content: string }[];
   agentName: string;
   agentBio: string;
+  /** Subject areas this student's purchases entitle them to discuss. */
+  scope: AgentScope;
   equifaxReport?: {
     fetchedAt: string;
     totalAccounts: number;
@@ -1147,8 +1201,11 @@ async function callAIBackend(params: {
   const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
   const baseUrl = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
 
-  // Build system prompt with Equifax context if available
-  let systemMessage = `${AGENT_SYSTEM_PROMPT}\n\nYour name is ${params.agentName}. ${params.agentBio}\n\nYou are speaking with a user who is enrolled in the ACE-1 credit repair course. Be their personal guide.`;
+  // Build the system prompt, then append the subject-scope clause derived
+  // from the courses this student actually owns. The scope clause goes LAST
+  // so it is the most recent instruction the model reads before the
+  // conversation, which makes it markedly harder to talk it out of.
+  let systemMessage = `${AGENT_SYSTEM_PROMPT}\n\nYour name is ${params.agentName}. ${params.agentBio}\n\nBe this student's personal guide.`;
 
   // If Equifax report data is provided, add it to the system context
   if (params.equifaxReport && params.equifaxReport.negativeAccountCount > 0) {
@@ -1254,6 +1311,9 @@ IMPORTANT DISPUTE GUIDANCE:
     systemMessage += disputesContext;
   }
 
+  // Subject restrictions, appended last so they are the final word.
+  systemMessage += buildScopeInstruction(params.scope);
+
   // Cap each history message so an entire credit-report analysis in an old
   // chat message can't balloon every future request toward the token-per-
   // minute limit. ~4,000 chars ≈ 1,000 tokens; 10 history messages ≈ 10k tokens.
@@ -1271,7 +1331,7 @@ IMPORTANT DISPUTE GUIDANCE:
   ];
 
   // Define tools for function calling
-  const tools = [
+  const allTools = [
     {
       type: "function",
       function: {
@@ -1334,6 +1394,22 @@ IMPORTANT DISPUTE GUIDANCE:
       },
     },
   ];
+
+  // Withhold the dispute tooling from students who did not buy ACE-1.
+  //
+  // The prompt already tells the agent to decline credit-repair questions,
+  // but a model that can still SEE `generate_dispute_letter` may call it
+  // anyway and hand over the exact deliverable ACE-1 is sold for. Removing
+  // the tools makes that impossible rather than merely discouraged.
+  const disputeTools = new Set([
+    "get_disputes",
+    "generate_dispute_letter",
+    "analyze_credit_report",
+    "open_credit_report_upload",
+  ]);
+  const tools = params.scope.unrestricted || params.scope.topics.includes("credit_repair")
+    ? allTools
+    : allTools.filter((t) => !disputeTools.has(t.function.name));
 
   // If no API key, return a fallback response (demo mode)
   if (!apiKey) {
@@ -1876,6 +1952,12 @@ export const aiAgentsRouter = createTRPCRouter({
           .max(30)
           .optional()
           .default([]),
+        /**
+         * Courses the client believes it owns. Used ONLY as a fallback when
+         * the server-side enrollment lookup is unavailable - never trusted
+         * to widen scope when the server can answer for itself.
+         */
+        enrolledCourseIds: z.array(z.string()).max(20).optional(),
         // Equifax credit report data for AI analysis (session-only, not persisted)
         equifaxReport: z
           .object({
@@ -1929,17 +2011,44 @@ export const aiAgentsRouter = createTRPCRouter({
       // Load user's current disputes from database for AI context
       const { disputes: userDisputes } = await fetchUserDisputes(input.userId);
 
-      // 3. Build the message array for the AI call
+      // 3. Work out what this student is entitled to discuss.
+      //
+      // The scope is resolved on the SERVER from their enrollments. The client
+      // also knows its own scope (to label the UI), but trusting a
+      // client-supplied scope would let anyone unlock every topic by editing
+      // one request, so the value sent by the app is deliberately ignored.
+      //
+      // If the enrollment lookup fails we fall back to the client's declared
+      // scope rather than silencing the agent mid-conversation for a paying
+      // student; an outage should degrade politely, not look like a bug.
+      const enrolledCourseIds = await fetchEnrolledCourseIds(input.userId);
+      const scope =
+        enrolledCourseIds !== null
+          ? deriveAgentScope(enrolledCourseIds)
+          : deriveAgentScope(input.enrolledCourseIds ?? []);
+
+      console.log(
+        "[AI Agents] Scope for",
+        input.userId,
+        "- unrestricted:",
+        scope.unrestricted,
+        "topics:",
+        scope.topics.join(",") || "none",
+        enrolledCourseIds === null ? "(from client fallback)" : "(from enrollments)"
+      );
+
+      // 4. Build the message array for the AI call
       const messages = [
         ...input.history.map((m) => ({ role: m.role, content: m.content })),
         { role: "user", content: input.message },
       ];
 
-      // 4. Call the AI backend with disputes context
+      // 5. Call the AI backend with disputes context
       const { response, toolCalls } = await callAIBackend({
         messages,
         agentName,
         agentBio,
+        scope,
         equifaxReport: input.equifaxReport,
         disputes: userDisputes,
         userId: input.userId,

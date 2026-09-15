@@ -68,6 +68,12 @@ export interface UseAgentChatOptions {
   agentId: number | undefined;
   /** Only connect and load once the chat surface is actually on screen. */
   enabled?: boolean;
+  /**
+   * Courses this user owns. Sent so the server can still scope the agent's
+   * subject matter if its own enrollment lookup is unavailable - the server
+   * prefers its own data and ignores this whenever it can read it.
+   */
+  enrolledCourseIds?: readonly string[];
   /** Fired when the agent generates a dispute letter through a tool call. */
   onLetterGenerated?: (letter: TriggeredLetter) => void;
   /** Fired when a tool call changed dispute data so counters can refresh. */
@@ -174,6 +180,7 @@ export function useAgentChat({
   userId,
   agentId,
   enabled = true,
+  enrolledCourseIds,
   onLetterGenerated,
   onDisputeDataChanged,
   onRequestCreditAnalysis,
@@ -338,6 +345,9 @@ export function useAgentChat({
           agentId,
           message: text,
           history,
+          enrolledCourseIds: enrolledCourseIds
+            ? [...enrolledCourseIds]
+            : undefined,
         });
 
         // Reconcile against the rows the server actually persisted.
@@ -381,6 +391,7 @@ export function useAgentChat({
     [
       agentId,
       userId,
+      enrolledCourseIds,
       chatMutation,
       applyRows,
       onLetterGenerated,
