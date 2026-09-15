@@ -38,7 +38,9 @@ struct MyAgentView: View {
     @State private var viewModel: MyAgentViewModel
     /// Created once the agent is known; owns the live conversation.
     @State private var chatViewModel: AgentChatViewModel?
-    @State private var surface: Surface = .chat
+    /// Opens on the overview: the dashboard frames what the agent is and what
+    /// it can do, so landing there orients the student before the conversation.
+    @State private var surface: Surface = .overview
     @State private var showCreditRepair = false
     @State private var showCreditAnalysis = false
     @State private var showCreditSummary = false

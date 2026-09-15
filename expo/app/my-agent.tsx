@@ -73,8 +73,12 @@ type AgentView = "chat" | "overview";
 // ============================================================
 
 export interface MyAgentScreenProps {
-  /** When true, renders inside a bottom tab: no back button,
-   *  and the tab navigator supplies the safe-area top inset. */
+  /** When true, renders inside a bottom tab: no back button.
+   *
+   *  The safe-area top inset is applied either way. The tab is registered with
+   *  `headerShown: false`, so the navigator contributes no top chrome and the
+   *  screen owns the inset itself — without it the header rode under the
+   *  status bar and the Chat/Overview switch sat beyond the reachable area. */
   embedded?: boolean;
 }
 
@@ -112,7 +116,9 @@ function MyAgentScreenInner({
   const userId = user?.id || "";
 
   // ── View + modal state ────────────────────────────────────────
-  const [view, setView] = useState<AgentView>("chat");
+  // Opens on the overview: the dashboard frames what the agent is and what it
+  // can do, so landing there orients the user before the conversation starts.
+  const [view, setView] = useState<AgentView>("overview");
   const [creditRepairVisible, setCreditRepairVisible] = useState(false);
   const [disputeTrackerVisible, setDisputeTrackerVisible] = useState(false);
   const [creditAnalysisVisible, setCreditAnalysisVisible] = useState(false);
@@ -484,7 +490,7 @@ function MyAgentScreenInner({
       <>
         {!embedded && <Stack.Screen options={{ headerShown: false }} />}
         <View
-          style={[styles.container, { paddingTop: embedded ? 0 : insets.top }]}
+          style={[styles.container, { paddingTop: insets.top }]}
         >
           <View style={styles.header}>
             {embedded ? (
@@ -532,7 +538,7 @@ function MyAgentScreenInner({
       <>
         {!embedded && <Stack.Screen options={{ headerShown: false }} />}
         <View
-          style={[styles.container, { paddingTop: embedded ? 0 : insets.top }]}
+          style={[styles.container, { paddingTop: insets.top }]}
         >
           <View style={styles.header}>
             {embedded ? (
@@ -624,7 +630,7 @@ function MyAgentScreenInner({
     <>
       {!embedded && <Stack.Screen options={{ headerShown: false }} />}
       <View
-        style={[styles.container, { paddingTop: embedded ? 0 : insets.top }]}
+        style={[styles.container, { paddingTop: insets.top }]}
       >
         {/* ── Conversation header ─────────────────────────────── */}
         <View style={styles.chatHeader}>
@@ -711,7 +717,7 @@ function MyAgentScreenInner({
           <KeyboardAvoidingView
             style={styles.flex}
             behavior={Platform.OS === "ios" ? "padding" : undefined}
-            keyboardVerticalOffset={embedded ? 0 : insets.top}
+            keyboardVerticalOffset={insets.top}
           >
             {agent ? (
               <AgentChatPanel
@@ -988,7 +994,7 @@ function LockedView({
     <>
       {!embedded && <Stack.Screen options={{ headerShown: false }} />}
       <View
-        style={[styles.container, { paddingTop: embedded ? 0 : insets.top }]}
+        style={[styles.container, { paddingTop: insets.top }]}
       >
         <View style={styles.header}>
           {embedded ? (
@@ -1091,7 +1097,7 @@ function NoAgentView({
     <>
       {!embedded && <Stack.Screen options={{ headerShown: false }} />}
       <View
-        style={[styles.container, { paddingTop: embedded ? 0 : insets.top }]}
+        style={[styles.container, { paddingTop: insets.top }]}
       >
         <View style={styles.header}>
           {embedded ? (
