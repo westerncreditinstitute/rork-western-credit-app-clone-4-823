@@ -303,7 +303,7 @@ struct CourseDetailView: View {
                     pricingLine("Due today", Pricing.format(current.dueToday), emphasized: true)
 
                     if let days = current.freeTrialDays {
-                        Text("Then free for \(days) days. Keep your account past \(days) days and it is \(Pricing.format(current.monthlyFee ?? Pricing.monthlySubscription)) per month.")
+                        Text("Free for \(days) days — nothing is charged today. During the trial you get the course, your AI agent and your credit report analysis; the full dispute letter library opens when your subscription starts. When the trial ends: \(Pricing.format(current.certificationFee ?? Pricing.certificateFee)) certificate fee, then \(Pricing.format(current.monthlyFee ?? Pricing.monthlySubscription)) per month.")
                             .font(.system(size: 13))
                             .foregroundStyle(theme.colors.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -410,7 +410,7 @@ struct CourseDetailView: View {
     /// Caption under the enroll-bar price, naming what the charge covers.
     private func enrollCaption(_ current: Course) -> String {
         if current.isLifetime { return "one time — lifetime access" }
-        if let days = current.freeTrialDays { return "certificate — free \(days) days" }
+        if current.freeTrialDays != nil { return "nothing due today" }
         if current.hasEnrollmentFee { return "certificate + enrollment" }
         return "due today"
     }
@@ -421,7 +421,7 @@ struct CourseDetailView: View {
             return "Buy \(current.title) for \(Pricing.format(current.price))? This is a one-time payment for lifetime access — there is no monthly subscription."
         }
         if let days = current.freeTrialDays {
-            return "Pay the \(Pricing.format(current.dueToday)) certificate fee and get \(days) days free? After that it is \(Pricing.format(current.monthlyFee ?? Pricing.monthlySubscription)) per month."
+            return "Start \(current.title) free for \(days) days? Nothing is charged today. When the trial ends it is a \(Pricing.format(current.certificationFee ?? Pricing.certificateFee)) certificate fee, then \(Pricing.format(current.monthlyFee ?? Pricing.monthlySubscription)) per month."
         }
         return "Enroll in \(current.title) for \(Pricing.format(current.dueToday)) today, then \(Pricing.format(current.monthlyFee ?? Pricing.monthlySubscription)) per month? There is no free trial for this course."
     }

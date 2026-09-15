@@ -84,12 +84,12 @@ export default function HelpCenterScreen() {
         {
           id: "gs-3",
           question: "What courses are available?",
-          answer: "We offer the following courses:\n\n• ACE-1: Advanced Credit Repair - Master techniques to legally remove negative items from your credit report. $99.99 certificate fee, then FREE for 60 days. Keep your account past 60 days and it is $49.99/month.\n\n• ACE-2: Advanced Credit Building - Learn to establish an 800+ FICO score in as little as 90 days. $99.99 certificate fee + $100 enrollment fee, then $49.99/month. No free trial.\n\n• ACE-3: Advanced Business Credit - Master business credit strategies for business growth. $99.99 certificate fee + $100 enrollment fee, then $49.99/month. No free trial.\n\n• ACE-4: Complete ACE Bundle - A one-time payment of $1,299 for LIFETIME access to all three courses, all AI tools, all three certificates, the affiliate network and every future update. No monthly subscription, ever.\n\n• CSO Certification - FREE program for students who complete ACE-1, ACE-2, and ACE-3"
+          answer: "We offer the following courses:\n\n• ACE-1: Advanced Credit Repair - Master techniques to legally remove negative items from your credit report. Start with a 7-day free trial — nothing is charged to enroll. When the trial ends it is a $99.99 certificate fee, then $49.99/month.\n\n• ACE-2: Advanced Credit Building - Learn to establish an 800+ FICO score in as little as 90 days. $99.99 certificate fee + $100 enrollment fee, then $49.99/month. No free trial.\n\n• ACE-3: Advanced Business Credit - Master business credit strategies for business growth. $99.99 certificate fee + $100 enrollment fee, then $49.99/month. No free trial.\n\n• ACE-4: Complete ACE Bundle - A one-time payment of $1,299 for LIFETIME access to all three courses, all AI tools, all three certificates, the affiliate network and every future update. No monthly subscription, ever.\n\n• CSO Certification - FREE program for students who complete ACE-1, ACE-2, and ACE-3"
         },
         {
           id: "gs-4",
           question: "Is there a free trial?",
-          answer: "Yes! ACE-1 (Advanced Credit Repair) is FREE for 60 days. You only pay the $99.99 certificate fee to enroll. This gives you full access to:\n\n• All course materials and video lectures\n• AI Credit Repair Coach\n• AI Dispute Assistant\n• AI Lawsuit Assistant\n• Cloud Dispute Tracker\n• Interactive Study Guide\n\nIf you keep your account past 60 days, it is $49.99/month to maintain your subscription.\n\nACE-2 and ACE-3 do not have a free trial. The ACE-4 bundle is a one-time payment with lifetime access."
+          answer: "Yes! ACE-1 (Advanced Credit Repair) starts with a 7-day free trial and nothing is charged to enroll.\n\nDuring the trial you get:\n• All course materials and video lectures\n• Your AI Credit Repair Agent\n• Analyze My Credit Report, plus the specific dispute letter your agent recommends\n• Cloud Dispute Tracker\n• Interactive Study Guide\n\nThe full dispute letter library (the Credit Repair Tool) opens once your subscription starts. During the trial your agent recommends the one letter your situation calls for, rather than giving you the whole library.\n\nWhen the trial ends it is a $99.99 certificate fee, then $49.99/month to maintain your subscription.\n\nACE-2 and ACE-3 do not have a free trial. The ACE-4 bundle is a one-time payment with lifetime access."
         },
       ]
     },
@@ -170,12 +170,12 @@ export default function HelpCenterScreen() {
         {
           id: "ce-1",
           question: "How do I enroll in a course?",
-          answer: "To enroll in a course:\n\n1. Navigate to the 'Courses' tab\n2. Browse available courses or use the search function\n3. Tap on a course to view details\n4. Review course content, pricing, and features\n5. Tap 'Enroll Now' and follow the payment instructions\n\nFor ACE-1, you'll pay the $99.99 certificate fee and then have 60 days free. For ACE-2 and ACE-3, you'll pay $199.99 up front ($99.99 certificate + $100 enrollment) and there is no free trial."
+          answer: "To enroll in a course:\n\n1. Navigate to the 'Courses' tab\n2. Browse available courses or use the search function\n3. Tap on a course to view details\n4. Review course content, pricing, and features\n5. Tap 'Enroll Now' and follow the payment instructions\n\nFor ACE-1, you start with a 7-day free trial and nothing is charged today; the $99.99 certificate fee is taken when the trial ends. For ACE-2 and ACE-3, you'll pay $199.99 up front ($99.99 certificate + $100 enrollment) and there is no free trial."
         },
         {
           id: "ce-2",
           question: "What payment options are available?",
-          answer: "Payment options vary by course:\n\n• ACE-1: $99.99 certificate fee (one-time), free for 60 days, then $49.99/month to keep your subscription\n\n• ACE-2 & ACE-3: $99.99 certificate fee + $100 enrollment fee due at registration ($199.99 total), then $49.99/month to keep your subscription. No free trial.\n\n• ACE-4 Complete Bundle: $1,299 one time for lifetime access to all 3 courses, AI tools, certificates, the affiliate network and all future updates. No monthly subscription and no payment plan.\n\n• CSO Affiliate network membership: $50/month to stay listed on Hire a Pro\n\n• CSO Certification: FREE for students who complete ACE-1, ACE-2, and ACE-3\n\nWe accept major credit cards, debit cards, and PayPal."
+          answer: "Payment options vary by course:\n\n• ACE-1: 7-day free trial with nothing due today. When the trial ends, a one-time $99.99 certificate fee, then $49.99/month to keep your subscription\n\n• ACE-2 & ACE-3: $99.99 certificate fee + $100 enrollment fee due at registration ($199.99 total), then $49.99/month to keep your subscription. No free trial.\n\n• ACE-4 Complete Bundle: $1,299 one time for lifetime access to all 3 courses, AI tools, certificates, the affiliate network and all future updates. No monthly subscription and no payment plan.\n\n• CSO Affiliate network membership: $50/month to stay listed on Hire a Pro\n\n• CSO Certification: FREE for students who complete ACE-1, ACE-2, and ACE-3\n\nWe accept major credit cards, debit cards, and PayPal."
         },
         {
           id: "ce-3",
@@ -185,7 +185,7 @@ export default function HelpCenterScreen() {
         {
           id: "ce-4",
           question: "Can I get a refund?",
-          answer: "Due to the nature of our digital educational content and immediate access granted upon enrollment, ALL SALES ARE FINAL. We do not offer refunds, exchanges, or credits for any purchases.\n\nWe encourage you to:\n• Review all course information before purchasing\n• Take advantage of the 60 days of free access on ACE-1\n• Contact support with any questions before enrolling\n\nPlease review our full Terms & Conditions for more details."
+          answer: "Due to the nature of our digital educational content and immediate access granted upon enrollment, ALL SALES ARE FINAL. We do not offer refunds, exchanges, or credits for any purchases.\n\nWe encourage you to:\n• Review all course information before purchasing\n• Take advantage of the 7-day free trial on ACE-1 before you are charged\n• Contact support with any questions before enrolling\n\nPlease review our full Terms & Conditions for more details."
         },
         {
           id: "ce-5",

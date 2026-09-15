@@ -18,6 +18,7 @@ final class AppStore {
         static let walletUnlocked = "wci.wallet.unlocked"
         static let paidProviders = "wci.providers.paid"
         static let adminUnlocked = "wci.admin.unlocked"
+        static let certificatePaid = "wci.subscription.certificatePaid"
         /// Which account the persisted state above belongs to.
         static let owner = "wci.state.ownerUserId"
     }
@@ -62,6 +63,13 @@ final class AppStore {
         paidProviderIds = Set(defaults.stringArray(forKey: Keys.paidProviders) ?? [])
         isWalletUnlocked = defaults.bool(forKey: Keys.walletUnlocked)
         isAdminUnlocked = defaults.bool(forKey: Keys.adminUnlocked)
+        // `bool(forKey:)` cannot tell "false" from "never written", and the
+        // difference matters: an absent flag means this install predates the
+        // trial model, when the certificate fee was charged up front at
+        // enrollment. Those students have already paid, so absence reads as
+        // paid — defaulting to false would retroactively confiscate the
+        // letter library they bought.
+        certificatePaid = defaults.object(forKey: Keys.certificatePaid) as? Bool ?? true
 
         syncInitialEnrollments()
         applyReadState()
@@ -107,6 +115,10 @@ final class AppStore {
         // Tier is an entitlement of the account, not the device.
         tier = .free
         defaults.set(SubscriptionTier.free.rawValue, forKey: Keys.tier)
+
+        // Payment state belongs to the account too: a new signer-in must not
+        // inherit the previous user's unlocked letter library.
+        certificatePaid = false
     }
 
     // MARK: - Subscription
@@ -115,6 +127,43 @@ final class AppStore {
     var isPremium: Bool { tier != .free }
     var isACE1: Bool { tier == .ace1Student }
     var isCSO: Bool { tier == .csoAffiliate }
+
+    /// Whether the ACE-1 certificate fee has actually been collected.
+    ///
+    /// Stored rather than inferred: a trial member is already `.ace1Student`,
+    /// so the tier alone cannot tell a payer from a trialist. Treating the
+    /// tier as proof of payment would hand the letter library to every trial.
+    /// A CSO affiliate is a paid state by definition.
+    var certificatePaid: Bool {
+        didSet { UserDefaults.standard.set(certificatePaid, forKey: Keys.certificatePaid) }
+    }
+
+    /// Billing state of the ACE-1 membership, which drives every trial gate.
+    var ace1Status: ACE1Status {
+        if isCSO { return .paid }
+        guard isACE1 else { return .none }
+        return certificatePaid ? .paid : .trial
+    }
+
+    /// True while inside the free trial with nothing billed yet.
+    var isInTrial: Bool { ace1Status == .trial }
+
+    /// The full dispute-letter library (Credit Repair Tool). Paid only — it is
+    /// the core of what the subscription sells.
+    var canAccessLetterLibrary: Bool {
+        TrialAccess.canBrowseAllLetters(ace1Status)
+    }
+
+    /// The single letter the agent recommends after analysing a report. Open
+    /// during the trial so a trialist can still act on their credit.
+    var canGenerateRecommendedLetter: Bool {
+        TrialAccess.canUseRecommendedLetter(ace1Status)
+    }
+
+    /// Records that the certificate fee was paid and the subscription began.
+    func markCertificatePaid() {
+        certificatePaid = true
+    }
 
     func setTier(_ newTier: SubscriptionTier) {
         tier = newTier

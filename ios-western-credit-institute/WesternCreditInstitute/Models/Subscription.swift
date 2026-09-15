@@ -40,7 +40,7 @@ nonisolated enum SubscriptionTier: String, CaseIterable, Identifiable, Hashable,
         case .ace1Student:
             return [
                 "Full course access",
-                "Free for \(Pricing.ace1FreeDays) days",
+                "\(Pricing.ace1TrialDays)-day free trial",
                 "\(Pricing.format(Pricing.referralAce1Enrolled)) per ACE-1 referral",
                 "\(Pricing.format(Pricing.referralAce23Bounty)) per ACE-2/ACE-3 referral",
                 "Cloud dispute tracker",

@@ -14,6 +14,9 @@ const SUBSCRIPTION_FEES = {
   cso_affiliate: 50,
 };
 
+/** Length of the ACE-1 free trial, mirroring `ACE1_TRIAL_DAYS`. */
+const ACE1_TRIAL_DAYS = 7;
+
 const REFERRAL_BONUSES = {
   /** ACE-1 referral paid to a referrer still on the free tier. */
   ace1_from_free: 25,
@@ -88,10 +91,12 @@ export const subscriptionsRouter = createTRPCRouter({
       const now = new Date().toISOString();
       const id = `subscriptions:${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       
-      // ACE-1 is free for 60 days after the certificate fee is paid. This is
-      // the access window, and is deliberately separate from the 7-day
-      // referral qualifying window used by `processReferralBonus`.
-      const trialDays = input.tier === 'ace1_student' ? 60 : 30;
+      // ACE-1 starts on a 7-day free trial: enrollment costs nothing and the
+      // certificate fee is collected when the trial ends. `certificatePaid`
+      // is what separates a trial member from a subscriber — the trial
+      // withholds the dispute-letter library, so this flag gates real value
+      // and must never be inferred from the tier alone.
+      const trialDays = input.tier === 'ace1_student' ? ACE1_TRIAL_DAYS : 30;
       const expiryDate = new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000).toISOString();
 
       const subscription = {
@@ -104,6 +109,10 @@ export const subscriptionsRouter = createTRPCRouter({
         endDate: input.tier === 'ace1_student' ? expiryDate : undefined,
         initialRegistrationDate: input.isInitialRegistration ? now : undefined,
         initialRegistrationExpiry: input.isInitialRegistration ? expiryDate : undefined,
+        // A new ACE-1 subscription is always a trial: nothing has been billed
+        // yet. Only a completed certificate payment flips this.
+        certificatePaid: input.tier === 'ace1_student' ? false : undefined,
+        trialEndsAt: input.tier === 'ace1_student' ? expiryDate : undefined,
         autoRenew: true,
         referredBy: input.referredBy,
         createdAt: now,

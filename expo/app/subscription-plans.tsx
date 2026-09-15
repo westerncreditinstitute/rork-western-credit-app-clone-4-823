@@ -26,7 +26,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import Colors from "@/constants/colors";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import {
-  ACE1_FREE_DAYS,
+  ACE1_TRIAL_DAYS,
   ACE23_DUE_TODAY,
   BUNDLE_PAYOUT_CSO,
   BUNDLE_PRICE,
@@ -60,12 +60,12 @@ const plans: Plan[] = [
   {
     id: "ace1_course",
     name: "ACE-1 Course",
-    subtitle: `Free for ${ACE1_FREE_DAYS} Days`,
-    price: CERTIFICATE_FEE,
-    priceLabel: "Certificate Fee Only",
+    subtitle: `${ACE1_TRIAL_DAYS}-Day Free Trial`,
+    price: 0,
+    priceLabel: "Free to Start",
     badge: "BEST START",
     features: [
-      { text: `Full ACE-1 course access, free for ${ACE1_FREE_DAYS} days`, included: true },
+      { text: `Start free — nothing due for ${ACE1_TRIAL_DAYS} days`, included: true },
       { text: "AI Credit Repair Coach", included: true },
       { text: "AI Dispute Assistant", included: true },
       { text: "Lawsuit Assistant", included: true },
@@ -74,7 +74,11 @@ const plans: Plan[] = [
       { text: `${formatPrice(REFERRAL_ACE1_ENROLLED)} referral bonus per student`, included: true },
       { text: `${formatPrice(REFERRAL_ACE23_BOUNTY)} per ACE-2/ACE-3 referral`, included: true },
       {
-        text: `${formatPrice(MONTHLY_SUBSCRIPTION)}/mo after ${ACE1_FREE_DAYS} days`,
+        text: `${formatPrice(CERTIFICATE_FEE)} certificate fee after your trial`,
+        included: true,
+      },
+      {
+        text: `Then ${formatPrice(MONTHLY_SUBSCRIPTION)}/mo subscription`,
         included: true,
       },
     ],
@@ -104,7 +108,7 @@ const courseOptions: CourseOption[] = [
     id: "ace1",
     name: "ACE-1: Advanced Credit Repair",
     certFee: CERTIFICATE_FEE,
-    freeTrialDays: ACE1_FREE_DAYS,
+    freeTrialDays: ACE1_TRIAL_DAYS,
     monthlyPrice: MONTHLY_SUBSCRIPTION,
     description: "Master advanced credit repair techniques",
     image: "https://images.unsplash.com/photo-1554224154-26032ffc0d07?w=600&h=400&fit=crop",
@@ -184,7 +188,7 @@ export default function SubscriptionPlansScreen() {
       : (course.certFee ?? 0) + (course.enrollmentFee ?? 0);
 
     const message = isACE1
-      ? `Pay the ${formatPrice(course.certFee ?? CERTIFICATE_FEE)} certificate fee to enroll, then ACE-1 is FREE for ${ACE1_FREE_DAYS} days. Keep your account past ${ACE1_FREE_DAYS} days and it is ${formatPrice(MONTHLY_SUBSCRIPTION)}/month.`
+      ? `Start ACE-1 free for ${ACE1_TRIAL_DAYS} days — nothing is charged today.\n\nDuring the trial you get the course, your AI agent and your credit report analysis. The full dispute letter library opens when your subscription starts.\n\nWhen the trial ends: ${formatPrice(course.certFee ?? CERTIFICATE_FEE)} certificate fee, then ${formatPrice(MONTHLY_SUBSCRIPTION)}/month.`
       : isBundle
       ? `One payment of ${formatPrice(dueToday)} for LIFETIME access to all 3 courses, AI tools, certificates, the affiliate network and every future update. No monthly subscription, ever.`
       : `${course.name}\n\nCertificate fee: ${formatPrice(course.certFee ?? CERTIFICATE_FEE)}\nEnrollment fee: ${formatPrice(course.enrollmentFee ?? ENROLLMENT_FEE)}\n\nDue today: ${formatPrice(dueToday)}\nThen ${formatPrice(MONTHLY_SUBSCRIPTION)}/month to keep your subscription.\n\nThere is no free trial for this course.`;
@@ -207,7 +211,7 @@ export default function SubscriptionPlansScreen() {
                   console.log('[SubscriptionPlans] ACE-1 upgrade successful');
                   Alert.alert(
                     "Successfully Enrolled!", 
-                    `You are now enrolled in ACE-1! Your ${ACE1_FREE_DAYS} days of free access are active.`,
+                    `You are now enrolled in ACE-1! Your ${ACE1_TRIAL_DAYS}-day free trial is active and nothing has been charged.`,
                     [{ text: "OK", onPress: () => router.back() }]
                   );
                 } else {
@@ -367,7 +371,7 @@ export default function SubscriptionPlansScreen() {
                   <Text style={styles.ace1BadgeText}>SPECIAL OFFER</Text>
                 </View>
                 <Text style={styles.ace1HighlightTitle}>
-                  ACE-1 Free for {ACE1_FREE_DAYS} Days!
+                  ACE-1 Free for {ACE1_TRIAL_DAYS} Days!
                 </Text>
                 <Text style={styles.ace1HighlightText}>
                   Start your credit repair journey with just the{" "}

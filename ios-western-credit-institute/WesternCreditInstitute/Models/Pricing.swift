@@ -15,7 +15,11 @@ nonisolated enum Pricing {
 
     // MARK: - Course pricing
 
-    /// Certificate fee, charged once at enrollment for every ACE course.
+    /// Certificate fee, charged once per ACE course.
+    ///
+    /// For ACE-2 and ACE-3 this is due at enrollment. For ACE-1 it is
+    /// deferred: the trial starts at no charge and the certificate is billed
+    /// when the trial ends, which is when ACE-1 becomes a paid subscription.
     static let certificateFee: Double = 99.99
 
     /// Enrollment fee, charged once for ACE-2 and ACE-3 only. ACE-1 has none.
@@ -24,8 +28,12 @@ nonisolated enum Pricing {
     /// Monthly subscription that keeps any ACE course active.
     static let monthlySubscription: Double = 49.99
 
-    /// ACE-1 is free for this many days; the subscription starts afterwards.
-    static let ace1FreeDays: Int = 60
+    /// Length of the ACE-1 free trial.
+    ///
+    /// The trial is a genuine preview, not the course: the AI agent runs on
+    /// restricted topics and the full dispute-letter library stays closed.
+    /// See `TrialAccess` for exactly what a trial member can reach.
+    static let ace1TrialDays: Int = 7
 
     /// One-time price for the Complete ACE Bundle (ACE-4), lifetime access.
     static let bundlePrice: Double = 1299
@@ -33,8 +41,14 @@ nonisolated enum Pricing {
     /// Monthly dues to stay in the CSO network and keep a Hire a Pro listing.
     static let csoMonthlyFee: Double = 50
 
-    /// Due today to start ACE-1: certificate only, then free for 60 days.
-    static let ace1DueToday: Double = certificateFee
+    /// Due today to start the ACE-1 trial: nothing.
+    ///
+    /// Enrollment is free and the certificate fee is not taken until the
+    /// trial ends, so nothing may quote a charge on day one.
+    static let ace1DueToday: Double = 0
+
+    /// Charged when the ACE-1 trial ends, before the subscription starts.
+    static let ace1DueAfterTrial: Double = certificateFee
 
     /// Due today to start ACE-2 or ACE-3: certificate + enrollment, no trial.
     static let ace23DueToday: Double = certificateFee + enrollmentFee
@@ -43,7 +57,11 @@ nonisolated enum Pricing {
 
     /// A referral qualifies once the referred student keeps the account open
     /// past this many days.
-    static let referralQualifyingDays: Int = 7
+    ///
+    /// This now coincides with the end of the ACE-1 trial, which is when the
+    /// certificate fee is actually collected — so a payout is never owed on a
+    /// trial that lapsed without paying.
+    static let referralQualifyingDays: Int = ace1TrialDays
 
     /// ACE-1 referral payout when the referrer is on the free tier.
     static let referralAce1Free: Double = 25

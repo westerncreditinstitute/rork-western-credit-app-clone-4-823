@@ -90,7 +90,15 @@ export default function AIDisputeAssistantScreen() {
   const insets = useSafeAreaInsets();
   const { createDispute } = useDisputes();
   const { user } = useUser();
-  const { isFree, isPremium } = useSubscription();
+  const { isFree, isPremium, canAccessLetterLibrary, canGenerateRecommendedLetter } =
+    useSubscription();
+
+  // Who only ever sees the ONE letter their answers point to, rather than the
+  // full library: free members and trial members alike. Trial members can
+  // still generate it - that single recommended letter is the part of the
+  // product the trial deliberately includes.
+  const restrictedToRecommended = !canAccessLetterLibrary;
+  const canGenerate = canGenerateRecommendedLetter;
 
   const [currentStep, setCurrentStep] = useState(1);
   const [detectedBureau, setDetectedBureau] = useState<string>("auto");
@@ -955,15 +963,15 @@ export default function AIDisputeAssistantScreen() {
               <TouchableOpacity 
                 style={[
                   styles.primaryButton, 
-                  isFree && currentAccountIndex === selectedAccounts.length - 1 && styles.primaryButtonDisabled
+                  !canGenerate && currentAccountIndex === selectedAccounts.length - 1 && styles.primaryButtonDisabled
                 ]} 
                 onPress={proceedToNextAccount}
-                disabled={isFree && currentAccountIndex === selectedAccounts.length - 1}
+                disabled={!canGenerate && currentAccountIndex === selectedAccounts.length - 1}
               >
                 <Text style={styles.primaryButtonText}>
                   {currentAccountIndex < selectedAccounts.length - 1 
                     ? "Next Account" 
-                    : (isFree ? "🔒 Upgrade to ACE-1 to Generate Letters" : "Generate Letters")}
+                    : (canGenerate ? "Generate Letters" : "🔒 Start ACE-1 to Generate Letters")}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -1094,13 +1102,13 @@ export default function AIDisputeAssistantScreen() {
           <TouchableOpacity 
             style={[
               styles.primaryButton, 
-              isFree && styles.primaryButtonDisabled
+              !canGenerate && styles.primaryButtonDisabled
             ]} 
             onPress={generateAllLetters}
-            disabled={isFree}
+            disabled={!canGenerate}
           >
             <Text style={styles.primaryButtonText}>
-              {isFree ? "🔒 Upgrade to ACE-1 to Generate Letters" : "Generate Letters"}
+              {canGenerate ? "Generate Letters" : "🔒 Start ACE-1 to Generate Letters"}
             </Text>
           </TouchableOpacity>
         </View>
@@ -1203,10 +1211,11 @@ export default function AIDisputeAssistantScreen() {
           </View>
         </View>
 
-        {isFree && disputes.length > 0 && (
+        {restrictedToRecommended && disputes.length > 0 && (
           <View style={styles.freeTrialBanner}>
             <Text style={styles.freeTrialText}>
-              💡 Free Trial: Showing only recommended letters. Upgrade to ACE-1 to see all available dispute letters.
+              💡 Showing the letter your agent recommended for each account.
+              The full dispute letter library opens when your subscription starts.
             </Text>
           </View>
         )}
@@ -1218,7 +1227,7 @@ export default function AIDisputeAssistantScreen() {
             <View style={styles.lettersGrid}>
               {disputes
                 .filter(dispute => {
-                  if (isFree && selectedAccounts.length > 0) {
+                  if (restrictedToRecommended && selectedAccounts.length > 0) {
                     const account = selectedAccounts.find(acc => acc.name === dispute.creditor);
                     return account && dispute.disputeType === account.recommendation;
                   }

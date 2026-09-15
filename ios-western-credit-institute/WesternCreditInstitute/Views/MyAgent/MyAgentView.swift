@@ -46,6 +46,7 @@ struct MyAgentView: View {
     @State private var showCreditSummary = false
     @State private var showDisputeTracker = false
     @State private var showPlans = false
+    @State private var showLettersLocked = false
 
     /// Warp intro plays on the first open of the tab each app session.
     @State private var showWarp = !WarpIntroView.shownThisSession
@@ -90,6 +91,16 @@ struct MyAgentView: View {
         }
         .background(theme.colors.background)
         .sheet(isPresented: $showPlans) { SubscriptionPlansView() }
+        // Explains why the full letter library is closed during the trial,
+        // naming the route that IS open so it reads as a boundary with a way
+        // forward rather than a dead end.
+        .alert(TrialAccess.lettersLockedTitle, isPresented: $showLettersLocked) {
+            Button("Analyze my report") { showCreditAnalysis = true }
+            Button("View plans") { showPlans = true }
+            Button("Not now", role: .cancel) {}
+        } message: {
+            Text(TrialAccess.lettersLockedMessage)
+        }
         .sheet(isPresented: $showCreditRepair) {
             NavigationStack { AIDisputeAssistantView() }
         }
@@ -347,7 +358,9 @@ struct MyAgentView: View {
                         onOpenCreditAnalysis: { showCreditAnalysis = true },
                         onOpenCreditSummary: { showCreditSummary = true },
                         onOpenCreditRepair: { showCreditRepair = true },
-                        onOpenDisputeTracker: { showDisputeTracker = true }
+                        onOpenDisputeTracker: { showDisputeTracker = true },
+                        lettersUnlocked: store.canAccessLetterLibrary,
+                        onLockedLetterLibrary: { showLettersLocked = true }
                     )
                 }
 

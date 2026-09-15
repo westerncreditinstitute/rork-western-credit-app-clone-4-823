@@ -14,7 +14,13 @@
 
 // MARK: - Course pricing
 
-/** Certificate fee, charged once at enrollment for every ACE course. */
+/**
+ * Certificate fee, charged once per ACE course.
+ *
+ * For ACE-2 and ACE-3 this is due at enrollment. For ACE-1 it is deferred:
+ * the trial starts at no charge and the certificate is billed when the trial
+ * ends, which is the moment ACE-1 becomes a paid subscription.
+ */
 export const CERTIFICATE_FEE = 99.99;
 
 /** Enrollment fee, charged once for ACE-2 and ACE-3 only. ACE-1 has none. */
@@ -23,8 +29,14 @@ export const ENROLLMENT_FEE = 100;
 /** Monthly subscription that keeps any ACE course active. */
 export const MONTHLY_SUBSCRIPTION = 49.99;
 
-/** ACE-1 is free for this many days; the subscription starts afterwards. */
-export const ACE1_FREE_DAYS = 60;
+/**
+ * Length of the ACE-1 free trial.
+ *
+ * The trial is a genuine preview, not the course: it runs the AI agent on
+ * restricted topics and withholds the full dispute-letter library. See
+ * `constants/trial-access.ts` for exactly what a trial member can reach.
+ */
+export const ACE1_TRIAL_DAYS = 7;
 
 /** One-time price for the Complete ACE Bundle (ACE-4), lifetime access. */
 export const BUNDLE_PRICE = 1299;
@@ -32,8 +44,16 @@ export const BUNDLE_PRICE = 1299;
 /** Monthly dues to stay listed in the CSO Affiliate network / Hire a Pro. */
 export const CSO_MONTHLY_FEE = 50;
 
-/** Due today to start ACE-1: certificate only, then free for 60 days. */
-export const ACE1_DUE_TODAY = CERTIFICATE_FEE;
+/**
+ * Due today to start the ACE-1 trial: nothing.
+ *
+ * Enrollment is free and the certificate fee is not taken until the trial
+ * ends, so nothing may quote a charge on day one.
+ */
+export const ACE1_DUE_TODAY = 0;
+
+/** Charged when the ACE-1 trial ends, before the monthly subscription starts. */
+export const ACE1_DUE_AFTER_TRIAL = CERTIFICATE_FEE;
 
 /** Due today to start ACE-2 or ACE-3: certificate + enrollment, no trial. */
 export const ACE23_DUE_TODAY = CERTIFICATE_FEE + ENROLLMENT_FEE;
@@ -42,10 +62,13 @@ export const ACE23_DUE_TODAY = CERTIFICATE_FEE + ENROLLMENT_FEE;
 
 /**
  * A referral qualifies once the referred student keeps their account open
- * past this many days. This is the refund/chargeback window on the
- * certificate fee, not the length of the ACE-1 free period.
+ * past this many days.
+ *
+ * This now coincides with the end of the ACE-1 trial, which is the point the
+ * certificate fee is actually collected — so a payout is never owed on a
+ * trial that lapsed without paying.
  */
-export const REFERRAL_QUALIFYING_DAYS = 7;
+export const REFERRAL_QUALIFYING_DAYS = ACE1_TRIAL_DAYS;
 
 /** ACE-1 referral payout when the referrer is on the free tier. */
 export const REFERRAL_ACE1_FREE = 25;

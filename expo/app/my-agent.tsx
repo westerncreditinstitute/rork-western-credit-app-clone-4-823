@@ -10,6 +10,7 @@ import {
   RefreshControl,
   KeyboardAvoidingView,
   Image,
+  Alert,
 } from "react-native";
 import { useRouter, Stack } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -32,6 +33,10 @@ import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useDisputes } from "@/contexts/DisputesContext";
 import { trpc, isTransportErrorMessage } from "@/lib/trpc";
 import { AGENT_NOT_INCLUDED_MESSAGE, agentScopeLabel } from "@/constants/agent-access";
+import {
+  TRIAL_LETTERS_LOCKED_MESSAGE,
+  TRIAL_LETTERS_LOCKED_TITLE,
+} from "@/constants/trial-access";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { useAgentChat, type TriggeredLetter } from "@/hooks/useAgentChat";
 
@@ -110,7 +115,12 @@ function MyAgentScreenInner({
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user } = useUser();
-  const { tier, enrolledCourses, agentScope } = useSubscription();
+  const {
+    tier,
+    enrolledCourses,
+    agentScope,
+    canGenerateRecommendedLetter,
+  } = useSubscription();
   const { disputes, refetch: refetchDisputes } = useDisputes();
 
   const userId = user?.id || "";
@@ -329,15 +339,51 @@ function MyAgentScreenInner({
     refetchDisputes?.();
   }, [refetchDisputes]);
 
-  /** The agent used its letter tool mid-conversation — open the editor. */
-  const handleLetterFromAgent = useCallback((letter: TriggeredLetter) => {
-    setCreditRepairPrefill({
-      letterType: letter.letterType,
-      creditorName: letter.creditorName,
-      accountNumber: letter.accountNumber,
-    });
-    setCreditRepairVisible(true);
-  }, []);
+  /**
+   * Explains why the full letter library is closed during the trial.
+   *
+   * Deliberately names the route that IS open - the credit report analysis -
+   * so the message reads as a boundary with a way forward rather than a
+   * dead end.
+   */
+  const showLetterLibraryLocked = useCallback(() => {
+    Alert.alert(
+      TRIAL_LETTERS_LOCKED_TITLE,
+      TRIAL_LETTERS_LOCKED_MESSAGE,
+      [
+        { text: "Not now", style: "cancel" },
+        {
+          text: "Analyze my report",
+          onPress: () => setCreditAnalysisVisible(true),
+        },
+        {
+          text: "View plans",
+          onPress: () => router.push("/subscription-plans"),
+        },
+      ],
+    );
+  }, [router]);
+
+  /** The agent used its letter tool mid-conversation — open the editor.
+   *
+   *  Trial members never reach this: the server withholds the letter tool
+   *  from them entirely, so the agent has nothing to trigger. The guard here
+   *  is a second line of defence rather than the primary gate. */
+  const handleLetterFromAgent = useCallback(
+    (letter: TriggeredLetter) => {
+      if (!canGenerateRecommendedLetter) {
+        showLetterLibraryLocked();
+        return;
+      }
+      setCreditRepairPrefill({
+        letterType: letter.letterType,
+        creditorName: letter.creditorName,
+        accountNumber: letter.accountNumber,
+      });
+      setCreditRepairVisible(true);
+    },
+    [canGenerateRecommendedLetter, showLetterLibraryLocked],
+  );
 
   /** Move from a negative account into the escalation questionnaire.
    *
@@ -761,6 +807,7 @@ function MyAgentScreenInner({
                   setCreditRepairPrefill(null);
                   setCreditRepairVisible(true);
                 }}
+                onLockedLetterLibrary={showLetterLibraryLocked}
                 onOpenDisputeTracker={() => setDisputeTrackerVisible(true)}
                 onOpenCreditAnalysis={() => setCreditAnalysisVisible(true)}
                 onOpenCreditSummary={() => setCreditSummaryVisible(true)}

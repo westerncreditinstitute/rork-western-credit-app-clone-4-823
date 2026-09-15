@@ -5,7 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { trpc, isTransportErrorMessage } from '@/lib/trpc';
 import { useAuth } from '@/contexts/AuthContext';
 import {
-  ACE1_FREE_DAYS,
+  ACE1_TRIAL_DAYS,
   CSO_MONTHLY_FEE,
   MONTHLY_SUBSCRIPTION,
   REFERRAL_ACE1_ENROLLED,
@@ -20,6 +20,11 @@ import {
   canAccessInteractiveCoach,
   deriveAgentScope,
 } from '@/constants/agent-access';
+import {
+  type ACE1Status,
+  canBrowseAllLetters,
+  canUseRecommendedLetter,
+} from '@/constants/trial-access';
 
 export type SubscriptionTier = 'free' | 'ace1_student' | 'cso_affiliate';
 
@@ -41,6 +46,17 @@ export interface Subscription {
   startDate: string;
   endDate?: string;
   autoRenew: boolean;
+  /**
+   * True once the certificate fee has actually been collected.
+   *
+   * This is what separates a trial member from a subscriber. It is stored
+   * rather than inferred, because "tier is ace1_student" is true during the
+   * trial too — treating that as paid would hand the letter library to every
+   * trial member.
+   */
+  certificatePaid?: boolean;
+  /** When the free trial lapses and the certificate fee comes due. */
+  trialEndsAt?: string;
 }
 
 const getStorageKey = (baseKey: string, userId?: string) => {
@@ -76,7 +92,7 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     price: MONTHLY_SUBSCRIPTION,
     features: [
       'Full course access',
-      `Free for ${ACE1_FREE_DAYS} days`,
+      `${ACE1_TRIAL_DAYS}-day free trial`,
       'AI Credit Coach',
       'AI Dispute Assistant',
       'Cloud dispute tracker',
@@ -369,9 +385,10 @@ export const [SubscriptionProvider, useSubscription] = createContextHook(() => {
       // Update subscription for paid courses
       const isPaidCourse = PAID_COURSE_IDS.includes(courseId);
       if (isPaidCourse && tier === 'free') {
-        // ACE-1 is free for 60 days after the certificate fee. Other courses
-        // bill monthly from enrollment, so they get a standard 30-day cycle.
-        const trialDays = isACE1Course ? ACE1_FREE_DAYS : 30;
+        // ACE-1 opens on a 7-day free trial and the certificate fee is not
+        // collected until it ends. Other courses bill monthly from
+        // enrollment, so they get a standard 30-day cycle.
+        const trialDays = isACE1Course ? ACE1_TRIAL_DAYS : 30;
         const newTier: SubscriptionTier = 'ace1_student';
         
         setTier(newTier);
@@ -463,7 +480,7 @@ export const [SubscriptionProvider, useSubscription] = createContextHook(() => {
         // Update tier if any paid courses are enrolled
         const hasPaidCourse = currentEnrolled.some(id => PAID_COURSE_IDS.includes(id));
         if (hasPaidCourse && tier === 'free') {
-          await updateTier('ace1_student', ACE1_FREE_DAYS);
+          await updateTier('ace1_student', ACE1_TRIAL_DAYS);
           console.log('[Subscription] Updated tier due to enrolled paid courses');
         }
       }
@@ -532,9 +549,9 @@ export const [SubscriptionProvider, useSubscription] = createContextHook(() => {
 
       console.log('[SubscriptionContext] Subscription created:', subscription);
 
-      // Free access runs for 60 days before the subscription starts.
+      // The free trial runs for 7 days before the certificate fee is due.
       const expiry = new Date();
-      expiry.setDate(expiry.getDate() + ACE1_FREE_DAYS);
+      expiry.setDate(expiry.getDate() + ACE1_TRIAL_DAYS);
       
       // Update local state
       setExpiryDate(expiry);
@@ -599,6 +616,59 @@ export const [SubscriptionProvider, useSubscription] = createContextHook(() => {
   const isCSO = tier === 'cso_affiliate';
   const isPremium = (isACE1 || isCSO) && !isExpired;
 
+  /**
+   * Whether the certificate fee has actually been collected.
+   *
+   * Read from the subscription record rather than inferred from the tier: a
+   * trial member is already `ace1_student`, so tier alone cannot tell a payer
+   * from a trialist. A CSO affiliate is a paid state by definition.
+   *
+   * The three states of the stored flag are deliberately distinct:
+   *   - `true`  → paid.
+   *   - `false` → on trial; the field is written at sign-up under the new model.
+   *   - absent  → a LEGACY subscription. These were created when the
+   *     certificate fee was charged up front at enrollment, so those students
+   *     have already paid. Treating them as trials would retroactively take
+   *     away the letter library they bought, which is why absence must not
+   *     collapse into `false`.
+   */
+  const certificatePaid = useMemo(() => {
+    if (isCSO) return true;
+    if (!subscription) return false;
+    return subscription.certificatePaid !== false;
+  }, [isCSO, subscription]);
+
+  /**
+   * Billing state of the ACE-1 membership, which drives every trial gate.
+   */
+  const ace1Status: ACE1Status = useMemo(() => {
+    if (isCSO) return 'paid';
+    if (!isACE1) return 'none';
+    if (certificatePaid) return 'paid';
+    return isExpired ? 'trial_expired' : 'trial';
+  }, [isACE1, isCSO, certificatePaid, isExpired]);
+
+  /** True while the member is inside the free trial and hasn't paid yet. */
+  const isInTrial = ace1Status === 'trial';
+
+  /** Days left in the free trial, or null when not on one. */
+  const trialDaysRemaining = useMemo(() => {
+    if (!isInTrial) return null;
+    return daysUntilExpiry;
+  }, [isInTrial, daysUntilExpiry]);
+
+  /**
+   * The full dispute-letter library (Credit Repair Tool). Paid only — it is
+   * the core of what the subscription sells.
+   */
+  const canAccessLetterLibrary = canBrowseAllLetters(ace1Status);
+
+  /**
+   * The single letter the agent recommends after analysing a report. Open
+   * during the trial so a trialist can still act on their credit.
+   */
+  const canGenerateRecommendedLetter = canUseRecommendedLetter(ace1Status);
+
   const canAccessCourses = isPremium;
   const canAccessAICoach = isPremium;
   const canAccessAIDispute = isPremium;
@@ -661,6 +731,12 @@ export const [SubscriptionProvider, useSubscription] = createContextHook(() => {
     isCSO,
     isPremium,
     isExpired,
+    ace1Status,
+    isInTrial,
+    certificatePaid,
+    trialDaysRemaining,
+    canAccessLetterLibrary,
+    canGenerateRecommendedLetter,
     expiryDate,
     daysUntilExpiry,
     canAccessCourses,

@@ -21,6 +21,10 @@ struct AgentProfileCardView: View {
     var onOpenCreditSummary: () -> Void
     var onOpenCreditRepair: () -> Void
     var onOpenDisputeTracker: () -> Void
+    /// False during the free trial: the full letter library is a paid feature.
+    var lettersUnlocked: Bool = true
+    /// Tapped when a trial member selects the locked Credit Repair Tool.
+    var onLockedLetterLibrary: () -> Void = {}
 
     // Console palette — fixed so the panel looks identical day and night.
     private let consoleBG = Color(hex: "#0B1220")
@@ -257,6 +261,7 @@ struct AgentProfileCardView: View {
         let label: String
         let detail: String
         let tint: Color
+        var isLocked: Bool = false
         let action: () -> Void
     }
 
@@ -286,13 +291,19 @@ struct AgentProfileCardView: View {
                 tint: Color(hex: "#38BDF8"),
                 action: onOpenCreditSummary
             ),
+            // The full letter library is what the subscription sells, so
+            // during the trial this row stays visible but locked — hiding it
+            // would leave the student unaware of what they subscribe for.
             AgentAction(
                 id: "credit-repair",
-                symbol: "doc.text.fill",
+                symbol: lettersUnlocked ? "doc.text.fill" : "lock.fill",
                 label: "Credit Repair Tool",
-                detail: "Generate FCRA & FDCPA letters",
+                detail: lettersUnlocked
+                    ? "Generate FCRA & FDCPA letters"
+                    : TrialAccess.lettersLockedCaption,
                 tint: Color(hex: "#F472B6"),
-                action: onOpenCreditRepair
+                isLocked: !lettersUnlocked,
+                action: lettersUnlocked ? onOpenCreditRepair : onLockedLetterLibrary
             ),
             AgentAction(
                 id: "dispute-tracker",
@@ -321,18 +332,24 @@ struct AgentProfileCardView: View {
                     HStack(spacing: Spacing.md - 2) {
                         Image(systemName: action.symbol)
                             .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(action.tint)
+                            .foregroundStyle(action.isLocked ? consoleMuted : action.tint)
                             .frame(width: 40, height: 40)
-                            .background(action.tint.opacity(0.12), in: .rect(cornerRadius: Radius.md, style: .continuous))
+                            .background(
+                                (action.isLocked ? Color(hex: "#94A3B8") : action.tint).opacity(0.12),
+                                in: .rect(cornerRadius: Radius.md, style: .continuous)
+                            )
                             .overlay {
                                 RoundedRectangle(cornerRadius: Radius.md, style: .continuous)
-                                    .strokeBorder(action.tint.opacity(0.4), lineWidth: 1)
+                                    .strokeBorder(
+                                        (action.isLocked ? Color(hex: "#94A3B8") : action.tint).opacity(0.4),
+                                        lineWidth: 1
+                                    )
                             }
 
                         VStack(alignment: .leading, spacing: 2) {
                             Text(action.label)
                                 .font(.system(size: 14, weight: .bold))
-                                .foregroundStyle(consoleText)
+                                .foregroundStyle(action.isLocked ? consoleMuted : consoleText)
                                 .multilineTextAlignment(.leading)
                             Text(action.detail)
                                 .font(.system(size: 11))

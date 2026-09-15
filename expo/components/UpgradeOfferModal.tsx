@@ -23,7 +23,7 @@ import {
 
 import { useTheme } from "@/contexts/ThemeContext";
 import {
-  ACE1_FREE_DAYS,
+  ACE1_TRIAL_DAYS,
   ACE23_DUE_TODAY,
   BUNDLE_PRICE,
   CERTIFICATE_FEE,
@@ -65,11 +65,11 @@ const OFFERS: OfferCourse[] = [
     code: "ACE-1",
     title: "Advanced Credit Repair",
     tagline: "Remove negative items and take back your report.",
-    dueToday: CERTIFICATE_FEE,
-    dueTodayCaption: `Certificate fee — then free for ${ACE1_FREE_DAYS} days`,
-    monthlyCaption: `${formatPrice(MONTHLY_SUBSCRIPTION)}/mo after ${ACE1_FREE_DAYS} days`,
+    dueToday: 0,
+    dueTodayCaption: `Nothing due today — ${ACE1_TRIAL_DAYS}-day free trial`,
+    monthlyCaption: `${formatPrice(CERTIFICATE_FEE)} certificate, then ${formatPrice(MONTHLY_SUBSCRIPTION)}/mo after your trial`,
     perks: [
-      `Free for your first ${ACE1_FREE_DAYS} days`,
+      `Free for ${ACE1_TRIAL_DAYS} days, no charge today`,
       "Your own AI Credit Repair Agent",
       "AI Dispute & Lawsuit Assistants",
       "Cloud Dispute Tracker",

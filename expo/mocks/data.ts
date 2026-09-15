@@ -1,6 +1,6 @@
 import { Course, User, EarningRecord, Notification } from "@/types";
 import {
-  ACE1_FREE_DAYS,
+  ACE1_TRIAL_DAYS,
   BUNDLE_PAYOUT_CSO,
   BUNDLE_PRICE,
   CERTIFICATE_FEE,
@@ -56,12 +56,12 @@ export const courses: Course[] = [
     id: "3",
     title: "Advanced Credit Repair (ACE-1)",
     description: "Master advanced credit repair techniques with AI-powered guidance. Interactive avatar provides personalized instruction through complex dispute strategies.",
-    fullDescription: "This Advanced Credit Education course is designed to teach insider secrets and advanced techniques to successfully repair credit. This course is 1 of 4 in the (ACE) Advanced Credit Education program. Pay only the $99.99 certificate fee to enroll, then ACE-1 is FREE for 60 days. Keep your account past 60 days and it is $49.99 per month to maintain your subscription.",
+    fullDescription: "This Advanced Credit Education course is designed to teach insider secrets and advanced techniques to successfully repair credit. This course is 1 of 4 in the (ACE) Advanced Credit Education program. Start with a 7-day free trial \u2014 nothing is charged to enroll. During the trial you get the course, your AI Credit Repair Agent and your credit report analysis; the full dispute letter library opens once your subscription starts. When the trial ends it is a $99.99 certificate fee, then $49.99 per month to maintain your subscription.",
     duration: "6 weeks",
     lessons: 41,
-    price: CERTIFICATE_FEE,
+    price: 0,
     certificationFee: CERTIFICATE_FEE,
-    freeTrialDays: ACE1_FREE_DAYS,
+    freeTrialDays: ACE1_TRIAL_DAYS,
     monthlyFee: MONTHLY_SUBSCRIPTION,
     image: "https://pub-e001eb4506b145aa938b5d3badbff6a5.r2.dev/attachments/520eex3l9y7mr3n4el5xk",
     category: "Strategy",

@@ -18,8 +18,10 @@ import {
   FileSearch,
   LayoutDashboard,
   Radio,
+  Lock,
 } from "lucide-react-native";
 import { useSubscription } from "@/contexts/SubscriptionContext";
+import { TRIAL_LETTERS_LOCKED_CAPTION } from "@/constants/trial-access";
 
 // ============================================================
 // AgentProfileCard — the "agent console" on the Overview tab.
@@ -73,6 +75,8 @@ export interface AgentProfileCardProps {
   onOpenNegativeAccountsDashboard?: () => void;
   /** Whether the current user is an ACE-1 student (controls action button visibility) */
   isACE1?: boolean;
+  /** Tapped when a trial member selects the locked Credit Repair Tool. */
+  onLockedLetterLibrary?: () => void;
 }
 
 // ============================================================
@@ -89,8 +93,9 @@ export default function AgentProfileCard({
   onOpenCreditSummary,
   onOpenNegativeAccountsDashboard,
   isACE1 = true,
+  onLockedLetterLibrary,
 }: AgentProfileCardProps) {
-  const { tier } = useSubscription();
+  const { tier, canAccessLetterLibrary, isInTrial } = useSubscription();
 
   const formattedDate = assignedAt
     ? new Date(assignedAt).toLocaleDateString("en-US", {
@@ -140,10 +145,16 @@ export default function AgentProfileCard({
     {
       id: "credit-repair",
       label: "Credit Repair Tool",
-      description: "Generate FCRA & FDCPA letters",
-      icon: FileText,
+      // The full letter library is what the subscription sells, so during the
+      // trial this row stays visible but locked - hiding it entirely would
+      // leave the student unaware of what they are subscribing for.
+      description: canAccessLetterLibrary
+        ? "Generate FCRA & FDCPA letters"
+        : TRIAL_LETTERS_LOCKED_CAPTION,
+      icon: canAccessLetterLibrary ? FileText : Lock,
       color: "#F472B6",
-      onPress: onOpenCreditRepair,
+      locked: !canAccessLetterLibrary,
+      onPress: canAccessLetterLibrary ? onOpenCreditRepair : onLockedLetterLibrary,
     },
     {
       id: "dispute-tracker",
@@ -260,18 +271,25 @@ export default function AgentProfileCard({
                 accessibilityRole="button"
                 accessibilityLabel={action.label}
                 accessibilityHint={action.description}
+                accessibilityState={{ disabled: !!action.locked }}
                 activeOpacity={0.75}
               >
                 <View
                   style={[
                     styles.actionIconWrap,
-                    { borderColor: `${action.color}66`, backgroundColor: `${action.color}1F` },
+                    action.locked
+                      ? styles.actionIconWrapLocked
+                      : { borderColor: `${action.color}66`, backgroundColor: `${action.color}1F` },
                   ]}
                 >
-                  <Icon size={18} color={action.color} />
+                  <Icon size={18} color={action.locked ? CONSOLE_MUTED : action.color} />
                 </View>
                 <View style={styles.actionTextWrap}>
-                  <Text style={styles.actionLabel}>{action.label}</Text>
+                  <Text
+                    style={[styles.actionLabel, action.locked && styles.actionLabelLocked]}
+                  >
+                    {action.label}
+                  </Text>
                   <Text style={styles.actionDescription} numberOfLines={1}>
                     {action.description}
                   </Text>
@@ -509,10 +527,17 @@ const styles = StyleSheet.create({
   actionTextWrap: {
     flex: 1,
   },
+  actionIconWrapLocked: {
+    borderColor: "rgba(148,163,184,0.35)",
+    backgroundColor: "rgba(148,163,184,0.12)",
+  },
   actionLabel: {
     fontSize: 14,
     fontWeight: "700",
     color: CONSOLE_TEXT,
+  },
+  actionLabelLocked: {
+    color: CONSOLE_MUTED,
   },
   actionDescription: {
     fontSize: 11,

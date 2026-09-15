@@ -7,6 +7,7 @@ import {
   buildScopeInstruction,
   deriveAgentScope,
 } from "@/constants/agent-access";
+import { TRIAL_AGENT_LETTER_CLAUSE } from "@/constants/trial-access";
 // Server-only client: bypasses RLS when SUPABASE_SERVICE_ROLE_KEY is set,
 // and transparently falls back to the anon client when it isn't. Aliased to
 // `supabase` so every query below reads naturally.
@@ -1161,12 +1162,74 @@ async function fetchEnrolledCourseIds(userId: string): Promise<string[] | null> 
   }
 }
 
+/**
+ * Whether this user has actually paid the ACE-1 certificate fee.
+ *
+ * A trial member is already `ace1_student`, so the tier cannot answer this.
+ * Returns null when the store is unreachable, so callers can tell "has not
+ * paid" apart from "could not find out".
+ */
+async function fetchCertificatePaid(userId: string): Promise<boolean | null> {
+  const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
+  const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
+  const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
+
+  if (!endpoint || !namespace || !token) return null;
+
+  try {
+    const response = await fetch(`${endpoint}/sql`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        "surreal-ns": namespace,
+        "surreal-db": "app",
+      },
+      body: JSON.stringify({
+        query: `SELECT tier, certificatePaid FROM subscriptions WHERE userId = '${userId.replace(/'/g, "")}' AND status = 'active'`,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error("[AI Agents] Certificate lookup failed:", response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    const rows = data?.[0]?.result;
+    if (!Array.isArray(rows)) return null;
+
+    // A CSO affiliate is a paid state by definition; otherwise the flag on
+    // the subscription record decides.
+    //
+    // An ABSENT flag means a legacy subscription, created back when the
+    // certificate fee was charged up front at enrollment - those students
+    // have already paid, so absence must not collapse into "trial" or the
+    // change would retroactively confiscate the library they bought. Only an
+    // explicit `false` (written at sign-up under the new model) is a trial.
+    return rows.some(
+      (r: { tier?: string; certificatePaid?: boolean }) =>
+        r?.tier === "cso_affiliate" || r?.certificatePaid !== false
+    );
+  } catch (error) {
+    console.error("[AI Agents] Certificate lookup error:", error);
+    return null;
+  }
+}
+
 async function callAIBackend(params: {
   messages: { role: string; content: string }[];
   agentName: string;
   agentBio: string;
   /** Subject areas this student's purchases entitle them to discuss. */
   scope: AgentScope;
+  /**
+   * Whether the full dispute-letter library is unlocked (certificate paid).
+   *
+   * False for trial members: they keep the agent and the report analysis,
+   * but the letter-drafting tool is withheld entirely.
+   */
+  lettersUnlocked: boolean;
   equifaxReport?: {
     fetchedAt: string;
     totalAccounts: number;
@@ -1314,6 +1377,14 @@ IMPORTANT DISPUTE GUIDANCE:
   // Subject restrictions, appended last so they are the final word.
   systemMessage += buildScopeInstruction(params.scope);
 
+  // Trial members keep the agent but not the letter library. The clause is
+  // paired with physically removing the tool below - wording alone would be
+  // talked around, and the tool alone would leave the agent confused about
+  // why it cannot do something it was just asked for.
+  if (!params.lettersUnlocked) {
+    systemMessage += `\n\n${TRIAL_AGENT_LETTER_CLAUSE}`;
+  }
+
   // Cap each history message so an entire credit-report analysis in an old
   // chat message can't balloon every future request toward the token-per-
   // minute limit. ~4,000 chars ≈ 1,000 tokens; 10 history messages ≈ 10k tokens.
@@ -1407,9 +1478,17 @@ IMPORTANT DISPUTE GUIDANCE:
     "analyze_credit_report",
     "open_credit_report_upload",
   ]);
-  const tools = params.scope.unrestricted || params.scope.topics.includes("credit_repair")
+  const scopedTools = params.scope.unrestricted || params.scope.topics.includes("credit_repair")
     ? allTools
     : allTools.filter((t) => !disputeTools.has(t.function.name));
+
+  // Withhold letter DRAFTING from trial members, while deliberately leaving
+  // `analyze_credit_report` in place: the analysis is the one route to a
+  // letter that stays open during the trial, and it yields a single
+  // recommended letter rather than the whole library.
+  const tools = params.lettersUnlocked
+    ? scopedTools
+    : scopedTools.filter((t) => t.function.name !== "generate_dispute_letter");
 
   // If no API key, return a fallback response (demo mode)
   if (!apiKey) {
@@ -2027,6 +2106,24 @@ export const aiAgentsRouter = createTRPCRouter({
           ? deriveAgentScope(enrolledCourseIds)
           : deriveAgentScope(input.enrolledCourseIds ?? []);
 
+      // Whether the dispute-letter library is unlocked, resolved server-side
+      // for the same reason as scope: a client-supplied flag would let anyone
+      // unlock the paid deliverable by editing one request.
+      //
+      // On an outage this stays LOCKED. Scope degrades open (so a paying
+      // student isn't silenced mid-conversation), but letters degrade closed
+      // — wrongly withholding a letter is recoverable, wrongly handing over
+      // the product that the subscription sells is not.
+      const certificatePaid = await fetchCertificatePaid(input.userId);
+      const lettersUnlocked = certificatePaid === true;
+
+      console.log(
+        "[AI Agents] Letter library for",
+        input.userId,
+        lettersUnlocked ? "unlocked (certificate paid)" : "locked (trial or unpaid)",
+        certificatePaid === null ? "- lookup unavailable, failing closed" : ""
+      );
+
       console.log(
         "[AI Agents] Scope for",
         input.userId,
@@ -2049,6 +2146,7 @@ export const aiAgentsRouter = createTRPCRouter({
         agentName,
         agentBio,
         scope,
+        lettersUnlocked,
         equifaxReport: input.equifaxReport,
         disputes: userDisputes,
         userId: input.userId,
