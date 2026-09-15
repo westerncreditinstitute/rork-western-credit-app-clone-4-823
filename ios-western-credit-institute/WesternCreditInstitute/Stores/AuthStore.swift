@@ -42,6 +42,7 @@ final class AuthStore {
     private(set) var shouldPresentUpgradeOffer = false
 
     private let service = AuthService.shared
+    private let directService = DirectAuthService.shared
     private let sessionStore = AuthSessionStore.shared
 
     init() {
@@ -75,6 +76,29 @@ final class AuthStore {
             adopt(account)
             return true
         } catch {
+            // The API tier is unreachable. The database lives on a different
+            // host and is usually still healthy, so verify the password there
+            // directly before telling the user to come back later.
+            if let clientError = error as? TRPCClientError,
+               clientError.isTransportFailure,
+               directService.isAvailable {
+                switch await directService.login(email: email, password: password) {
+                case .success(let account):
+                    adopt(account)
+                    print("[Auth] Signed in via direct database fallback")
+                    return true
+
+                case .invalidCredentials:
+                    // The database answered and said no. That is a real
+                    // rejection, so report it as one rather than the network.
+                    errorMessage = "Invalid email or password. Please try again."
+                    return false
+
+                case .unavailable(let reason):
+                    print("[Auth] Direct fallback unavailable: \(reason)")
+                }
+            }
+
             errorMessage = Self.message(for: error, action: .signIn)
             return false
         }

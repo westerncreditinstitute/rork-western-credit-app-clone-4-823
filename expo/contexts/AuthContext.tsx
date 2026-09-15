@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { TRPCClientError } from '@trpc/client';
 import { trpcClient, isTransportErrorMessage } from '@/lib/trpc';
 import { isSupabaseConfigured } from '@/lib/supabase';
+import { loginDirect, DIRECT_AUTH_AVAILABLE } from '@/lib/direct-auth';
 
 function extractErrorMessage(error: unknown): string {
   if (error instanceof TRPCClientError) {
@@ -339,15 +340,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch (backendError) {
         const backendErrorMessage = extractErrorMessage(backendError);
 
-        // Server unreachable: a demo fallback would mint a brand-new random id,
-        // and every per-user storage key (tier, progress, enrolments) is
-        // namespaced by that id - so "logging in" offline would silently hide
-        // the real account's data behind an empty one. Retrying is correct.
+        // The API tier is unreachable. The database lives on a different host
+        // and is usually still healthy, so verify the password there directly
+        // before telling the user to come back later.
+        //
+        // A demo/offline fallback is NOT an option here: it would mint a
+        // brand-new random id, and every per-user storage key (tier, progress,
+        // enrolments) is namespaced by that id - so "logging in" offline would
+        // silently hide the real account's data behind an empty one. The direct
+        // path returns the real row, so the session id stays correct.
         if (isNetworkFailure(backendErrorMessage)) {
           console.warn(
-            '[Auth] Login could not reach the server, asking user to retry:',
+            '[Auth] Login could not reach the API, trying the database directly:',
             backendErrorMessage,
           );
+
+          if (DIRECT_AUTH_AVAILABLE) {
+            const direct = await loginDirect(email, password);
+
+            if (direct.status === 'success') {
+              await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(direct.user));
+              setUser(direct.user);
+              setIsAuthenticated(true);
+              console.log('[Auth] Signed in via direct database fallback:', direct.user.email);
+              return { success: true, user: direct.user };
+            }
+
+            // The database answered and said no. That is a real rejection, so
+            // report it as one rather than blaming the network.
+            if (direct.status === 'invalid_credentials') {
+              console.warn('[Auth] Direct fallback rejected the credentials');
+              return {
+                success: false,
+                error: 'Invalid email or password. Please try again.',
+              };
+            }
+
+            console.warn('[Auth] Direct fallback unavailable:', direct.reason);
+          }
+
           return {
             success: false,
             error:
@@ -369,6 +400,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (isNetworkFailure(rawMessage)) {
         console.warn('[Auth] Login transport failure:', rawMessage);
+
+        // Same reasoning as the inner handler: the database is a separate host
+        // and may still be able to verify this password.
+        if (DIRECT_AUTH_AVAILABLE) {
+          const direct = await loginDirect(email, password);
+
+          if (direct.status === 'success') {
+            await AsyncStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(direct.user));
+            setUser(direct.user);
+            setIsAuthenticated(true);
+            console.log('[Auth] Signed in via direct database fallback:', direct.user.email);
+            return { success: true, user: direct.user };
+          }
+
+          if (direct.status === 'invalid_credentials') {
+            return {
+              success: false,
+              error: 'Invalid email or password. Please try again.',
+            };
+          }
+
+          console.warn('[Auth] Direct fallback unavailable:', direct.reason);
+        }
+
         return {
           success: false,
           error:
