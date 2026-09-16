@@ -38,7 +38,6 @@ interface MenuItem {
   requiresACE1?: boolean;
   /** Interactive Coach: sold with ACE-2, ACE-3 and the ACE-4 bundle. */
   requiresCoachAccess?: boolean;
-  requiresAdmin?: boolean;
   /** Label shown on the LOCKED badge, e.g. "ACE-2+". */
   lockedLabel?: string;
 }
@@ -56,8 +55,6 @@ export default function MoreScreen() {
 
   const isACE1 =
     unlockForTesting || tier === "ace1_student" || tier === "cso_affiliate";
-  const isAdmin =
-    unlockForTesting || user?.role === "CSO" || user?.role === "Affiliate";
   const coachUnlocked = unlockForTesting || canAccessInteractiveCoach;
 
   // ============================================================
@@ -167,18 +164,21 @@ export default function MoreScreen() {
       : []),
   ];
 
-  const adminTools: MenuItem[] = isAdmin
-    ? [
-        {
-          id: "admin",
-          label: "Admin Panel",
-          description: "Manage users, courses, and platform settings",
-          icon: <Settings color={Colors.primary} size={24} />,
-          route: "/(tabs)/admin",
-          requiresAdmin: true,
-        },
-      ]
-    : [];
+  // The Admin row is always listed because the Admin screen guards itself with
+  // its own password login (`AdminLoginScreen`), which is the real access
+  // control. Hiding the row by account role only removed the way IN: role is
+  // currently "Student" for every signed-in account, so the gate hid the panel
+  // from everyone, including real admins. This also matches the iOS app, where
+  // the Admin row is unconditional.
+  const adminTools: MenuItem[] = [
+    {
+      id: "admin",
+      label: "Admin Panel",
+      description: "Manage users, courses, and platform settings",
+      icon: <Settings color={Colors.primary} size={24} />,
+      route: "/(tabs)/admin",
+    },
+  ];
 
   // ============================================================
   // Render
