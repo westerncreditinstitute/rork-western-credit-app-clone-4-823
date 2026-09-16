@@ -19,7 +19,12 @@ import { AppState, type AppStateStatus } from "react-native";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
-import { trpc, trpcClient } from "@/lib/trpc";
+import {
+  trpc,
+  trpcClient,
+  subscribeToConnection,
+  getConnectionState,
+} from "@/lib/trpc";
 
 // ============================================================
 // Types
@@ -316,6 +321,25 @@ export function useAgentChat({
       clearInterval(timer);
       subscription.remove();
     };
+  }, [isActive, connection, pollOnce]);
+
+  // ── Auto-recover the moment the shared transport comes back ─────
+  //
+  // The regular fallback poll above already retries every few seconds, but
+  // while the app-wide circuit breaker (lib/trpc.ts) is open it fails fast
+  // without even trying the network - so this chat could sit in "offline"
+  // for the length of a whole cooldown window after the server has already
+  // recovered. Reacting to the shared connection state closes that gap: the
+  // instant any request elsewhere in the app proves the server is back, this
+  // chat re-polls immediately instead of waiting out its own next tick.
+  useEffect(() => {
+    if (!isActive) return;
+
+    return subscribeToConnection(() => {
+      if (getConnectionState() === "online" && connection === "offline") {
+        void pollOnce();
+      }
+    });
   }, [isActive, connection, pollOnce]);
 
   // ── Sending ─────────────────────────────────────────────────

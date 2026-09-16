@@ -31,7 +31,13 @@ import Colors from "@/constants/colors";
 import { useUser } from "@/contexts/UserContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useDisputes } from "@/contexts/DisputesContext";
-import { trpc, isTransportErrorMessage } from "@/lib/trpc";
+import {
+  trpc,
+  isTransportErrorMessage,
+  warmUpApi,
+  subscribeToConnection,
+  getConnectionState,
+} from "@/lib/trpc";
 import { AGENT_NOT_INCLUDED_MESSAGE, agentScopeLabel } from "@/constants/agent-access";
 import {
   TRIAL_LETTERS_LOCKED_MESSAGE,
@@ -242,12 +248,76 @@ function MyAgentScreenInner({
     assignAgentMutation.error?.message,
   ]);
 
+  // ── Connectivity: warm up on open, auto-recover once reachable ──────
+  //
+  // "Can't reach the server right now" on this tab is almost always the
+  // Rork-hosted backend cold-starting (it sleeps after inactivity and takes
+  // a few seconds to answer its first request). Two gaps used to turn that
+  // few-second blip into a stuck error screen:
+  //
+  //   1. The FIRST request this tab makes (`getMyAgent`) was the one that
+  //      paid the full cold-start cost, with no warm-up beforehand.
+  //   2. Once the transport circuit breaker tripped, nothing on this screen
+  //      ever re-checked - the user was stuck on the error view until they
+  //      manually tapped "Try Again", even seconds after the server had
+  //      already woken back up.
+  //
+  // Fixing both: ping the API as soon as the tab mounts (cheap, harmless if
+  // it's already awake), and subscribe to the shared connection state so the
+  // moment ANY request proves the server is back, this screen refetches on
+  // its own.
+  useEffect(() => {
+    if (!userId || !isACE1) return;
+    void warmUpApi(3);
+  }, [userId, isACE1]);
+
+  useEffect(() => {
+    if (!userId || !isACE1) return;
+
+    const unsubscribe = subscribeToConnection(() => {
+      if (getConnectionState() !== "online") return;
+
+      // The server just proved it's reachable again. If this tab is still
+      // sitting on a transport-caused error (not a real setup problem),
+      // retry on its own instead of waiting for a manual tap.
+      const stuckOnTransportError =
+        (myAgentQuery.isError &&
+          isTransportErrorMessage(myAgentQuery.error?.message)) ||
+        (assignAgentMutation.isError &&
+          isTransportErrorMessage(assignAgentMutation.error?.message));
+
+      if (stuckOnTransportError) {
+        console.log("[MyAgent] Server reachable again — auto-retrying");
+        assignAgentMutation.reset();
+        myAgentQuery.refetch();
+      }
+    });
+
+    return unsubscribe;
+  }, [userId, isACE1, myAgentQuery, assignAgentMutation]);
+
   // ── Derived agent state ───────────────────────────────────────
   const agent = myAgentQuery.data?.agent as AgentInfo | undefined;
   const assignment = myAgentQuery.data?.assignment;
   const isAssigning =
     assignAgentMutation.isPending ||
     (myAgentQuery.isLoading && !myAgentQuery.data);
+
+  /**
+   * True ONLY while the `assign` mutation is actually creating a brand-new
+   * assignment - i.e. `getMyAgent` has already resolved and confirmed this
+   * user has no agent yet.
+   *
+   * `isAssigning` above also covers the very first `getMyAgent` fetch on
+   * every cold app launch, which is ambiguous: at that point we don't yet
+   * know whether this is a new user or one who was assigned an agent weeks
+   * ago. That fetch is a normal, quick lookup for a returning user, not a
+   * search through the agent pool - so the "matching you with one of
+   * 10,000 agents" copy must never show for it. It is reserved for the one
+   * moment that copy is actually true: a genuinely new assignment is being
+   * created.
+   */
+  const isCreatingNewAssignment = assignAgentMutation.isPending;
 
   /**
    * Work out WHY there is no agent, instead of guessing.
@@ -556,10 +626,13 @@ function MyAgentScreenInner({
           </View>
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={Colors.primary} />
-            <Text style={styles.loadingTitle}>Assigning Your AI Agent...</Text>
+            <Text style={styles.loadingTitle}>
+              {isCreatingNewAssignment ? "Assigning Your AI Agent..." : "Loading Your Agent..."}
+            </Text>
             <Text style={styles.loadingDesc}>
-              We&apos;re matching you with one of 10,000 specialized AI Credit Repair
-              Agents. This only takes a moment.
+              {isCreatingNewAssignment
+                ? "We\u2019re matching you with one of 10,000 specialized AI Credit Repair Agents. This only takes a moment."
+                : "Reconnecting you with your AI Credit Repair Agent. This only takes a moment."}
             </Text>
           </View>
         </View>

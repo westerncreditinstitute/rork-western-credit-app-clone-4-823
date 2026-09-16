@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ import { useSubscription } from '@/contexts/SubscriptionContext';
 import { REFERRAL_ACE1_FREE, formatPrice } from '@/constants/pricing';
 import { markUpgradeOfferPending } from '@/lib/upgrade-offer';
 import { useRouter } from 'expo-router';
+import { warmUpApi } from '@/lib/trpc';
 
 const { width, height } = Dimensions.get('window');
 
@@ -42,6 +43,18 @@ export default function RegisterScreen() {
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
+
+  // Pre-warm the backend as soon as this screen mounts. Login/register are
+  // the very first authenticated requests a session makes, so if the API
+  // host is cold-starting there's normally no head start at all — the user
+  // types their credentials, taps submit, and only then does the wake-up
+  // clock start ticking. Firing a harmless warm-up ping now overlaps that
+  // wake-up time with the time the user spends typing, so by the time they
+  // submit, the real request has a much better chance of hitting an already
+  // -awake host (and the fail-fast login path in lib/trpc.ts covers the rest).
+  useEffect(() => {
+    void warmUpApi(3);
+  }, []);
 
   React.useEffect(() => {
     Animated.parallel([
