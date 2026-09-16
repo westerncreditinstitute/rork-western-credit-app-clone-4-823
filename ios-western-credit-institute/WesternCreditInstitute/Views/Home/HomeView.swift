@@ -110,14 +110,14 @@ struct HomeView: View {
             }
             .clipShape(.rect(bottomLeadingRadius: Radius.xxl, bottomTrailingRadius: Radius.xxl))
 
-            VStack(spacing: Spacing.md) {
+            VStack(spacing: Spacing.sm) {
                 brandingRow
                 welcomeRow
                 if store.isPremium { statsRow }
             }
             .padding(.horizontal, Spacing.md)
-            .padding(.top, 56)
-            .padding(.bottom, Spacing.lg)
+            .padding(.top, 50)
+            .padding(.bottom, Spacing.md)
         }
         .fixedSize(horizontal: false, vertical: true)
     }
@@ -125,15 +125,15 @@ struct HomeView: View {
     private var brandingRow: some View {
         HStack(spacing: Spacing.sm) {
             Image(systemName: "graduationcap.fill")
-                .font(.system(size: 19, weight: .semibold))
+                .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(.white)
-                .frame(width: 40, height: 40)
+                .frame(width: 32, height: 32)
                 .background(Color.white.opacity(0.16))
                 .clipShape(.rect(cornerRadius: Radius.md))
 
             VStack(alignment: .leading, spacing: 1) {
                 Text("Western Credit Institute")
-                    .font(.system(size: 16, weight: .heavy))
+                    .font(.system(size: 15, weight: .heavy))
                     .foregroundStyle(.white)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
@@ -149,9 +149,9 @@ struct HomeView: View {
                 showNotifications = true
             } label: {
                 Image(systemName: "bell.fill")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(.white)
-                    .frame(width: 40, height: 40)
+                    .frame(width: 34, height: 34)
                     .background(Color.white.opacity(0.14))
                     .clipShape(.circle)
                     .overlay(alignment: .topTrailing) {
@@ -179,16 +179,16 @@ struct HomeView: View {
             AvatarView(
                 urlString: store.user.avatarURL,
                 initials: store.user.initials,
-                size: 58,
+                size: 40,
                 borderColor: Color.white.opacity(0.25)
             )
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text("Welcome back,")
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(Color.white.opacity(0.72))
                 Text(store.user.firstName)
-                    .font(.system(size: 26, weight: .heavy))
+                    .font(.system(size: 19, weight: .heavy))
                     .foregroundStyle(.white)
             }
 
@@ -204,8 +204,8 @@ struct HomeView: View {
                         Text("Upgrade").font(.system(size: 13, weight: .bold))
                     }
                     .foregroundStyle(Color(hex: "#001F42"))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
                     .background(Color(hex: "#FBBF24"))
                     .clipShape(.capsule)
                 }
@@ -227,7 +227,7 @@ struct HomeView: View {
             divider
             statItem(symbol: "person.2.fill", tint: Color(hex: "#60A5FA"), value: "\(store.user.referrals)", label: "Referrals")
         }
-        .padding(.vertical, Spacing.md)
+        .padding(.vertical, Spacing.sm)
         .padding(.horizontal, Spacing.sm)
         .background(Color.white.opacity(0.09))
         .clipShape(.rect(cornerRadius: Radius.lg))
@@ -241,26 +241,26 @@ struct HomeView: View {
     private var divider: some View {
         Rectangle()
             .fill(Color.white.opacity(0.14))
-            .frame(width: 1, height: 34)
+            .frame(width: 1, height: 26)
     }
 
     private func statItem(symbol: String, tint: Color, value: String, label: String) -> some View {
         HStack(spacing: Spacing.sm) {
             Image(systemName: symbol)
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(tint)
-                .frame(width: 30, height: 30)
+                .frame(width: 24, height: 24)
                 .background(Color.white.opacity(0.12))
                 .clipShape(.circle)
 
             VStack(alignment: .leading, spacing: 0) {
                 Text(value)
-                    .font(.system(size: 15, weight: .heavy))
+                    .font(.system(size: 13, weight: .heavy))
                     .foregroundStyle(.white)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
                 Text(label)
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: 9, weight: .medium))
                     .foregroundStyle(Color.white.opacity(0.6))
             }
         }

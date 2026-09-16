@@ -13,7 +13,6 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import * as Haptics from "expo-haptics";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   Bell,
   BookOpen,
@@ -77,7 +76,6 @@ export default function HomeScreen() {
   const { user } = useUser();
   const { user: authUser } = useAuth();
   const isGameAdmin = authUser?.role?.toLowerCase() === "admin";
-  const insets = useSafeAreaInsets();
   
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
@@ -224,9 +222,16 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
+      >
+      {/* The hero header lives INSIDE the scroll so it moves off-screen as you
+          scroll down — the navigator's logo bar is the only fixed chrome. */}
       <LinearGradient
         colors={isDark ? ['#0F172A', '#1E293B'] as [string, string] : ['#001F42', '#003D82'] as [string, string]}
-        style={[styles.header, { paddingTop: insets.top + 12 }]}
+        style={styles.header}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
       >
@@ -251,7 +256,7 @@ export default function HomeScreen() {
         >
           <View style={styles.logoContainer}>
             <View style={styles.logoIconWrap}>
-              <GraduationCap color="#FFFFFF" size={22} />
+              <GraduationCap color="#FFFFFF" size={18} />
             </View>
             <View style={styles.brandTextContainer}>
               <Text style={styles.brandTitle}>Western Credit Institute</Text>
@@ -266,7 +271,7 @@ export default function HomeScreen() {
                 router.push("/notifications" as any);
               }}
             >
-              <Bell color="#FFFFFF" size={20} />
+              <Bell color="#FFFFFF" size={17} />
               {unreadNotifications > 0 && (
                 <View style={styles.badge}>
                   <Text style={styles.badgeText}>{unreadNotifications}</Text>
@@ -283,7 +288,7 @@ export default function HomeScreen() {
           ]}
         >
           <View style={styles.welcomeRow}>
-            <Avatar source={user.avatar} size="lg" showBorder borderColor="rgba(255,255,255,0.25)" />
+            <Avatar source={user.avatar} size="sm" showBorder borderColor="rgba(255,255,255,0.25)" />
             <View style={styles.welcomeText}>
               <Text style={styles.greeting}>Welcome back,</Text>
               <Text style={styles.userName}>{user.name.split(" ")[0]}</Text>
@@ -293,7 +298,7 @@ export default function HomeScreen() {
                 style={styles.freeBadge}
                 onPress={() => router.push("/subscription-plans" as any)}
               >
-                <Crown size={14} color="#001F42" />
+                <Crown size={12} color="#001F42" />
                 <Text style={styles.freeBadgeText}>Upgrade</Text>
               </TouchableOpacity>
             )}
@@ -304,7 +309,7 @@ export default function HomeScreen() {
           <Animated.View style={[styles.statsRow, { opacity: fadeAnim }]}>
             <View style={styles.statItem}>
               <View style={styles.statIconWrap}>
-                <Award color="#10B981" size={18} />
+                <Award color="#10B981" size={14} />
               </View>
               <View>
                 <Text style={styles.statValue}>{user.coursesCompleted}</Text>
@@ -314,7 +319,7 @@ export default function HomeScreen() {
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
               <View style={styles.statIconWrap}>
-                <TrendingUp color="#10B981" size={18} />
+                <TrendingUp color="#10B981" size={14} />
               </View>
               <View>
                 <Text style={styles.statValue}>${user.totalEarnings.toLocaleString()}</Text>
@@ -324,7 +329,7 @@ export default function HomeScreen() {
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
               <View style={styles.statIconWrap}>
-                <Users color="#60A5FA" size={18} />
+                <Users color="#60A5FA" size={14} />
               </View>
               <View>
                 <Text style={styles.statValue}>{user.referrals}</Text>
@@ -335,11 +340,6 @@ export default function HomeScreen() {
         )}
       </LinearGradient>
 
-      <ScrollView
-        style={styles.content}
-        contentContainerStyle={styles.contentContainer}
-        showsVerticalScrollIndicator={false}
-      >
         <View style={styles.quickActionsGrid}>
           {quickActions.map((action, index) => {
             const IconComponent = action.icon;
@@ -823,10 +823,11 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     backgroundColor: colors.background,
   },
   header: {
-    paddingHorizontal: 20,
-    paddingBottom: 24,
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 14,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
     overflow: "hidden" as const,
   },
   headerPattern: {
@@ -838,26 +839,26 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   patternCircle: {
     position: "absolute" as const,
-    width: 200,
-    height: 200,
-    borderRadius: 100,
+    width: 150,
+    height: 150,
+    borderRadius: 75,
     backgroundColor: "#FFFFFF",
   },
   brandingContainer: {
     flexDirection: "row" as const,
     justifyContent: "space-between" as const,
     alignItems: "center" as const,
-    marginBottom: 20,
+    marginBottom: 12,
   },
   logoContainer: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
-    gap: 12,
+    gap: 10,
   },
   logoIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 10,
     backgroundColor: "rgba(16, 185, 129, 0.9)",
     alignItems: "center" as const,
     justifyContent: "center" as const,
@@ -871,42 +872,42 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     flexDirection: "column" as const,
   },
   brandTitle: {
-    fontSize: 20,
+    fontSize: 15,
     fontWeight: "800" as const,
     color: "#FFFFFF",
     letterSpacing: -0.3,
   },
   brandSubtitle: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: "600" as const,
     color: "#10B981",
     letterSpacing: 0.5,
-    marginTop: 2,
+    marginTop: 1,
     textTransform: "uppercase" as const,
   },
   headerActions: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
-    gap: 12,
+    gap: 8,
   },
   welcomeContainer: {
-    marginBottom: 16,
+    marginBottom: 12,
   },
   welcomeRow: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
-    gap: 14,
+    gap: 10,
   },
   welcomeText: {
     flex: 1,
   },
   greeting: {
-    fontSize: 13,
+    fontSize: 11,
     color: "rgba(255,255,255,0.65)",
-    marginBottom: 2,
+    marginBottom: 1,
   },
   userName: {
-    fontSize: 22,
+    fontSize: 17,
     fontWeight: "700" as const,
     color: "#FFFFFF",
     letterSpacing: -0.3,
@@ -915,10 +916,10 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     flexDirection: "row" as const,
     alignItems: "center" as const,
     backgroundColor: "#F59E0B",
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 16,
+    gap: 5,
     shadowColor: "#F59E0B",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
@@ -926,15 +927,15 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     elevation: 3,
   },
   freeBadgeText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700" as const,
     color: "#001F42",
   },
   notificationBtn: {
     position: "relative" as const,
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 34,
+    height: 34,
+    borderRadius: 10,
     backgroundColor: "rgba(255,255,255,0.12)",
     alignItems: "center" as const,
     justifyContent: "center" as const,
@@ -943,12 +944,12 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   badge: {
     position: "absolute" as const,
-    top: -4,
-    right: -4,
+    top: -3,
+    right: -3,
     backgroundColor: "#EF4444",
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
     justifyContent: "center" as const,
     alignItems: "center" as const,
     borderWidth: 2,
@@ -962,8 +963,9 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   statsRow: {
     flexDirection: "row" as const,
     backgroundColor: "rgba(255,255,255,0.08)",
-    borderRadius: 18,
-    padding: 16,
+    borderRadius: 14,
+    paddingVertical: 9,
+    paddingHorizontal: 10,
     justifyContent: "space-around" as const,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
@@ -971,23 +973,23 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   statItem: {
     flexDirection: "row" as const,
     alignItems: "center" as const,
-    gap: 10,
+    gap: 7,
   },
   statIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 26,
+    height: 26,
+    borderRadius: 8,
     backgroundColor: "rgba(255,255,255,0.12)",
     justifyContent: "center" as const,
     alignItems: "center" as const,
   },
   statValue: {
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: "700" as const,
     color: "#FFFFFF",
   },
   statLabel: {
-    fontSize: 10,
+    fontSize: 9,
     color: "rgba(255,255,255,0.55)",
     marginTop: 1,
     textTransform: "uppercase" as const,
@@ -1002,7 +1004,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
   },
   contentContainer: {
     padding: 20,
-    paddingTop: 24,
+    paddingTop: 14,
   },
   quickActionsGrid: {
     flexDirection: "row",
