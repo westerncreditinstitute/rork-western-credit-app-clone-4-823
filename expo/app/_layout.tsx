@@ -4,7 +4,7 @@ import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { StatusBar } from "expo-status-bar";
-import { View, ActivityIndicator, InteractionManager } from "react-native";
+import { View, ActivityIndicator } from "react-native";
 
 import { trpc, trpcClient } from "@/lib/trpc";
 import { ThemeProvider, useTheme } from "@/contexts/ThemeContext";
@@ -19,7 +19,19 @@ import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { useNotificationResponseRouter } from "@/hooks/useNotificationResponseRouter";
 import { testingService } from "@/services/TestingService";
 
-SplashScreen.preventAutoHideAsync();
+// Never let a rejected promise here escape: if the splash module is
+// unavailable (or auto-hide already ran) an unhandled rejection at module
+// scope can take down the whole JS bundle before the first screen mounts.
+SplashScreen.preventAutoHideAsync().catch(() => {});
+
+/**
+ * Hard ceiling on how long the splash screen may stay up.
+ *
+ * Hiding the splash must never depend on anything that can fail or stall -
+ * a held splash is indistinguishable from "the app won't open", even though
+ * the JS bundle is running perfectly behind it.
+ */
+const SPLASH_TIMEOUT_MS = 2000;
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -429,9 +441,26 @@ function RootLayoutNav() {
 
 export default function RootLayout() {
   useEffect(() => {
-    InteractionManager.runAfterInteractions(() => {
-      SplashScreen.hideAsync();
-    });
+    let hidden = false;
+    const hide = () => {
+      if (hidden) return;
+      hidden = true;
+      SplashScreen.hideAsync().catch(() => {});
+    };
+
+    // Previously this waited on InteractionManager.runAfterInteractions.
+    // That only runs once no interaction is active, and this app starts a
+    // number of never-ending Animated.loop animations (live feed pulse, sync
+    // pill, spinners). JS-driven loops keep an interaction outstanding for as
+    // long as they run, so the callback could simply never fire and the
+    // splash screen stayed up forever - the app looked frozen on launch while
+    // the bundle behind it was running fine.
+    //
+    // The first screen is ready as soon as this effect runs, so hide now and
+    // keep a timer purely as a belt-and-braces fallback.
+    hide();
+    const timer = setTimeout(hide, SPLASH_TIMEOUT_MS);
+    return () => clearTimeout(timer);
   }, []);
 
   return (
