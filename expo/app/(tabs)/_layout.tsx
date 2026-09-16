@@ -55,15 +55,16 @@ export default function TabLayout() {
         options={{ title: "My Agent", headerShown: false }}
       />
 
-      {/* Wallet, Earnings, Hire Pro and Admin remain routable but are reached
-          through the "More" tab so the bar stays readable on small screens. */}
+      {/* Wallet, Earnings, Hire Pro, Profile and Admin remain routable but are
+          reached through the "More" tab so the bar stays readable on small
+          screens. Deep links and in-app shortcuts to them keep working. */}
       <Tabs.Screen name="wallet" options={{ href: null }} />
       <Tabs.Screen name="earnings" options={{ href: null }} />
       <Tabs.Screen name="hire-pro" options={{ href: null }} />
-      <Tabs.Screen name="profile" options={{ title: "Profile" }} />
+      <Tabs.Screen name="profile" options={{ href: null }} />
       <Tabs.Screen name="admin" options={{ href: null }} />
 
-      {/* "More" — hosts Wallet, Earnings, Hire Pro, Admin and credit tools. */}
+      {/* "More" — hosts Wallet, Earnings, Hire Pro, Profile, Admin and tools. */}
       <Tabs.Screen name="more" options={{ title: "More" }} />
     </Tabs>
   );

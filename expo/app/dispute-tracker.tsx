@@ -62,6 +62,7 @@ export default function DisputeTrackerScreen() {
     disputes,
     analytics,
     isLoading,
+    isShowingCachedDisputes,
     createDispute,
     updateDispute,
     deleteDispute,
@@ -421,6 +422,26 @@ export default function DisputeTrackerScreen() {
           }
           contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
         >
+          {/* Shown only when the list below was restored from the device
+              because the server is unreachable. Without this the tracker
+              would look like an empty account during an outage. */}
+          {isShowingCachedDisputes ? (
+            <View style={styles.offlineBanner}>
+              <AlertCircle color={Colors.warning} size={18} />
+              <Text style={styles.offlineBannerText}>
+                Showing your saved disputes — reconnecting to the server.
+              </Text>
+              <TouchableOpacity
+                onPress={onRefresh}
+                accessibilityRole="button"
+                accessibilityLabel="Retry connecting to the server"
+                hitSlop={8}
+              >
+                <Text style={styles.offlineBannerAction}>Retry</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
           {/* Analytics Dashboard */}
           <View style={styles.analyticsCard}>
             <Text style={styles.analyticsTitle}>Dispute Analytics</Text>
@@ -1073,6 +1094,29 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: 16,
+  },
+  offlineBanner: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 10,
+    backgroundColor: Colors.warning + "1F",
+    borderLeftWidth: 3,
+    borderLeftColor: Colors.warning,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 16,
+  },
+  offlineBannerText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    color: Colors.text,
+  },
+  offlineBannerAction: {
+    fontSize: 13,
+    fontWeight: "700" as const,
+    color: Colors.primary,
   },
   analyticsCard: {
     backgroundColor: Colors.surface,

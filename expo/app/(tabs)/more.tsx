@@ -126,10 +126,17 @@ export default function MoreScreen() {
 
   const accountTools: MenuItem[] = [
     {
+      id: "profile",
+      label: "Profile",
+      description: "Your account, certificates and enrolled courses",
+      icon: <UserIcon color={Colors.primary} size={24} />,
+      route: "/(tabs)/profile",
+    },
+    {
       id: "personal-info",
       label: "Personal Information",
-      description: "Update your profile and contact details",
-      icon: <UserIcon color={Colors.primary} size={24} />,
+      description: "Update your contact details",
+      icon: <FileText color={Colors.primary} size={24} />,
       route: "/personal-info",
     },
     {

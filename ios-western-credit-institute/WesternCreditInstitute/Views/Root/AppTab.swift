@@ -8,9 +8,9 @@ import SwiftUI
 /// Every destination, each with its own vivid accent color and a filled/outline
 /// symbol pair for the selected and idle states.
 ///
-/// Only `barCases` appear in the tab bar; Wallet, Earnings, Hire Pro and Admin
-/// stay routable but are reached through the "More" tab so the bar stays
-/// readable on small screens.
+/// Only `barCases` appear in the tab bar; Wallet, Earnings, Hire Pro, Profile
+/// and Admin stay routable but are reached through the "More" tab so the bar
+/// stays readable on small screens.
 nonisolated enum AppTab: String, CaseIterable, Identifiable, Sendable {
     case home
     case courses
@@ -24,13 +24,13 @@ nonisolated enum AppTab: String, CaseIterable, Identifiable, Sendable {
 
     var id: String { rawValue }
 
-    /// The five destinations rendered in the floating tab bar.
-    static let barCases: [AppTab] = [.home, .courses, .myAgent, .profile, .more]
+    /// The four destinations rendered in the floating tab bar.
+    static let barCases: [AppTab] = [.home, .courses, .myAgent, .more]
 
     /// Destinations that live behind the "More" tab rather than in the bar.
     var isHostedInMore: Bool {
         switch self {
-        case .wallet, .earnings, .hirePro, .admin: return true
+        case .wallet, .earnings, .hirePro, .profile, .admin: return true
         default: return false
         }
     }

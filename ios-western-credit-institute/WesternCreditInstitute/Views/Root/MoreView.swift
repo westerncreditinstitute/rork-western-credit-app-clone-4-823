@@ -6,7 +6,8 @@
 import SwiftUI
 
 /// Hosts the destinations that no longer live in the tab bar — Wallet,
-/// Earnings, Hire Pro and Admin — mirroring the "More" tab on the native app.
+/// Earnings, Hire Pro, Profile and Admin — mirroring the "More" tab on the
+/// native app.
 struct MoreView: View {
     @Environment(ThemeManager.self) private var theme
     @Environment(AppStore.self) private var store
@@ -51,6 +52,19 @@ struct MoreView: View {
         ]
     }
 
+    private var accountItems: [MoreItem] {
+        [
+            MoreItem(
+                id: "profile",
+                tab: .profile,
+                symbol: "person.crop.circle.fill",
+                title: "Profile",
+                subtitle: "Your account, certificates and enrolled courses",
+                tint: AppTab.profile.activeColor
+            )
+        ]
+    }
+
     private var adminItems: [MoreItem] {
         [
             MoreItem(
@@ -72,6 +86,7 @@ struct MoreView: View {
                 header
 
                 group(title: "Financial", items: financialItems)
+                group(title: "Account", items: accountItems)
                 group(title: "Administration", items: adminItems)
 
                 Text("Western Credit Institute")

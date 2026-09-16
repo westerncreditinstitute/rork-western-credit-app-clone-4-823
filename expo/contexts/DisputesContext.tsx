@@ -2,6 +2,10 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import createContextHook from '@nkzw/create-context-hook';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { trpc, trpcClient } from '@/lib/trpc';
+import {
+  readCachedDisputes,
+  writeCachedDisputes,
+} from '@/lib/disputes-cache';
 import { useUser } from './UserContext';
 import { notificationService } from '@/services/NotificationService';
 import { useNotifications } from './NotificationContext';
@@ -113,6 +117,11 @@ export const [DisputesProvider, useDisputes] = createContextHook(() => {
   // user so alerts survive app restarts without re-firing.
   const sentAlertsRef = useRef<Set<string> | null>(null);
   const lastKnownStatusRef = useRef<Map<string, string>>(new Map());
+  // Disputes restored from the device while the network refresh runs. Keeps
+  // the tracker showing real records during an outage instead of collapsing
+  // to the "No Disputes Found" empty state, which reads as data loss.
+  const [cachedAnalytics, setCachedAnalytics] = useState<DisputeAnalytics | null>(null);
+  const [isShowingCachedDisputes, setIsShowingCachedDisputes] = useState(false);
 
   // Initialize testing mode on component mount
   useEffect(() => {
@@ -155,16 +164,54 @@ export const [DisputesProvider, useDisputes] = createContextHook(() => {
           setDisputes(testDisputes.map(testDisputeToDispute));
           setLastSyncedAt(Date.now());
         } else if (disputesQuery.data) {
-          // Load from Supabase in production mode
-          setDisputes(disputesQuery.data as Dispute[]);
+          // Load from Supabase in production mode. A server-confirmed list is
+          // authoritative, so it both replaces state and refreshes the cache.
+          const fetched = disputesQuery.data as Dispute[];
+          setDisputes(fetched);
           setLastSyncedAt(Date.now());
+          setIsShowingCachedDisputes(false);
+          setCachedAnalytics(null);
+          if (user?.id) {
+            await writeCachedDisputes(user.id, fetched, analyticsQuery.data ?? null);
+          }
         }
       } catch (error) {
         console.error('[DisputesContext] Error loading disputes:', error);
       }
     };
     loadDisputes();
-  }, [disputesQuery.data, isTestingMode, user?.id]);
+  }, [disputesQuery.data, analyticsQuery.data, isTestingMode, user?.id]);
+
+  // Restore the last-known list when the server can't be reached. Runs only
+  // while there is nothing on screen and no successful fetch has landed, so a
+  // real (possibly empty) server response always wins over the cache.
+  useEffect(() => {
+    const userId = user?.id;
+    if (!userId || isTestingMode) return;
+    if (disputesQuery.isSuccess || disputes.length > 0) return;
+    if (!disputesQuery.isError) return;
+
+    let active = true;
+    (async () => {
+      const cached = await readCachedDisputes<Dispute, DisputeAnalytics>(userId);
+      if (!active || !cached || cached.disputes.length === 0) return;
+
+      setDisputes(cached.disputes);
+      setCachedAnalytics(cached.analytics ?? null);
+      setLastSyncedAt(cached.savedAt);
+      setIsShowingCachedDisputes(true);
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [
+    user?.id,
+    isTestingMode,
+    disputesQuery.isError,
+    disputesQuery.isSuccess,
+    disputes.length,
+  ]);
 
   // ── Proactive dispute alerts ──────────────────────────────────
   // Whenever the dispute list is (re)loaded, check each dispute's 30-day
@@ -544,7 +591,10 @@ export const [DisputesProvider, useDisputes] = createContextHook(() => {
     }
   }, [addReminderMutation, disputesQuery]);
 
-  const analytics: DisputeAnalytics = analyticsQuery.data || {
+  // Server analytics win; the cached copy covers an outage; otherwise derive
+  // the counters from whatever list is on screen so the dashboard is never
+  // blank while real disputes are displayed beneath it.
+  const analytics: DisputeAnalytics = analyticsQuery.data || cachedAnalytics || {
     totalDisputes: disputes.length,
     resolvedDisputes: disputes.filter(d => d.status === 'resolved').length,
     rejectedDisputes: disputes.filter(d => d.status === 'rejected').length,
@@ -563,6 +613,12 @@ export const [DisputesProvider, useDisputes] = createContextHook(() => {
     isSyncing: isSyncing || disputesQuery.isRefetching,
     /** Epoch ms of the last successful server reconciliation, or null. */
     lastSyncedAt,
+    /**
+     * True when the list on screen was restored from the device because the
+     * server is unreachable. Lets the tracker say so instead of implying the
+     * disputes are gone.
+     */
+    isShowingCachedDisputes,
     createDispute,
     updateDispute,
     deleteDispute,
