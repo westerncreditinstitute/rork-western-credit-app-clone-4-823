@@ -26,6 +26,12 @@ final class MyAgentViewModel {
     private(set) var disputes: [DisputeSummaryRecord] = []
     private(set) var phase: Phase = .loading
 
+    /// True while the agent on screen came from the device cache rather than a
+    /// successful fetch - i.e. the server is unreachable but the assignment is
+    /// durable enough to keep working from. Drives the quiet "saved agent"
+    /// banner; cleared by the next good response.
+    private(set) var isShowingCachedAgent: Bool = false
+
     private let service = AIAgentService.shared
 
     init(userId: String) {
@@ -36,6 +42,7 @@ final class MyAgentViewModel {
             agent = cached.agent
             assignment = cached.assignment
             phase = .ready
+            isShowingCachedAgent = true
         }
     }
 
@@ -64,6 +71,7 @@ final class MyAgentViewModel {
                 phase = .failed(message: Self.message(for: error), isAtCapacity: Self.isCapacityError(error))
             } else {
                 phase = .ready
+                isShowingCachedAgent = true
             }
         }
 
@@ -123,6 +131,7 @@ final class MyAgentViewModel {
         agent = newAgent
         assignment = newAssignment
         phase = .ready
+        isShowingCachedAgent = false
         service.cacheAgent(
             MyAgentResponse(agent: newAgent, assignment: newAssignment),
             userId: userId

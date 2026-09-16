@@ -45,6 +45,12 @@ import {
 } from "@/constants/trial-access";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { useAgentChat, type TriggeredLetter } from "@/hooks/useAgentChat";
+import {
+  readCachedAgent,
+  writeCachedAgent,
+  clearCachedAgent,
+  type CachedAgent,
+} from "@/lib/agent-cache";
 
 import AgentProfileCard, {
   AgentInfo,
@@ -162,6 +168,41 @@ function MyAgentScreenInner({
   const [refreshing, setRefreshing] = useState(false);
 
   // ── Agent assignment & fetch ──────────────────────────────────
+  //
+  // The assignment is durable (one row per user, effectively permanent), so
+  // the last-known agent is cached on the device and painted immediately.
+  // Without it, any blip from the API host - it sleeps between sessions and
+  // cold starts slowly - left this tab with nothing to render and dropped
+  // the user on "Couldn't Reach Your Agent", even though their agent and
+  // their whole conversation were already on the phone. iOS has always
+  // cached this; Expo now matches.
+  const [cachedAgent, setCachedAgent] = useState<CachedAgent | null>(null);
+  const [cacheChecked, setCacheChecked] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    if (!userId) {
+      setCachedAgent(null);
+      setCacheChecked(true);
+      return;
+    }
+
+    setCacheChecked(false);
+    void readCachedAgent(userId).then((cached) => {
+      if (!active) return;
+      if (cached) {
+        console.log("[MyAgent] Painted from cached assignment");
+      }
+      setCachedAgent(cached);
+      setCacheChecked(true);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [userId]);
+
   // First, check if the user already has an agent assigned.
   const myAgentQuery = trpc.aiAgents.getMyAgent.useQuery(
     { userId },
@@ -172,6 +213,14 @@ function MyAgentScreenInner({
   const assignAgentMutation = trpc.aiAgents.assign.useMutation({
     onSuccess: (data) => {
       console.log("[MyAgent] Agent assigned:", data.agent?.agent_name);
+      if (data.agent) {
+        const fresh: CachedAgent = {
+          agent: data.agent as AgentInfo,
+          assignment: data.assignment ?? null,
+        };
+        setCachedAgent(fresh);
+        void writeCachedAgent(userId, fresh);
+      }
       myAgentQuery.refetch();
     },
     onError: (error) => {
@@ -296,12 +345,56 @@ function MyAgentScreenInner({
     return unsubscribe;
   }, [userId, isACE1, myAgentQuery, assignAgentMutation]);
 
+  // ── Keep the local copy in step with the server ───────────────
+  //
+  // Only a definitive answer updates the cache. A transport failure tells us
+  // nothing about whether the assignment still exists, so the stored agent is
+  // left untouched and keeps the tab usable; an explicit "no agent" (with no
+  // setup error) is authoritative and clears it.
+  useEffect(() => {
+    if (!userId || !myAgentQuery.isSuccess) return;
+
+    const fetched = myAgentQuery.data?.agent as AgentInfo | undefined;
+
+    if (fetched) {
+      const fresh: CachedAgent = {
+        agent: fetched,
+        assignment: myAgentQuery.data?.assignment ?? null,
+      };
+      setCachedAgent(fresh);
+      void writeCachedAgent(userId, fresh);
+      return;
+    }
+
+    if (!myAgentQuery.data?.setupError) {
+      setCachedAgent(null);
+      void clearCachedAgent(userId);
+    }
+  }, [
+    userId,
+    myAgentQuery.isSuccess,
+    myAgentQuery.data?.agent,
+    myAgentQuery.data?.assignment,
+    myAgentQuery.data?.setupError,
+  ]);
+
   // ── Derived agent state ───────────────────────────────────────
-  const agent = myAgentQuery.data?.agent as AgentInfo | undefined;
-  const assignment = myAgentQuery.data?.assignment;
+  //
+  // The cached assignment backs the live one, so an unreachable server
+  // degrades to "your agent, with a reconnecting banner" instead of a
+  // dead-end error screen.
+  const agent =
+    (myAgentQuery.data?.agent as AgentInfo | undefined) ?? cachedAgent?.agent;
+  const assignment = myAgentQuery.data?.assignment ?? cachedAgent?.assignment;
+
+  /** True when the agent on screen came from the device, not this fetch. */
+  const isShowingCachedAgent = !myAgentQuery.data?.agent && !!cachedAgent?.agent;
+
   const isAssigning =
-    assignAgentMutation.isPending ||
-    (myAgentQuery.isLoading && !myAgentQuery.data);
+    !agent &&
+    (assignAgentMutation.isPending ||
+      !cacheChecked ||
+      (myAgentQuery.isLoading && !myAgentQuery.data));
 
   /**
    * True ONLY while the `assign` mutation is actually creating a brand-new
@@ -830,6 +923,25 @@ function MyAgentScreenInner({
             </SegmentButton>
           </View>
         </View>
+
+        {/* Shown only when the server is unreachable and the agent on screen
+            came from the device. Explains itself rather than pretending the
+            connection is healthy, and clears itself on the next good fetch. */}
+        {isShowingCachedAgent ? (
+          <View style={styles.offlineBanner}>
+            <Text style={styles.offlineBannerText} numberOfLines={2}>
+              Showing your saved agent — reconnecting to the server.
+            </Text>
+            <TouchableOpacity
+              onPress={() => myAgentQuery.refetch()}
+              accessibilityRole="button"
+              accessibilityLabel="Retry connecting to the server"
+              hitSlop={8}
+            >
+              <Text style={styles.offlineBannerAction}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
 
         {/* ── Chat ─────────────────────────────────────────────── */}
         {view === "chat" ? (
@@ -1437,6 +1549,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
     paddingVertical: 32,
     gap: 16,
+  },
+  offlineBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: Colors.warningLight + "30",
+    borderLeftWidth: 3,
+    borderLeftColor: Colors.warning,
+  },
+  offlineBannerText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    color: Colors.text,
+  },
+  offlineBannerAction: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: Colors.primary,
   },
   errorHintBox: {
     width: "100%",

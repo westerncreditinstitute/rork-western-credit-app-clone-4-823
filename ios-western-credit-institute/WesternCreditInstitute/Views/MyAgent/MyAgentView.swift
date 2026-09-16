@@ -160,12 +160,50 @@ struct MyAgentView: View {
                 agentHeader
             }
 
+            if viewModel.isShowingCachedAgent {
+                cachedAgentBanner
+            }
+
             if surface == .chat, let chatViewModel {
                 AgentChatPanelView(viewModel: chatViewModel)
             } else {
                 dashboard
             }
         }
+    }
+
+    /// Shown only when the server is unreachable and the agent on screen came
+    /// from the device cache. Explains itself rather than pretending the
+    /// connection is healthy, and clears on the next good fetch.
+    private var cachedAgentBanner: some View {
+        HStack(spacing: Spacing.sm) {
+            Text("Showing your saved agent — reconnecting to the server.")
+                .font(.system(size: 13))
+                .foregroundStyle(theme.colors.text)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Button {
+                Haptics.light()
+                Task { await viewModel.refresh() }
+            } label: {
+                Text("Retry")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(theme.colors.primary)
+            }
+            .buttonStyle(PressableButtonStyle())
+        }
+        .padding(.horizontal, Spacing.sm + 6)
+        .padding(.vertical, Spacing.sm + 2)
+        .background(theme.colors.warning.opacity(0.18))
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(theme.colors.warning)
+                .frame(width: 3)
+        }
+        .clipShape(.rect(cornerRadius: Radius.sm))
+        .padding(.horizontal, Spacing.md)
+        .padding(.top, Spacing.sm)
     }
 
     // MARK: - Agent header
