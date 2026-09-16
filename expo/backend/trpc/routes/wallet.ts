@@ -1,5 +1,6 @@
 import * as z from "zod";
 import { createTRPCRouter, publicProcedure } from "../create-context";
+import { CSO_MONTHLY_FEE, CSO_RESIDUAL_MONTHLY } from "@/constants/pricing";
 
 export const walletRouter = createTRPCRouter({
   getByUserId: publicProcedure
@@ -331,8 +332,15 @@ export const walletRouter = createTRPCRouter({
         const countData = await referralsCountResponse.json();
         const csoReferralCount = countData[0]?.result?.[0]?.count || 0;
 
-        const residualRate = csoReferralCount >= 100 ? 0.75 : 0.50;
-        const residualAmount = 49.99 * residualRate;
+        // A referred CSO Affiliate pays CSO_MONTHLY_FEE ($50) a month to stay
+        // in the network and half of that ($25) goes to whoever signed them
+        // up, every month for as long as they keep paying.
+        //
+        // This previously multiplied a rate against 49.99 - the ACE course
+        // subscription - which is not the fee this residual is drawn from, so
+        // every payout was a few cents light and drifted from the rate quoted
+        // on the Earnings screen. Both now read from constants/pricing.
+        const residualAmount = CSO_RESIDUAL_MONTHLY;
 
         const walletResponse = await fetch(`${endpoint}/sql`, {
           method: "POST",
@@ -359,7 +367,9 @@ export const walletRouter = createTRPCRouter({
             type: "residual_income",
             amount: residualAmount,
             status: "pending",
-            description: `CSO Affiliate Residual Income (${Math.round(residualRate * 100)}%) - ${currentMonth}`,
+            description: `CSO Affiliate residual - ${Math.round(
+              (CSO_RESIDUAL_MONTHLY / CSO_MONTHLY_FEE) * 100
+            )}% of ${CSO_MONTHLY_FEE} monthly dues - ${currentMonth}`,
             referenceId: cso.id,
             referenceType: "subscription",
             createdAt: now,

@@ -362,6 +362,13 @@ final class AppStore {
     /// Share of an ACE-4 bundle sale kept at the current tier.
     var bundleCommissionRate: Double { Pricing.bundleCommissionRate(for: tier) }
 
+    /// Monthly residual per CSO Affiliate this user signed up.
+    ///
+    /// Unlike the other payouts this one recurs for as long as the referred
+    /// affiliate keeps paying their network dues, so it is the figure the
+    /// Earnings screen leans on when explaining recurring income.
+    var csoResidualPerAffiliate: Double { Pricing.csoResidualMonthly }
+
     // MARK: - Course entitlements
 
     /// What the user's AI Credit Repair Agent may discuss, derived from the

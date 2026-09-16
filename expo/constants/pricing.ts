@@ -45,6 +45,22 @@ export const BUNDLE_PRICE = 1299;
 export const CSO_MONTHLY_FEE = 50;
 
 /**
+ * Residual paid every month to the CSO Affiliate who signed up another CSO
+ * Affiliate.
+ *
+ * The referred CSO pays {@link CSO_MONTHLY_FEE} a month to stay in the
+ * network, and half of that flows straight back to whoever recruited them -
+ * for as long as that CSO keeps their membership active. Unlike every other
+ * payout in this file this one is recurring, not one-off, which is why the
+ * Earnings screen has to present it separately: ten recruited CSOs is $250
+ * every month, not $250 once.
+ */
+export const CSO_RESIDUAL_MONTHLY = 25;
+
+/** Share of a referred CSO's monthly dues paid out as residual income. */
+export const CSO_RESIDUAL_SHARE = CSO_RESIDUAL_MONTHLY / CSO_MONTHLY_FEE;
+
+/**
  * Due today to start the ACE-1 trial: nothing.
  *
  * Enrollment is free and the certificate fee is not taken until the trial
@@ -97,6 +113,19 @@ export const BUNDLE_CSO_ADVANTAGE = BUNDLE_PAYOUT_CSO - BUNDLE_PAYOUT_STANDARD;
 export type ReferrerTier = 'free' | 'ace1_student' | 'cso_affiliate';
 
 /**
+ * Monthly residual income from CSO Affiliates this member recruited.
+ *
+ * Only CSO Affiliates earn this. Someone on the free or student tier can
+ * still refer a CSO, but the residual is a benefit of carrying the
+ * membership yourself - which mirrors how the payout run in
+ * `backend/trpc/routes/wallet.ts` resolves it.
+ */
+export function csoResidualIncome(tier: ReferrerTier, activeCSOReferrals: number): number {
+  if (tier !== 'cso_affiliate') return 0;
+  return activeCSOReferrals * CSO_RESIDUAL_MONTHLY;
+}
+
+/**
  * ACE-1 referral payout for a given referrer tier.
  *
  * Enrolled students earn double what free members earn - that gap is the
@@ -129,11 +158,14 @@ export function projectMonthlyEarnings(input: {
   ace1Referrals: number;
   advancedCourseRegistrations: number;
   bundleSales: number;
+  /** CSO Affiliates recruited and still paying dues, earning residual. */
+  activeCSOReferrals?: number;
 }): number {
   const ace1 = input.ace1Referrals * ace1ReferralBonus(input.tier);
   const advanced = input.advancedCourseRegistrations * REFERRAL_ACE23_BOUNTY;
   const bundles = input.bundleSales * bundleCommission(input.tier);
-  return ace1 + advanced + bundles;
+  const residual = csoResidualIncome(input.tier, input.activeCSOReferrals ?? 0);
+  return ace1 + advanced + bundles + residual;
 }
 
 /** Formats a price, dropping the cents on whole-dollar amounts. */
@@ -153,6 +185,13 @@ export interface EarningsScenario {
   ace1Referrals: number;
   advancedCourseRegistrations: number;
   bundleSales: number;
+  /**
+   * CSO Affiliates recruited so far who are still paying their monthly dues.
+   *
+   * This one compounds: it is carried over month to month rather than earned
+   * fresh, which is the whole point of the residual.
+   */
+  activeCSOReferrals: number;
 }
 
 /**
@@ -168,6 +207,7 @@ export const EARNINGS_SCENARIOS: EarningsScenario[] = [
     ace1Referrals: 10,
     advancedCourseRegistrations: 4,
     bundleSales: 1,
+    activeCSOReferrals: 2,
   },
   {
     id: 'builder',
@@ -176,6 +216,7 @@ export const EARNINGS_SCENARIOS: EarningsScenario[] = [
     ace1Referrals: 25,
     advancedCourseRegistrations: 15,
     bundleSales: 3,
+    activeCSOReferrals: 8,
   },
   {
     id: 'pro',
@@ -184,5 +225,6 @@ export const EARNINGS_SCENARIOS: EarningsScenario[] = [
     ace1Referrals: 40,
     advancedCourseRegistrations: 30,
     bundleSales: 8,
+    activeCSOReferrals: 20,
   },
 ];

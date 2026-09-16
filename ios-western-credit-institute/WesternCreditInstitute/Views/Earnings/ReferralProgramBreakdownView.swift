@@ -92,6 +92,18 @@ struct ReferralProgramBreakdownView: View {
                     isYours: true
                 )
 
+                Divider().overlay(theme.colors.border)
+
+                payoutRow(
+                    symbol: "arrow.triangle.2.circlepath",
+                    tint: theme.colors.secondary,
+                    title: "You sign up another CSO Affiliate",
+                    amount: "\(Pricing.format(Pricing.csoResidualMonthly))/mo",
+                    subtitle: "Every month, for as long as they stay. They pay \(Pricing.format(Pricing.csoMonthlyFee))/month to be in the network and half of it comes back to you.",
+                    tag: isCSO ? "Your CSO residual" : "CSO Affiliates only",
+                    isYours: isCSO
+                )
+
                 HStack(alignment: .top, spacing: Spacing.sm) {
                     Image(systemName: "clock.fill")
                         .font(.system(size: 12))
@@ -103,6 +115,25 @@ struct ReferralProgramBreakdownView: View {
                 .padding(Spacing.sm)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(theme.colors.surfaceAlt)
+                .clipShape(.rect(cornerRadius: Radius.sm))
+
+                HStack(alignment: .top, spacing: Spacing.sm) {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .font(.system(size: 12))
+                        .foregroundStyle(theme.colors.secondary)
+                    Group {
+                        Text("The residual is the only one that repeats. ")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(theme.colors.text)
+                        + Text("Every other payout here is earned once. Sign up 10 CSO Affiliates and that is \(Pricing.format(Pricing.csoResidualMonthly * 10)) arriving every month without referring anyone new.")
+                            .font(.system(size: 13))
+                            .foregroundStyle(theme.colors.textSecondary)
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(Spacing.sm)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(theme.colors.secondary.opacity(0.1))
                 .clipShape(.rect(cornerRadius: Radius.sm))
             }
         }
@@ -177,7 +208,7 @@ struct ReferralProgramBreakdownView: View {
                     symbolTint: theme.colors.secondary
                 )
 
-                Text("Real math at CSO Affiliate rates — not projections. Here is what a month looks like at three levels of activity.")
+                Text("Real math at CSO Affiliate rates — not projections. Here is what a month looks like at three levels of activity. The residual line is the part that carries over to next month on its own.")
                     .font(.system(size: 14))
                     .foregroundStyle(theme.colors.textSecondary)
 
@@ -219,6 +250,8 @@ struct ReferralProgramBreakdownView: View {
                 Text("\(scenario.ace1Referrals) ACE-1 referrals × \(Pricing.format(Pricing.referralAce1Enrolled)) = \(Pricing.format(Double(scenario.ace1Referrals) * Pricing.referralAce1Enrolled))")
                 Text("\(scenario.advancedCourseRegistrations) ACE-2/ACE-3 registrations × \(Pricing.format(Pricing.referralAce23Bounty)) = \(Pricing.format(Double(scenario.advancedCourseRegistrations) * Pricing.referralAce23Bounty))")
                 Text("\(scenario.bundleSales) bundle sales × \(Pricing.format(Pricing.bundlePayoutCSO)) = \(Pricing.format(Double(scenario.bundleSales) * Pricing.bundlePayoutCSO))")
+                Text("\(scenario.activeCSOReferrals) CSO Affiliates × \(Pricing.format(Pricing.csoResidualMonthly)) residual = \(Pricing.format(scenario.csoResidual)) — every month")
+                    .foregroundStyle(theme.colors.secondary)
             }
             .font(.system(size: 12))
             .foregroundStyle(theme.colors.textLight)
@@ -328,6 +361,7 @@ struct ReferralProgramBreakdownView: View {
             "\(Pricing.formatRate(Pricing.bundleCommissionCSO)) commission on every bundle sale",
             "\(Pricing.format(Pricing.referralAce1Enrolled)) per ACE-1 referral",
             "\(Pricing.format(Pricing.referralAce23Bounty)) per ACE-2/ACE-3 registration",
+            "\(Pricing.format(Pricing.csoResidualMonthly))/month residual for every CSO Affiliate you sign up",
             "Listed publicly on the Hire a Pro page",
             "Paid client consultations through the network",
         ]

@@ -8,6 +8,7 @@ import {
   Check,
   TrendingUp,
   Clock,
+  Repeat,
 } from "lucide-react-native";
 
 import { useTheme } from "@/contexts/ThemeContext";
@@ -20,6 +21,8 @@ import {
   BUNDLE_PAYOUT_CSO,
   BUNDLE_PAYOUT_STANDARD,
   CSO_MONTHLY_FEE,
+  CSO_RESIDUAL_MONTHLY,
+  CSO_RESIDUAL_SHARE,
   EARNINGS_SCENARIOS,
   REFERRAL_ACE1_ENROLLED,
   REFERRAL_ACE1_FREE,
@@ -28,6 +31,7 @@ import {
   type ReferrerTier,
   ace1ReferralBonus,
   bundleCommission,
+  csoResidualIncome,
   formatPrice,
   projectMonthlyEarnings,
 } from "@/constants/pricing";
@@ -57,6 +61,7 @@ function ReferralProgramBreakdown({ tier }: ReferralProgramBreakdownProps) {
         ...scenario,
         csoTotal: projectMonthlyEarnings({ ...scenario, tier: "cso_affiliate" }),
         yourTotal: projectMonthlyEarnings({ ...scenario, tier }),
+        csoResidual: csoResidualIncome("cso_affiliate", scenario.activeCSOReferrals),
       })),
     [tier]
   );
@@ -125,6 +130,20 @@ function ReferralProgramBreakdown({ tier }: ReferralProgramBreakdownProps) {
           }
           tag={isCSO ? "Your CSO rate" : "Your current rate"}
           isYours
+        />
+
+        <PayoutRow
+          styles={styles}
+          colors={colors}
+          icon={<Repeat color={colors.secondary} size={20} />}
+          tint={colors.secondary}
+          title="You sign up another CSO Affiliate"
+          amount={`${formatPrice(CSO_RESIDUAL_MONTHLY)}/mo`}
+          subtitle={`Every month, for as long as they stay. They pay ${formatPrice(
+            CSO_MONTHLY_FEE
+          )}/month to be in the network and half of it comes back to you.`}
+          tag={isCSO ? "Your CSO residual" : "CSO Affiliates only"}
+          isYours={isCSO}
           isLast
         />
 
@@ -133,6 +152,18 @@ function ReferralProgramBreakdown({ tier }: ReferralProgramBreakdownProps) {
           <Text style={styles.noteText}>
             One person can earn you money more than once — the ACE-1 bonus, then
             again for every course they add on top.
+          </Text>
+        </View>
+
+        <View style={[styles.noteBox, { backgroundColor: colors.secondary + "12" }]}>
+          <Repeat color={colors.secondary} size={14} />
+          <Text style={styles.noteText}>
+            <Text style={styles.noteStrong}>
+              The residual is the only one that repeats.
+            </Text>{" "}
+            Every other payout here is earned once. Sign up 10 CSO Affiliates and
+            that is {formatPrice(CSO_RESIDUAL_MONTHLY * 10)} arriving every month
+            without referring anyone new.
           </Text>
         </View>
       </Card>
@@ -144,7 +175,8 @@ function ReferralProgramBreakdown({ tier }: ReferralProgramBreakdownProps) {
         </View>
         <Text style={styles.sectionIntro}>
           Real math at CSO Affiliate rates — not projections. Here is what a
-          month looks like at three levels of activity.
+          month looks like at three levels of activity. The residual line is the
+          part that carries over to next month on its own.
         </Text>
 
         {scenarios.map((scenario) => (
@@ -175,6 +207,11 @@ function ReferralProgramBreakdown({ tier }: ReferralProgramBreakdownProps) {
                 {scenario.bundleSales} bundle sales ×{" "}
                 {formatPrice(BUNDLE_PAYOUT_CSO)} ={" "}
                 {formatPrice(scenario.bundleSales * BUNDLE_PAYOUT_CSO)}
+              </Text>
+              <Text style={[styles.scenarioLine, { color: colors.secondary }]}>
+                {scenario.activeCSOReferrals} CSO Affiliates ×{" "}
+                {formatPrice(CSO_RESIDUAL_MONTHLY)} residual ={" "}
+                {formatPrice(scenario.csoResidual)} — every month
               </Text>
             </View>
 
@@ -236,6 +273,7 @@ function ReferralProgramBreakdown({ tier }: ReferralProgramBreakdownProps) {
               `${BUNDLE_COMMISSION_CSO * 100}% commission on every bundle sale`,
               `${formatPrice(REFERRAL_ACE1_ENROLLED)} per ACE-1 referral`,
               `${formatPrice(REFERRAL_ACE23_BOUNTY)} per ACE-2/ACE-3 registration`,
+              `${formatPrice(CSO_RESIDUAL_MONTHLY)}/month residual for every CSO Affiliate you sign up`,
               "Listed publicly on the Hire a Pro page",
               "Paid client consultations through the network",
             ].map((benefit) => (
@@ -417,6 +455,10 @@ const createStyles = (colors: any) =>
       fontSize: 13,
       color: colors.textSecondary,
       lineHeight: 19,
+    },
+    noteStrong: {
+      fontWeight: "700" as const,
+      color: colors.text,
     },
     scenarioCard: {
       backgroundColor: colors.surfaceAlt,

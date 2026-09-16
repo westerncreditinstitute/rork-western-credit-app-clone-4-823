@@ -4,6 +4,7 @@ import {
   BUNDLE_PAYOUT_CSO,
   BUNDLE_PRICE,
   CERTIFICATE_FEE,
+  CSO_RESIDUAL_MONTHLY,
   ENROLLMENT_FEE,
   MONTHLY_SUBSCRIPTION,
   REFERRAL_ACE1_ENROLLED,
@@ -305,6 +306,22 @@ export const earnings: EarningRecord[] = [
     date: "2025-01-02",
     description: "ACE-3 registration - Mike Brown",
     status: "pending",
+  },
+  {
+    id: "7",
+    type: "residual",
+    amount: CSO_RESIDUAL_MONTHLY * 2,
+    date: "2025-01-01",
+    description: "CSO Affiliate residual - 2 affiliates × $25",
+    status: "pending",
+  },
+  {
+    id: "8",
+    type: "residual",
+    amount: CSO_RESIDUAL_MONTHLY * 2,
+    date: "2024-12-01",
+    description: "CSO Affiliate residual - 2 affiliates × $25",
+    status: "completed",
   },
 ];
 

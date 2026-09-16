@@ -261,6 +261,8 @@ nonisolated enum MockData {
         EarningRecord(id: "4", type: .coaching, amount: 200, date: date("2024-12-15"), detail: "1-on-1 coaching session", status: .completed),
         EarningRecord(id: "5", type: .referral, amount: Pricing.referralAce1Enrolled, date: date("2024-12-10"), detail: "ACE-1 referral - Mike Brown", status: .completed),
         EarningRecord(id: "6", type: .commission, amount: Pricing.referralAce23Bounty, date: date("2025-01-02"), detail: "ACE-3 registration - Mike Brown", status: .pending),
+        EarningRecord(id: "7", type: .residual, amount: Pricing.csoResidualMonthly * 2, date: date("2025-01-01"), detail: "CSO Affiliate residual - 2 affiliates × $25", status: .pending),
+        EarningRecord(id: "8", type: .residual, amount: Pricing.csoResidualMonthly * 2, date: date("2024-12-01"), detail: "CSO Affiliate residual - 2 affiliates × $25", status: .completed),
     ]
 
     // MARK: - Wallet

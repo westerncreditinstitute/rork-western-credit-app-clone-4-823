@@ -41,6 +41,20 @@ nonisolated enum Pricing {
     /// Monthly dues to stay in the CSO network and keep a Hire a Pro listing.
     static let csoMonthlyFee: Double = 50
 
+    /// Residual paid every month to the CSO Affiliate who signed up another
+    /// CSO Affiliate.
+    ///
+    /// The referred CSO pays `csoMonthlyFee` a month to stay in the network,
+    /// and half of that flows straight back to whoever recruited them - for as
+    /// long as that CSO keeps their membership active. Unlike every other
+    /// payout here this one is recurring, not one-off, which is why the
+    /// Earnings screen presents it separately: ten recruited CSOs is $250
+    /// every month, not $250 once.
+    static let csoResidualMonthly: Double = 25
+
+    /// Share of a referred CSO's monthly dues paid out as residual income.
+    static let csoResidualShare: Double = csoResidualMonthly / csoMonthlyFee
+
     /// Due today to start the ACE-1 trial: nothing.
     ///
     /// Enrollment is free and the certificate fee is not taken until the
@@ -105,17 +119,29 @@ nonisolated enum Pricing {
         bundlePrice * bundleCommissionRate(for: tier)
     }
 
+    /// Monthly residual income from CSO Affiliates this member recruited.
+    ///
+    /// Only CSO Affiliates earn this. Someone on the free or student tier can
+    /// still refer a CSO, but the residual is a benefit of carrying the
+    /// membership yourself.
+    static func csoResidualIncome(for tier: SubscriptionTier, activeCSOReferrals: Int) -> Double {
+        guard tier == .csoAffiliate else { return 0 }
+        return Double(activeCSOReferrals) * csoResidualMonthly
+    }
+
     /// Projects a month of referral income at a given tier.
     static func projectMonthlyEarnings(
         tier: SubscriptionTier,
         ace1Referrals: Int,
         advancedCourseRegistrations: Int,
-        bundleSales: Int
+        bundleSales: Int,
+        activeCSOReferrals: Int = 0
     ) -> Double {
         let ace1 = Double(ace1Referrals) * ace1ReferralBonus(for: tier)
         let advanced = Double(advancedCourseRegistrations) * referralAce23Bounty
         let bundles = Double(bundleSales) * bundleCommission(for: tier)
-        return ace1 + advanced + bundles
+        let residual = csoResidualIncome(for: tier, activeCSOReferrals: activeCSOReferrals)
+        return ace1 + advanced + bundles + residual
     }
 
     /// Formats a price, dropping the cents on whole-dollar amounts.
@@ -145,14 +171,26 @@ nonisolated struct EarningsScenario: Identifiable, Hashable, Sendable {
     let advancedCourseRegistrations: Int
     let bundleSales: Int
 
+    /// CSO Affiliates recruited so far who are still paying their monthly dues.
+    ///
+    /// This one compounds: it is carried over month to month rather than
+    /// earned fresh, which is the whole point of the residual.
+    let activeCSOReferrals: Int
+
     /// Monthly total this scenario produces at CSO Affiliate rates.
     var csoTotal: Double {
         Pricing.projectMonthlyEarnings(
             tier: .csoAffiliate,
             ace1Referrals: ace1Referrals,
             advancedCourseRegistrations: advancedCourseRegistrations,
-            bundleSales: bundleSales
+            bundleSales: bundleSales,
+            activeCSOReferrals: activeCSOReferrals
         )
+    }
+
+    /// Monthly residual this scenario produces at CSO Affiliate rates.
+    var csoResidual: Double {
+        Pricing.csoResidualIncome(for: .csoAffiliate, activeCSOReferrals: activeCSOReferrals)
     }
 
     /// Monthly total this scenario produces at the given tier's rates.
@@ -161,7 +199,8 @@ nonisolated struct EarningsScenario: Identifiable, Hashable, Sendable {
             tier: tier,
             ace1Referrals: ace1Referrals,
             advancedCourseRegistrations: advancedCourseRegistrations,
-            bundleSales: bundleSales
+            bundleSales: bundleSales,
+            activeCSOReferrals: activeCSOReferrals
         )
     }
 
@@ -174,7 +213,8 @@ nonisolated struct EarningsScenario: Identifiable, Hashable, Sendable {
             caption: "A few referrals a week from your own network.",
             ace1Referrals: 10,
             advancedCourseRegistrations: 4,
-            bundleSales: 1
+            bundleSales: 1,
+            activeCSOReferrals: 2
         ),
         EarningsScenario(
             id: "builder",
@@ -182,7 +222,8 @@ nonisolated struct EarningsScenario: Identifiable, Hashable, Sendable {
             caption: "Posting consistently and following up with your students.",
             ace1Referrals: 25,
             advancedCourseRegistrations: 15,
-            bundleSales: 3
+            bundleSales: 3,
+            activeCSOReferrals: 8
         ),
         EarningsScenario(
             id: "pro",
@@ -190,7 +231,8 @@ nonisolated struct EarningsScenario: Identifiable, Hashable, Sendable {
             caption: "Treating your affiliate business like a real business.",
             ace1Referrals: 40,
             advancedCourseRegistrations: 30,
-            bundleSales: 8
+            bundleSales: 8,
+            activeCSOReferrals: 20
         ),
     ]
 }

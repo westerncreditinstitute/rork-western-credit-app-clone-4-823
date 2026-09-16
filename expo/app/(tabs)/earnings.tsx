@@ -26,6 +26,7 @@ import {
   Crown,
   Package,
   ArrowRight,
+  Repeat,
 } from "lucide-react-native";
 
 import { useTheme } from "@/contexts/ThemeContext";
@@ -35,6 +36,8 @@ import { Card, Badge, Button } from "@/components/ui";
 import ReferralProgramBreakdown from "@/components/earnings/ReferralProgramBreakdown";
 import {
   BUNDLE_PAYOUT_CSO,
+  CSO_MONTHLY_FEE,
+  CSO_RESIDUAL_MONTHLY,
   REFERRAL_ACE1_ENROLLED,
   REFERRAL_ACE1_FREE,
   REFERRAL_ACE23_BOUNTY,
@@ -253,7 +256,7 @@ export default function EarningsScreen() {
           </View>
           <Text style={styles.referralDescription}>
             {isCSO
-              ? `You earn ${formatPrice(REFERRAL_ACE1_ENROLLED)} per ACE-1 referral, ${formatPrice(REFERRAL_ACE23_BOUNTY)} per ACE-2/ACE-3 registration, and ${formatPrice(BUNDLE_PAYOUT_CSO)} on every bundle sale.`
+              ? `You earn ${formatPrice(REFERRAL_ACE1_ENROLLED)} per ACE-1 referral, ${formatPrice(REFERRAL_ACE23_BOUNTY)} per ACE-2/ACE-3 registration, ${formatPrice(BUNDLE_PAYOUT_CSO)} on every bundle sale, and ${formatPrice(CSO_RESIDUAL_MONTHLY)} every month for each CSO Affiliate you sign up.`
               : `You earn ${formatPrice(ace1ReferralBonus(tier))} per ACE-1 referral, ${formatPrice(REFERRAL_ACE23_BOUNTY)} per ACE-2/ACE-3 registration, and ${formatPrice(bundleCommission(tier))} on every bundle sale.`}
           </Text>
           <View style={styles.referralLinkBox}>
@@ -315,7 +318,19 @@ export default function EarningsScreen() {
             {isCSO && (
               <Card variant="default" padding="md" style={styles.incomeTypeCard}>
                 <View style={[styles.incomeTypeIcon, { backgroundColor: colors.secondary + "20" }]}>
-                  <DollarSign color={colors.secondary} size={22} />
+                  <Repeat color={colors.secondary} size={22} />
+                </View>
+                <Text style={styles.incomeTypeTitle}>CSO Residuals</Text>
+                <Text style={styles.incomeTypeDesc}>
+                  {formatPrice(CSO_RESIDUAL_MONTHLY)}/mo each, recurring
+                </Text>
+              </Card>
+            )}
+
+            {isCSO && (
+              <Card variant="default" padding="md" style={styles.incomeTypeCard}>
+                <View style={[styles.incomeTypeIcon, { backgroundColor: colors.success + "20" }]}>
+                  <DollarSign color={colors.success} size={22} />
                 </View>
                 <Text style={styles.incomeTypeTitle}>Consultations</Text>
                 <Text style={styles.incomeTypeDesc}>$74.99 each</Text>

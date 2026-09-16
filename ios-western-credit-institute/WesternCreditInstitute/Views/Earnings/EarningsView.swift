@@ -220,9 +220,14 @@ struct EarningsView: View {
                     Text("Refer & Earn")
                         .font(.system(size: 16, weight: .heavy))
                         .foregroundStyle(.white)
-                    Text("\(Pricing.format(store.ace1ReferralBonus)) per ACE-1 student you refer")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.75))
+                    Text(
+                        store.isCSO
+                            ? "\(Pricing.format(store.ace1ReferralBonus)) per ACE-1 student, plus \(Pricing.format(store.csoResidualPerAffiliate))/mo per CSO Affiliate"
+                            : "\(Pricing.format(store.ace1ReferralBonus)) per ACE-1 student you refer"
+                    )
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.75))
+                    .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 0)
             }
