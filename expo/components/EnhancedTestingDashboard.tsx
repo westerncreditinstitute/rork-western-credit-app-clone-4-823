@@ -26,7 +26,7 @@ import {
   FlatList,
   SafeAreaView,
 } from 'react-native';
-import { useTheme } from '@react-navigation/native';
+import { useTheme } from "expo-router/react-navigation";
 import Colors from '@/constants/colors';
 import { testingService } from '@/services/TestingService';
 import { useDisputes } from '@/contexts/DisputesContext';

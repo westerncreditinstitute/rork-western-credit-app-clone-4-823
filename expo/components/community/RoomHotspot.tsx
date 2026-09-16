@@ -307,7 +307,7 @@ const createStyles = (colors: any, isDark: boolean, hotspotColor: string, isActi
 
 const groupStyles = StyleSheet.create({
   container: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   typeGroup: {
     position: 'relative',

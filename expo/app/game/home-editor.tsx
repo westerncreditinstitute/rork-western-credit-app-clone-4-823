@@ -807,7 +807,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   gridOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     overflow: 'hidden',
   },
   gridLine: {

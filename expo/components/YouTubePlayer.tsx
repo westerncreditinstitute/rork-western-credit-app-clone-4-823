@@ -139,7 +139,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   thumbnailOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -189,7 +189,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#000",
   },
   loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "#1a1a2e",
     justifyContent: "center",
     alignItems: "center",

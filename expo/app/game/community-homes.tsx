@@ -509,7 +509,7 @@ const styles = StyleSheet.create({
     height: 100,
   },
   liveOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     height: 100,
     padding: 8,
     justifyContent: 'space-between',
@@ -632,7 +632,7 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   cityOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.4)',
     padding: 10,
     justifyContent: 'flex-end',

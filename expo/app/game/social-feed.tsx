@@ -1294,7 +1294,7 @@ const createStyles = (colors: any, _isDark: boolean, _insets: any) =>
 
     // ── Composer ──
     composerOverlay: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
       backgroundColor: 'rgba(0,0,0,0.5)',
       zIndex: 1000,
     },

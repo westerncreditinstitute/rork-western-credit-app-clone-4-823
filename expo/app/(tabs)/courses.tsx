@@ -445,7 +445,7 @@ const createStyles = (colors: any) => StyleSheet.create({
     padding: 6,
   },
   comingSoonOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: "center",
     justifyContent: "center",
   },

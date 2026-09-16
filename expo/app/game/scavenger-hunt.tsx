@@ -2067,7 +2067,7 @@ const styles = StyleSheet.create({
   },
   mapImage: { width: '100%', height: '100%' },
   markersOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   playerMarker: {
     position: 'absolute',
@@ -2500,7 +2500,7 @@ const styles = StyleSheet.create({
 
   arContainer: { flex: 1 },
   arBackground: { flex: 1 },
-  arGrid: { ...StyleSheet.absoluteFillObject },
+  arGrid: { ...StyleSheet.absoluteFill },
   arGridLineH: { position: 'absolute', left: 0, right: 0, height: 1, backgroundColor: '#38BDF8' },
   arGridLineV: { position: 'absolute', top: 0, bottom: 0, width: 1, backgroundColor: '#38BDF8' },
   scanLine: { position: 'absolute', left: 0, right: 0, height: 3 },
@@ -2543,7 +2543,7 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
   },
-  arHUD: { ...StyleSheet.absoluteFillObject, justifyContent: 'space-between' },
+  arHUD: { ...StyleSheet.absoluteFill, justifyContent: 'space-between' },
   arTopBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2608,7 +2608,7 @@ const styles = StyleSheet.create({
   },
   arAnchorText: { color: '#7DD3FC', fontSize: 11, fontWeight: '600' as const },
   arOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   arPreviewOuter: {
     width: SCREEN_WIDTH * 0.7,

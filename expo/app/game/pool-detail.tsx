@@ -855,7 +855,7 @@ const styles = StyleSheet.create({
   updateTime: { fontSize: 11, marginTop: 4 },
   emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 60, gap: 12 },
   emptyText: { fontSize: 15 },
-  modalOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
+  modalOverlay: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
   modal: { borderRadius: 20, padding: 20, gap: 16 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   modalTitle: { fontSize: 20, fontWeight: '700' },

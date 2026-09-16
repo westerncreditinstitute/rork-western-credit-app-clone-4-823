@@ -827,9 +827,9 @@ const styles = StyleSheet.create({
   errorText: { fontSize: 20, fontWeight: '700' as const },
   errorSubtext: { fontSize: 14, textAlign: 'center' as const },
 
-  heroContainer: { ...StyleSheet.absoluteFillObject },
+  heroContainer: { ...StyleSheet.absoluteFill },
   heroImage: { width: '100%', height: '100%', resizeMode: 'cover' },
-  heroGradient: { ...StyleSheet.absoluteFillObject },
+  heroGradient: { ...StyleSheet.absoluteFill },
   heroContent: { flex: 1, justifyContent: 'space-between' },
   backButton: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', alignItems: 'center', marginLeft: 16, marginTop: 8 },
   heroTextContainer: { padding: 24, paddingBottom: 40 },

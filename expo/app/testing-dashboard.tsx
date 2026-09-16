@@ -1,7 +1,7 @@
 import React from "react";
 import { View, StyleSheet, useColorScheme } from "react-native";
 import { Stack } from "expo-router";
-import { useTheme } from "@react-navigation/native";
+import { useTheme } from "expo-router/react-navigation";
 import { EnhancedTestingDashboard } from "@/components/EnhancedTestingDashboard";
 import Colors from "@/constants/colors";
 
