@@ -6,8 +6,7 @@
 import SwiftUI
 
 /// Hosts the destinations that no longer live in the tab bar — Wallet,
-/// Earnings, Hire Pro, Profile and Admin — mirroring the "More" tab on the
-/// native app.
+/// Earnings, Profile and Admin — mirroring the "More" tab on the native app.
 struct MoreView: View {
     @Environment(ThemeManager.self) private var theme
     @Environment(AppStore.self) private var store
@@ -40,14 +39,6 @@ struct MoreView: View {
                 title: "Earnings",
                 subtitle: "Track referral earnings and commission payouts",
                 tint: AppTab.earnings.activeColor
-            ),
-            MoreItem(
-                id: "hirePro",
-                tab: .hirePro,
-                symbol: "checkmark.seal.fill",
-                title: "Hire a Pro",
-                subtitle: "Connect with a certified credit repair professional",
-                tint: AppTab.hirePro.activeColor
             ),
         ]
     }

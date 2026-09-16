@@ -54,13 +54,18 @@ const FALLBACK: TabConfig = { label: "Tab", color: "#3B82F6", icon: Home };
  * so hidden screens leaked back in. Listing the bar destinations here cannot
  * be silently undone by a library internal.
  */
-const BAR_ROUTES: readonly string[] = ["index", "courses", "my-agent", "more"];
+const BAR_ROUTES: readonly string[] = [
+  "index",
+  "courses",
+  "my-agent",
+  "hire-pro",
+  "more",
+];
 
 /** Routes reachable only through "More", which stays lit while they are open. */
 const HOSTED_IN_MORE: readonly string[] = [
   "wallet",
   "earnings",
-  "hire-pro",
   "profile",
   "admin",
 ];

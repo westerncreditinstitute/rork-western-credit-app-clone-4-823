@@ -51,6 +51,7 @@ import {
   clearCachedAgent,
   type CachedAgent,
 } from "@/lib/agent-cache";
+import { fetchAgentDirect } from "@/lib/direct-agent";
 
 import AgentProfileCard, {
   AgentInfo,
@@ -179,14 +180,24 @@ function MyAgentScreenInner({
   const [cachedAgent, setCachedAgent] = useState<CachedAgent | null>(null);
   const [cacheChecked, setCacheChecked] = useState(false);
 
+  // Agent resolved straight from the database when the API host is down.
+  // Distinct from `cachedAgent`: this is live data, just fetched over a
+  // different transport, so it also covers a first open on a new device
+  // where there is nothing cached yet.
+  const [directAgent, setDirectAgent] = useState<CachedAgent | null>(null);
+  const [directLookupPending, setDirectLookupPending] = useState(false);
+
   useEffect(() => {
     let active = true;
 
     if (!userId) {
       setCachedAgent(null);
+      setDirectAgent(null);
       setCacheChecked(true);
       return;
     }
+
+    setDirectAgent(null);
 
     setCacheChecked(false);
     void readCachedAgent(userId).then((cached) => {
@@ -338,12 +349,77 @@ function MyAgentScreenInner({
       if (stuckOnTransportError) {
         console.log("[MyAgent] Server reachable again — auto-retrying");
         assignAgentMutation.reset();
+        // Drop the direct-read copy so the API's answer becomes the source
+        // of truth again and the reconnecting banner clears.
+        setDirectAgent(null);
         myAgentQuery.refetch();
       }
     });
 
     return unsubscribe;
   }, [userId, isACE1, myAgentQuery, assignAgentMutation]);
+
+  // ── Fall back to the database when the API host is unreachable ──
+  //
+  // The API tier and the database are separate hosts. When the API is down
+  // (504 at the edge, or a timeout) the assignment is still readable straight
+  // from Supabase in well under a second, so the console opens instead of
+  // dead-ending on "Can't reach the server right now".
+  //
+  // Deliberately limited to TRANSPORT failures: a structured setup error
+  // (missing tables, RLS, empty pool) means the database itself is the
+  // problem, and going direct would hit the very same wall.
+  useEffect(() => {
+    if (!userId || !isACE1) return;
+    if (myAgentQuery.data?.agent || directAgent || directLookupPending) return;
+
+    const transportFailed =
+      (myAgentQuery.isError &&
+        isTransportErrorMessage(myAgentQuery.error?.message)) ||
+      (assignAgentMutation.isError &&
+        isTransportErrorMessage(assignAgentMutation.error?.message));
+
+    if (!transportFailed) return;
+
+    let active = true;
+    setDirectLookupPending(true);
+
+    void fetchAgentDirect(userId)
+      .then((outcome) => {
+        if (!active) return;
+        if (outcome.status === "success") {
+          console.log("[MyAgent] Resolved agent directly from the database");
+          const resolved: CachedAgent = {
+            agent: outcome.result.agent as unknown as AgentInfo,
+            assignment: outcome.result.assignment,
+          };
+          setDirectAgent(resolved);
+          // Worth persisting: it is a real, server-confirmed assignment.
+          void writeCachedAgent(userId, resolved);
+          return;
+        }
+        if (outcome.status === "unavailable") {
+          console.warn("[MyAgent] Direct lookup unavailable:", outcome.reason);
+        }
+      })
+      .finally(() => {
+        if (active) setDirectLookupPending(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [
+    userId,
+    isACE1,
+    directAgent,
+    directLookupPending,
+    myAgentQuery.isError,
+    myAgentQuery.error?.message,
+    myAgentQuery.data?.agent,
+    assignAgentMutation.isError,
+    assignAgentMutation.error?.message,
+  ]);
 
   // ── Keep the local copy in step with the server ───────────────
   //
@@ -380,20 +456,28 @@ function MyAgentScreenInner({
 
   // ── Derived agent state ───────────────────────────────────────
   //
-  // The cached assignment backs the live one, so an unreachable server
-  // degrades to "your agent, with a reconnecting banner" instead of a
-  // dead-end error screen.
+  // Three sources, most authoritative first: this fetch, the database read
+  // straight from the device, then the cached copy. An unreachable API host
+  // therefore degrades to "your agent, with a reconnecting banner" instead
+  // of a dead-end error screen.
   const agent =
-    (myAgentQuery.data?.agent as AgentInfo | undefined) ?? cachedAgent?.agent;
-  const assignment = myAgentQuery.data?.assignment ?? cachedAgent?.assignment;
+    (myAgentQuery.data?.agent as AgentInfo | undefined) ??
+    directAgent?.agent ??
+    cachedAgent?.agent;
+  const assignment =
+    myAgentQuery.data?.assignment ??
+    directAgent?.assignment ??
+    cachedAgent?.assignment;
 
-  /** True when the agent on screen came from the device, not this fetch. */
-  const isShowingCachedAgent = !myAgentQuery.data?.agent && !!cachedAgent?.agent;
+  /** True when the agent on screen did not come from this fetch. */
+  const isShowingCachedAgent =
+    !myAgentQuery.data?.agent && (!!directAgent?.agent || !!cachedAgent?.agent);
 
   const isAssigning =
     !agent &&
     (assignAgentMutation.isPending ||
       !cacheChecked ||
+      directLookupPending ||
       (myAgentQuery.isLoading && !myAgentQuery.data));
 
   /**
