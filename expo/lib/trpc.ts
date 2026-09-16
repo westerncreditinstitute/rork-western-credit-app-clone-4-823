@@ -255,19 +255,38 @@ function describeTarget(input: RequestInfo | URL): string {
   return "<unknown url>";
 }
 
+/**
+ * True for the one request where waiting out a full cold-start retry ladder
+ * is actively harmful: `users.login` has a fast, already-implemented
+ * fallback (`loginDirect` in `lib/direct-auth.ts`) that talks straight to
+ * Supabase and normally answers in well under a second. The generic policy
+ * below (5 attempts x 45s) can make a cold-starting API host hold the login
+ * screen for minutes before that fallback ever gets a chance to run. Failing
+ * fast here means a slow/asleep API host is bypassed almost immediately
+ * instead of being patiently waited out.
+ */
+function isLoginRequest(target: string): boolean {
+  return target.includes("users.login");
+}
+
 const fetchWithRetry = async (
   input: RequestInfo | URL,
   init?: RequestInit,
 ): Promise<Response> => {
   const isMutation = (init?.method ?? "GET").toUpperCase() === "POST";
   const target = describeTarget(input);
+  const isLogin = isLoginRequest(target);
 
   // The dev backend sleeps and answers with an instant edge-level 503 until the
   // instance wakes, so give every request enough attempts to outlast a cold start.
-  const maxAttempts = isMutation ? 5 : 5;
-  const baseDelay = 700;
+  // Login is the deliberate exception: fail fast so the direct-database
+  // fallback in AuthContext.login gets to run instead of the user staring at
+  // a spinner for the full cold-start ladder.
+  const maxAttempts = isLogin ? 2 : isMutation ? 5 : 5;
+  const baseDelay = isLogin ? 400 : 700;
   // Writes (video imports, saves) need a longer ceiling than quick reads.
-  const timeout = isMutation ? 45000 : 20000;
+  // Login gets a short leash for the same fail-fast reason as maxAttempts.
+  const timeout = isLogin ? 7000 : isMutation ? 45000 : 20000;
 
   if (init?.signal?.aborted) {
     throw new DOMException("Request was cancelled", "AbortError");
