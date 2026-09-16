@@ -99,7 +99,7 @@ struct ReferralProgramBreakdownView: View {
                     tint: theme.colors.secondary,
                     title: "You sign up another CSO Affiliate",
                     amount: "\(Pricing.format(Pricing.csoResidualMonthly))/mo",
-                    subtitle: "Every month, for as long as they stay. They pay \(Pricing.format(Pricing.csoMonthlyFee))/month to be in the network and half of it comes back to you.",
+                    subtitle: "Every month, for as long as they stay. They pay \(Pricing.format(Pricing.csoMonthlyFee))/month to be in the network and half of it comes back to you. Past your first \(Pricing.csoResidualBonusThreshold) recruits, the rate rises to \(Int(Pricing.csoResidualBonusShare * 100))% — \(Pricing.format(Pricing.csoResidualBonusMonthly))/mo.",
                     tag: isCSO ? "Your CSO residual" : "CSO Affiliates only",
                     isYours: isCSO
                 )
@@ -125,7 +125,7 @@ struct ReferralProgramBreakdownView: View {
                         Text("The residual is the only one that repeats. ")
                             .font(.system(size: 13, weight: .bold))
                             .foregroundStyle(theme.colors.text)
-                        + Text("Every other payout here is earned once. Sign up 10 CSO Affiliates and that is \(Pricing.format(Pricing.csoResidualMonthly * 10)) arriving every month without referring anyone new.")
+                        + Text("Every other payout here is earned once. Sign up 10 CSO Affiliates and that is \(Pricing.format(Pricing.csoResidualMonthly * 10)) arriving every month without referring anyone new. Pass \(Pricing.csoResidualBonusThreshold) recruited CSO Affiliates and the rate climbs from \(Int(Pricing.csoResidualShare * 100))% to \(Int(Pricing.csoResidualBonusShare * 100))% on every one after that.")
                             .font(.system(size: 13))
                             .foregroundStyle(theme.colors.textSecondary)
                     }
@@ -361,7 +361,7 @@ struct ReferralProgramBreakdownView: View {
             "\(Pricing.formatRate(Pricing.bundleCommissionCSO)) commission on every bundle sale",
             "\(Pricing.format(Pricing.referralAce1Enrolled)) per ACE-1 referral",
             "\(Pricing.format(Pricing.referralAce23Bounty)) per ACE-2/ACE-3 registration",
-            "\(Pricing.format(Pricing.csoResidualMonthly))/month residual for every CSO Affiliate you sign up",
+            "\(Pricing.format(Pricing.csoResidualMonthly))/month residual per CSO Affiliate — \(Int(Pricing.csoResidualBonusShare * 100))% past your first \(Pricing.csoResidualBonusThreshold)",
             "Listed publicly on the Hire a Pro page",
             "Paid client consultations through the network",
         ]

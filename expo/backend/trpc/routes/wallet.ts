@@ -1,6 +1,11 @@
 import * as z from "zod";
 import { createTRPCRouter, publicProcedure } from "../create-context";
-import { CSO_MONTHLY_FEE, CSO_RESIDUAL_MONTHLY } from "@/constants/pricing";
+import {
+  CSO_MONTHLY_FEE,
+  CSO_RESIDUAL_BONUS_MONTHLY,
+  CSO_RESIDUAL_BONUS_THRESHOLD,
+  CSO_RESIDUAL_MONTHLY,
+} from "@/constants/pricing";
 
 export const walletRouter = createTRPCRouter({
   getByUserId: publicProcedure
@@ -294,6 +299,10 @@ export const walletRouter = createTRPCRouter({
       const activeCSOs = csoData[0]?.result || [];
 
       let totalProcessed = 0;
+      // Counts each referrer's active recruits in the order this run reaches
+      // them, so the first CSO_RESIDUAL_BONUS_THRESHOLD get the standard rate
+      // and the rest get the bonus rate.
+      const referralOrdinals = new Map<string, number>();
 
       for (const cso of activeCSOs) {
         if (!cso.referredBy) continue;
@@ -316,31 +325,23 @@ export const walletRouter = createTRPCRouter({
 
         if (!referrerSub) continue;
 
-        const referralsCountResponse = await fetch(`${endpoint}/sql`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`,
-            "surreal-ns": namespace,
-            "surreal-db": "app",
-          },
-          body: JSON.stringify({
-            query: `SELECT count() as count FROM referrals WHERE referrerId = '${cso.referredBy}' AND referralType = 'cso_affiliate' AND status = 'active' GROUP ALL`,
-          }),
-        });
-
-        const countData = await referralsCountResponse.json();
-        const csoReferralCount = countData[0]?.result?.[0]?.count || 0;
-
         // A referred CSO Affiliate pays CSO_MONTHLY_FEE ($50) a month to stay
-        // in the network and half of that ($25) goes to whoever signed them
-        // up, every month for as long as they keep paying.
+        // in the network, and a share of that goes to whoever signed them up,
+        // every month for as long as they keep paying: 50% ($25) for each of
+        // the first CSO_RESIDUAL_BONUS_THRESHOLD recruits, 75% ($37.50) for
+        // every recruit past that.
         //
         // This previously multiplied a rate against 49.99 - the ACE course
         // subscription - which is not the fee this residual is drawn from, so
         // every payout was a few cents light and drifted from the rate quoted
-        // on the Earnings screen. Both now read from constants/pricing.
-        const residualAmount = CSO_RESIDUAL_MONTHLY;
+        // on the Earnings screen. All rates now read from constants/pricing.
+        const ordinal = referralOrdinals.get(cso.referredBy) ?? 0;
+        referralOrdinals.set(cso.referredBy, ordinal + 1);
+
+        const residualAmount =
+          ordinal < CSO_RESIDUAL_BONUS_THRESHOLD
+            ? CSO_RESIDUAL_MONTHLY
+            : CSO_RESIDUAL_BONUS_MONTHLY;
 
         const walletResponse = await fetch(`${endpoint}/sql`, {
           method: "POST",
@@ -368,7 +369,7 @@ export const walletRouter = createTRPCRouter({
             amount: residualAmount,
             status: "pending",
             description: `CSO Affiliate residual - ${Math.round(
-              (CSO_RESIDUAL_MONTHLY / CSO_MONTHLY_FEE) * 100
+              (residualAmount / CSO_MONTHLY_FEE) * 100
             )}% of ${CSO_MONTHLY_FEE} monthly dues - ${currentMonth}`,
             referenceId: cso.id,
             referenceType: "subscription",

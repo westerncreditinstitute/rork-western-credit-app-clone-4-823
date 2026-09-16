@@ -37,6 +37,8 @@ import ReferralProgramBreakdown from "@/components/earnings/ReferralProgramBreak
 import {
   BUNDLE_PAYOUT_CSO,
   CSO_MONTHLY_FEE,
+  CSO_RESIDUAL_BONUS_SHARE,
+  CSO_RESIDUAL_BONUS_THRESHOLD,
   CSO_RESIDUAL_MONTHLY,
   REFERRAL_ACE1_ENROLLED,
   REFERRAL_ACE1_FREE,
@@ -322,7 +324,8 @@ export default function EarningsScreen() {
                 </View>
                 <Text style={styles.incomeTypeTitle}>CSO Residuals</Text>
                 <Text style={styles.incomeTypeDesc}>
-                  {formatPrice(CSO_RESIDUAL_MONTHLY)}/mo each, recurring
+                  {formatPrice(CSO_RESIDUAL_MONTHLY)}/mo each — {CSO_RESIDUAL_BONUS_SHARE * 100}% past{' '}
+                  {CSO_RESIDUAL_BONUS_THRESHOLD}
                 </Text>
               </Card>
             )}

@@ -61,6 +61,22 @@ export const CSO_RESIDUAL_MONTHLY = 25;
 export const CSO_RESIDUAL_SHARE = CSO_RESIDUAL_MONTHLY / CSO_MONTHLY_FEE;
 
 /**
+ * Referred CSO count at which the residual rate steps up.
+ *
+ * The first {@link CSO_RESIDUAL_BONUS_THRESHOLD} active CSO Affiliates a
+ * member recruits pay the standard residual; every one after that pays the
+ * bonus rate, rewarding the affiliates who build the largest downlines.
+ */
+export const CSO_RESIDUAL_BONUS_THRESHOLD = 100;
+
+/** Share of monthly dues paid on referred CSOs past the bonus threshold. */
+export const CSO_RESIDUAL_BONUS_SHARE = 0.75;
+
+/** Monthly residual for each referred CSO Affiliate past the threshold. */
+export const CSO_RESIDUAL_BONUS_MONTHLY =
+  CSO_MONTHLY_FEE * CSO_RESIDUAL_BONUS_SHARE;
+
+/**
  * Due today to start the ACE-1 trial: nothing.
  *
  * Enrollment is free and the certificate fee is not taken until the trial
@@ -120,9 +136,23 @@ export type ReferrerTier = 'free' | 'ace1_student' | 'cso_affiliate';
  * membership yourself - which mirrors how the payout run in
  * `backend/trpc/routes/wallet.ts` resolves it.
  */
+/**
+ * Monthly residual income from CSO Affiliates this member recruited.
+ *
+ * Only CSO Affiliates earn this. Someone on the free or student tier can
+ * still refer a CSO, but the residual is a benefit of carrying the
+ * membership yourself - which mirrors how the payout run in
+ * `backend/trpc/routes/wallet.ts` resolves it.
+ *
+ * Tiered: the first {@link CSO_RESIDUAL_BONUS_THRESHOLD} active recruits pay
+ * {@link CSO_RESIDUAL_MONTHLY} each; every recruit past that pays the bonus
+ * rate {@link CSO_RESIDUAL_BONUS_MONTHLY}.
+ */
 export function csoResidualIncome(tier: ReferrerTier, activeCSOReferrals: number): number {
   if (tier !== 'cso_affiliate') return 0;
-  return activeCSOReferrals * CSO_RESIDUAL_MONTHLY;
+  const standard = Math.min(activeCSOReferrals, CSO_RESIDUAL_BONUS_THRESHOLD);
+  const bonus = Math.max(0, activeCSOReferrals - CSO_RESIDUAL_BONUS_THRESHOLD);
+  return standard * CSO_RESIDUAL_MONTHLY + bonus * CSO_RESIDUAL_BONUS_MONTHLY;
 }
 
 /**

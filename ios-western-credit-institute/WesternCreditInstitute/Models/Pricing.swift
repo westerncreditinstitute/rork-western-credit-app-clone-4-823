@@ -55,6 +55,19 @@ nonisolated enum Pricing {
     /// Share of a referred CSO's monthly dues paid out as residual income.
     static let csoResidualShare: Double = csoResidualMonthly / csoMonthlyFee
 
+    /// Referred CSO count at which the residual rate steps up.
+    ///
+    /// The first `csoResidualBonusThreshold` active CSO Affiliates a member
+    /// recruits pay the standard residual; every one after that pays the
+    /// bonus rate, rewarding the affiliates who build the largest downlines.
+    static let csoResidualBonusThreshold: Int = 100
+
+    /// Share of monthly dues paid on referred CSOs past the bonus threshold.
+    static let csoResidualBonusShare: Double = 0.75
+
+    /// Monthly residual for each referred CSO Affiliate past the threshold.
+    static let csoResidualBonusMonthly: Double = csoMonthlyFee * csoResidualBonusShare
+
     /// Due today to start the ACE-1 trial: nothing.
     ///
     /// Enrollment is free and the certificate fee is not taken until the
@@ -124,9 +137,15 @@ nonisolated enum Pricing {
     /// Only CSO Affiliates earn this. Someone on the free or student tier can
     /// still refer a CSO, but the residual is a benefit of carrying the
     /// membership yourself.
+    ///
+    /// Tiered: the first `csoResidualBonusThreshold` active recruits pay
+    /// `csoResidualMonthly` each; every recruit past that pays the bonus rate
+    /// `csoResidualBonusMonthly`.
     static func csoResidualIncome(for tier: SubscriptionTier, activeCSOReferrals: Int) -> Double {
         guard tier == .csoAffiliate else { return 0 }
-        return Double(activeCSOReferrals) * csoResidualMonthly
+        let standard = min(activeCSOReferrals, csoResidualBonusThreshold)
+        let bonus = max(0, activeCSOReferrals - csoResidualBonusThreshold)
+        return Double(standard) * csoResidualMonthly + Double(bonus) * csoResidualBonusMonthly
     }
 
     /// Projects a month of referral income at a given tier.

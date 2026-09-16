@@ -21,6 +21,9 @@ import {
   BUNDLE_PAYOUT_CSO,
   BUNDLE_PAYOUT_STANDARD,
   CSO_MONTHLY_FEE,
+  CSO_RESIDUAL_BONUS_MONTHLY,
+  CSO_RESIDUAL_BONUS_SHARE,
+  CSO_RESIDUAL_BONUS_THRESHOLD,
   CSO_RESIDUAL_MONTHLY,
   CSO_RESIDUAL_SHARE,
   EARNINGS_SCENARIOS,
@@ -141,7 +144,9 @@ function ReferralProgramBreakdown({ tier }: ReferralProgramBreakdownProps) {
           amount={`${formatPrice(CSO_RESIDUAL_MONTHLY)}/mo`}
           subtitle={`Every month, for as long as they stay. They pay ${formatPrice(
             CSO_MONTHLY_FEE
-          )}/month to be in the network and half of it comes back to you.`}
+          )}/month to be in the network and half of it comes back to you. Past your first ${CSO_RESIDUAL_BONUS_THRESHOLD} recruits, the rate rises to ${
+            CSO_RESIDUAL_BONUS_SHARE * 100
+          }% — ${formatPrice(CSO_RESIDUAL_BONUS_MONTHLY)}/mo.`}
           tag={isCSO ? "Your CSO residual" : "CSO Affiliates only"}
           isYours={isCSO}
           isLast
@@ -163,7 +168,9 @@ function ReferralProgramBreakdown({ tier }: ReferralProgramBreakdownProps) {
             </Text>{" "}
             Every other payout here is earned once. Sign up 10 CSO Affiliates and
             that is {formatPrice(CSO_RESIDUAL_MONTHLY * 10)} arriving every month
-            without referring anyone new.
+            without referring anyone new. Pass {CSO_RESIDUAL_BONUS_THRESHOLD}{' '}
+            recruited CSO Affiliates and the rate climbs from {CSO_RESIDUAL_SHARE * 100}%
+            to {CSO_RESIDUAL_BONUS_SHARE * 100}% on every one after that.
           </Text>
         </View>
       </Card>
@@ -273,7 +280,9 @@ function ReferralProgramBreakdown({ tier }: ReferralProgramBreakdownProps) {
               `${BUNDLE_COMMISSION_CSO * 100}% commission on every bundle sale`,
               `${formatPrice(REFERRAL_ACE1_ENROLLED)} per ACE-1 referral`,
               `${formatPrice(REFERRAL_ACE23_BOUNTY)} per ACE-2/ACE-3 registration`,
-              `${formatPrice(CSO_RESIDUAL_MONTHLY)}/month residual for every CSO Affiliate you sign up`,
+              `${formatPrice(CSO_RESIDUAL_MONTHLY)}/month residual per CSO Affiliate — ${
+                CSO_RESIDUAL_BONUS_SHARE * 100
+              }% past your first ${CSO_RESIDUAL_BONUS_THRESHOLD}`,
               "Listed publicly on the Hire a Pro page",
               "Paid client consultations through the network",
             ].map((benefit) => (
