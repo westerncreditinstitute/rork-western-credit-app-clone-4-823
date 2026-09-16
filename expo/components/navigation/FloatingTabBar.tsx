@@ -13,7 +13,7 @@ import {
   WalletCards,
   type LucideIcon,
 } from "lucide-react-native";
-import React, { useCallback, useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { Animated, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -42,6 +42,28 @@ const TAB_CONFIG: Record<string, TabConfig> = {
 };
 
 const FALLBACK: TabConfig = { label: "Tab", color: "#3B82F6", icon: Home };
+
+/**
+ * The only routes rendered in the bar, in order.
+ *
+ * This is an explicit allowlist rather than a filter on screen options because
+ * expo-router's `href: null` shortcut is consumed before the tab bar ever sees
+ * it: `TabsClient` destructures `href` out of the options and converts it into
+ * `tabBarButton` + `tabBarItemStyle: { display: 'none' }`. The *default* tab
+ * bar honors those, but this custom bar builds its own row from `state.routes`,
+ * so hidden screens leaked back in. Listing the bar destinations here cannot
+ * be silently undone by a library internal.
+ */
+const BAR_ROUTES: readonly string[] = ["index", "courses", "my-agent", "more"];
+
+/** Routes reachable only through "More", which stays lit while they are open. */
+const HOSTED_IN_MORE: readonly string[] = [
+  "wallet",
+  "earnings",
+  "hire-pro",
+  "profile",
+  "admin",
+];
 
 interface TabItemProps {
   config: TabConfig;
@@ -206,6 +228,21 @@ export default function FloatingTabBar({ state, descriptors, navigation }: Botto
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
 
+  // Keep the declared bar order stable and carry each route's real index in
+  // `state.routes` so focus and navigation stay correct after filtering.
+  const barRoutes = useMemo(
+    () =>
+      BAR_ROUTES.map((name) => {
+        const index = state.routes.findIndex((r) => r.name === name);
+        return index === -1 ? null : { route: state.routes[index], index };
+      }).filter((entry): entry is { route: BottomTabBarProps["state"]["routes"][number]; index: number } => entry !== null),
+    [state.routes]
+  );
+
+  const activeRouteHostedInMore = HOSTED_IN_MORE.includes(
+    state.routes[state.index]?.name ?? ""
+  );
+
   const surfaceTint = isDark ? "rgba(11, 18, 32, 0.82)" : "rgba(255, 255, 255, 0.76)";
   const borderTint = isDark ? "rgba(148, 163, 184, 0.18)" : "rgba(0, 43, 92, 0.10)";
   const inactiveColor = isDark ? "#64748B" : "#94A3B8";
@@ -236,27 +273,18 @@ export default function FloatingTabBar({ state, descriptors, navigation }: Botto
           <View style={[StyleSheet.absoluteFill, { backgroundColor: surfaceTint }]} />
 
           <View style={styles.row}>
-            {state.routes.map((route, index) => {
+            {barRoutes.map(({ route, index }) => {
               const descriptor = descriptors[route.key];
               const options = descriptor?.options;
-
-              // Expo-router's convention for hiding a tab is `href: null` in
-              // its screen options. The default tab bar honors that itself;
-              // this custom bar must filter the same way or hidden screens
-              // (Wallet, Earnings, Hire Pro, Admin — all under "More") leak
-              // back into the bar. `href` is an expo-router extension not in
-              // the base BottomTabNavigationOptions type, hence the narrow cast.
-              if (
-                (options as { href?: unknown } | undefined)?.href === null
-              ) {
-                return null;
-              }
 
               const config = TAB_CONFIG[route.name] ?? {
                 ...FALLBACK,
                 label: options?.title ?? route.name,
               };
-              const focused = state.index === index;
+              // "More" stays lit while any destination it hosts is on screen.
+              const focused =
+                state.index === index ||
+                (route.name === "more" && activeRouteHostedInMore);
               const rawBadge = options?.tabBarBadge;
               const badge =
                 rawBadge === undefined || rawBadge === null || rawBadge === ""
