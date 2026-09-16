@@ -469,12 +469,12 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     backgroundColor: '#000',
   },
   backgroundImage: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     width: '100%',
     height: '100%',
   },
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   notFoundContainer: {
     flex: 1,
@@ -565,7 +565,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     height: '100%',
   },
   homePreviewGradient: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   homePreviewContent: {
     position: 'absolute',

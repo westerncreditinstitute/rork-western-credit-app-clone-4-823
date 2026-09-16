@@ -301,7 +301,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#05010F",
   },
   centerGlowWrap: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -313,11 +313,11 @@ const styles = StyleSheet.create({
     opacity: 0.14,
   },
   starsWrap: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     overflow: "hidden",
   },
   hud: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 32,

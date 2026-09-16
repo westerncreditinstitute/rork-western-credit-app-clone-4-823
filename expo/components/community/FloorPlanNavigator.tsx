@@ -355,7 +355,7 @@ const createStyles = (colors: any, isDark: boolean, isExpanded: boolean) =>
       elevation: 8,
     },
     gradient: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
     },
     header: {
       flexDirection: 'row',

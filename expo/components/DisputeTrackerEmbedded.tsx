@@ -35,7 +35,7 @@ const STATUSES = ["all", "sent", "in-progress", "resolved", "rejected"] as const
 
 interface DisputeTrackerEmbeddedProps {
   showHeader?: boolean;
-  maxHeight?: number | string;
+  maxHeight?: number | `${number}%`;
   onDisputeSelected?: (dispute: Dispute) => void;
 }
 

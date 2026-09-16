@@ -273,7 +273,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   unavailableOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',

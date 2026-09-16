@@ -383,7 +383,7 @@ const styles = StyleSheet.create({
 
   // Backdrop
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: '#000',
     zIndex: 998,
   },

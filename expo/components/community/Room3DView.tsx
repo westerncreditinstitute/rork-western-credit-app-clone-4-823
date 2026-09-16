@@ -561,7 +561,7 @@ const createStyles = (colors: any, isDark: boolean, isFullscreen: boolean) =>
       borderRadius: 8,
     },
     weatherOverlay: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
     },
     raindrop: {
       position: 'absolute',

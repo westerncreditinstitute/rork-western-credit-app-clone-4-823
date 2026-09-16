@@ -1050,7 +1050,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     position: 'relative',
   },
   skybox: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   roomView: {
     flex: 1,
@@ -1479,7 +1479,7 @@ const createStyles = (colors: any, isDark: boolean) => StyleSheet.create({
     backgroundColor: colors.surfaceAlt,
   },
   guestBookModal: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.8)',
     justifyContent: 'center',
     padding: 24,

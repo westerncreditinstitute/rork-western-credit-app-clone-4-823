@@ -523,7 +523,7 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: Colors.background,
     justifyContent: "center",
     alignItems: "center",

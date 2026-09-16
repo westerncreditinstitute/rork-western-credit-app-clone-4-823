@@ -494,12 +494,12 @@ export default function AvatarCustomizer({
 const createStyles = (colors: any, isDark: boolean) =>
   StyleSheet.create({
     overlay: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
       justifyContent: 'flex-end',
       zIndex: 1000,
     },
     backdrop: {
-      ...StyleSheet.absoluteFillObject,
+      ...StyleSheet.absoluteFill,
       backgroundColor: 'rgba(0,0,0,0.6)',
     },
     modal: {

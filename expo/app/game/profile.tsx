@@ -1423,7 +1423,7 @@ const styles = StyleSheet.create({
   postMediaGridItem: { width: '49%' as any, height: 160, position: 'relative' },
   postMediaGridImage: { width: '100%', height: '100%' },
   moreMediaOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.5)',
     alignItems: 'center',
     justifyContent: 'center',

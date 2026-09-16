@@ -253,7 +253,8 @@ export class PropertyTypesService {
       for (const type of propertyTypes) {
         await supabase
           .from('property_types')
-          .upsert(type, { onConflict: 'id' });
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .upsert(type as any, { onConflict: 'id' });
       }
 
       console.log(`[PropertyTypesService] Initialized ${propertyTypes.length} property types`);

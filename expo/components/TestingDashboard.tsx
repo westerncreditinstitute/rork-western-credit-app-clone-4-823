@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
   StyleSheet,
 } from 'react-native';
-import { useTheme } from '@react-navigation/native';
+import { useTheme } from "expo-router/react-navigation";
 import { testingService } from '@/services/TestingService';
 import { useDisputes } from '@/contexts/DisputesContext';
 import { useUser } from '@/contexts/UserContext';
@@ -200,7 +200,7 @@ ${dataString}
     },
     subtitle: {
       fontSize: 14,
-      color: colors.text + '99',
+      color: (colors.text as string) + '99',
     },
     statsGrid: {
       flexDirection: 'row',
@@ -219,7 +219,7 @@ ${dataString}
     },
     statLabel: {
       fontSize: 12,
-      color: colors.text + '99',
+      color: (colors.text as string) + '99',
       marginBottom: 8,
       fontWeight: '500',
     },
@@ -424,7 +424,7 @@ ${dataString}
                 <Text style={{ color: colors.text, fontWeight: '600' }}>
                   {dispute.creditor}
                 </Text>
-                <Text style={{ color: colors.text + '99', fontSize: 12 }}>
+                <Text style={{ color: (colors.text as string) + '99', fontSize: 12 }}>
                   Account: {dispute.accountNumber}
                 </Text>
                 <View
@@ -434,7 +434,7 @@ ${dataString}
                     marginTop: 8,
                   }}
                 >
-                  <Text style={{ color: colors.text + '99', fontSize: 12 }}>
+                  <Text style={{ color: (colors.text as string) + '99', fontSize: 12 }}>
                     Type: {dispute.disputeType}
                   </Text>
                   <Text
@@ -465,7 +465,7 @@ ${dataString}
                     {dispute.status}
                   </Text>
                 </View>
-                <Text style={{ color: colors.text + '99', fontSize: 11, marginTop: 8 }}>
+                <Text style={{ color: (colors.text as string) + '99', fontSize: 11, marginTop: 8 }}>
                   Response by: {dispute.responseBy}
                 </Text>
               </View>
@@ -488,7 +488,7 @@ ${dataString}
             <TextInput
               style={styles.input}
               placeholder="Full Name"
-              placeholderTextColor={colors.text + '66'}
+              placeholderTextColor={(colors.text as string) + '66'}
               value={userName}
               onChangeText={setUserName}
               editable={!isLoading}
@@ -497,7 +497,7 @@ ${dataString}
             <TextInput
               style={styles.input}
               placeholder="Email Address"
-              placeholderTextColor={colors.text + '66'}
+              placeholderTextColor={(colors.text as string) + '66'}
               value={userEmail}
               onChangeText={setUserEmail}
               keyboardType="email-address"
@@ -507,7 +507,7 @@ ${dataString}
             <TextInput
               style={styles.input}
               placeholder="Phone (optional)"
-              placeholderTextColor={colors.text + '66'}
+              placeholderTextColor={(colors.text as string) + '66'}
               value={userPhone}
               onChangeText={setUserPhone}
               keyboardType="phone-pad"
@@ -551,7 +551,7 @@ ${dataString}
             <TextInput
               style={styles.input}
               placeholder="Creditor Name"
-              placeholderTextColor={colors.text + '66'}
+              placeholderTextColor={(colors.text as string) + '66'}
               value={creditor}
               onChangeText={setCreditor}
               editable={!isLoading}
@@ -560,7 +560,7 @@ ${dataString}
             <TextInput
               style={styles.input}
               placeholder="Account Number"
-              placeholderTextColor={colors.text + '66'}
+              placeholderTextColor={(colors.text as string) + '66'}
               value={accountNumber}
               onChangeText={setAccountNumber}
               editable={!isLoading}

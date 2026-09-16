@@ -728,12 +728,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
   },
   homeImage: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     width: '100%',
     height: '100%',
   },
   homeOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   imageIndicators: {
     position: 'absolute',

@@ -460,7 +460,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#0A1628',
   },
   backgroundPattern: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     overflow: 'hidden',
   },
   patternCircle: {

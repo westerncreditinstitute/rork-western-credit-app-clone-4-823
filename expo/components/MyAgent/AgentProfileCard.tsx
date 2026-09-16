@@ -343,7 +343,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#111A2E",
   },
   heroImage: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     resizeMode: "cover",
   },
   aura: {
