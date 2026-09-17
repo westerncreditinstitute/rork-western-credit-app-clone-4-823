@@ -19,21 +19,32 @@ export function useNotificationResponseRouter() {
   useEffect(() => {
     if (Platform.OS === 'web') return;
 
-    const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
-      try {
-        const data = response.notification.request.content.data as
-          | { actionUrl?: string }
-          | undefined;
-        if (data?.actionUrl) {
-          router.push(data.actionUrl as any);
+    // Subscribing reaches into the notifications native module. Where that
+    // module is absent (Expo Go) this throws during the root layout's first
+    // render, which unmounts the app before any screen appears.
+    let subscription: { remove: () => void } | undefined;
+    try {
+      subscription = Notifications.addNotificationResponseReceivedListener((response) => {
+        try {
+          const data = response.notification.request.content.data as
+            | { actionUrl?: string }
+            | undefined;
+          if (data?.actionUrl) {
+            router.push(data.actionUrl as any);
+          }
+        } catch (error) {
+          console.error('[useNotificationResponseRouter] Failed to handle notification tap:', error);
         }
-      } catch (error) {
-        console.error('[useNotificationResponseRouter] Failed to handle notification tap:', error);
-      }
-    });
+      });
+    } catch (error) {
+      console.warn(
+        '[useNotificationResponseRouter] Notification taps unavailable in this runtime:',
+        error instanceof Error ? error.message : error
+      );
+    }
 
     return () => {
-      subscription.remove();
+      subscription?.remove();
     };
   }, [router]);
 }

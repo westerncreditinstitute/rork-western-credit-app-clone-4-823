@@ -27,14 +27,37 @@ import { useUser } from '@/contexts/UserContext';
 // project id is added (via `eas init`), this hook will start
 // registering real tokens with no other code changes required.
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
+/**
+ * True when running inside the Expo Go sandbox rather than a real build.
+ *
+ * Expo Go ships a fixed set of native modules and, from SDK 53 on, no longer
+ * carries the remote-push half of `expo-notifications`. Calls that reach for
+ * that missing native side throw, so they are skipped here.
+ */
+export const IS_EXPO_GO = Constants.appOwnership === 'expo';
+
+// Configuring the handler touches the notifications native module at MODULE
+// scope - it runs the moment anything imports this file, which happens during
+// the root layout's own import graph. If it throws (Expo Go without the native
+// side present) the error escapes before any component mounts and the whole
+// bundle fails to start, which looks exactly like "the app won't open".
+// Wrapping it keeps a missing native module from taking the app down; local
+// notifications degrade quietly and everything else still boots.
+try {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+    }),
+  });
+} catch (error) {
+  console.warn(
+    '[usePushNotifications] Notification handler unavailable in this runtime:',
+    error instanceof Error ? error.message : error
+  );
+}
 
 export type PushPermissionStatus = 'undetermined' | 'granted' | 'denied' | 'unsupported';
 
@@ -66,6 +89,12 @@ export function usePushNotifications() {
     if (!Device.isDevice) {
       // Simulators/emulators can't receive real push tokens.
       console.log('[usePushNotifications] Not a physical device, skipping token registration');
+      return;
+    }
+    if (IS_EXPO_GO) {
+      // Expo Go (SDK 53+) dropped remote push support; asking for a token here
+      // throws rather than returning an error, so don't ask.
+      console.log('[usePushNotifications] Expo Go detected — skipping remote push token');
       return;
     }
     try {
