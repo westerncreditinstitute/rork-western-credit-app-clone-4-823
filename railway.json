@@ -1,11 +1,10 @@
 {
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
-    "builder": "NIXPACKS",
-    "buildCommand": "cd expo && npm install --legacy-peer-deps --include=dev && npx expo export --platform web --output-dir dist"
+    "buildCommand": "npm install --legacy-peer-deps --include=dev && npx expo export --platform web --output-dir dist"
   },
   "deploy": {
-    "startCommand": "cd expo && npx tsx scripts/serve-production.ts",
+    "startCommand": "npx tsx scripts/serve-production.ts",
     "healthcheckPath": "/api/system-status",
     "healthcheckTimeout": 300,
     "restartPolicyType": "ON_FAILURE",
