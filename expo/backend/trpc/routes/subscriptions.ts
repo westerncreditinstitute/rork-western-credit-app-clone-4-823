@@ -1,5 +1,12 @@
 import * as z from "zod";
 import { createTRPCRouter, publicProcedure } from "../create-context";
+// Server-only client: bypasses RLS when SUPABASE_SERVICE_ROLE_KEY is set,
+// and transparently falls back to the anon client when it isn't. This
+// replaces the old SurrealDB HTTP client (process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT),
+// which no longer exists after the Railway migration and made every call in
+// this file throw "Database configuration missing" - the actual root cause
+// of upgrades not persisting after logout/refresh.
+import { supabaseAdmin as supabase } from "@/lib/supabase-admin";
 
 /**
  * Server-side mirror of `expo/constants/pricing.ts`.
@@ -8,7 +15,7 @@ import { createTRPCRouter, publicProcedure } from "../create-context";
  * duplicated deliberately. If a price changes, it must change in BOTH files -
  * and in `Pricing.swift` for iOS.
  */
-const SUBSCRIPTION_FEES = {
+const SUBSCRIPTION_FEES: Record<string, number> = {
   free: 0,
   ace1_student: 49.99,
   cso_affiliate: 50,
@@ -37,39 +44,70 @@ function ace1BonusFor(referrerTier: string | undefined): number {
     : REFERRAL_BONUSES.ace1_from_free;
 }
 
+interface DbSubscription {
+  id: string;
+  user_id: string;
+  plan: string;
+  tier: string | null;
+  status: string;
+  monthly_fee: number | null;
+  start_date: string;
+  end_date: string | null;
+  initial_registration_date: string | null;
+  initial_registration_expiry: string | null;
+  certificate_paid: boolean | null;
+  trial_ends_at: string | null;
+  auto_renew: boolean | null;
+  referred_by: string | null;
+  promo_applied: boolean | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Maps a Supabase row (snake_case) to the camelCase shape the app's
+ * TypeScript types and UI screens already expect (see
+ * `contexts/SubscriptionContext.tsx`).
+ */
+function dbToSubscription(db: DbSubscription) {
+  return {
+    id: db.id,
+    userId: db.user_id,
+    tier: (db.tier || db.plan) as "free" | "ace1_student" | "cso_affiliate",
+    status: db.status,
+    monthlyFee: db.monthly_fee ?? 0,
+    startDate: db.start_date,
+    endDate: db.end_date ?? undefined,
+    initialRegistrationDate: db.initial_registration_date ?? undefined,
+    initialRegistrationExpiry: db.initial_registration_expiry ?? undefined,
+    certificatePaid: db.certificate_paid ?? undefined,
+    trialEndsAt: db.trial_ends_at ?? undefined,
+    autoRenew: db.auto_renew ?? true,
+    referredBy: db.referred_by ?? undefined,
+    promoApplied: db.promo_applied ?? undefined,
+    createdAt: db.created_at,
+    updatedAt: db.updated_at,
+  };
+}
+
 export const subscriptionsRouter = createTRPCRouter({
   getByUserId: publicProcedure
     .input(z.object({ userId: z.string() }))
     .query(async ({ input }) => {
-      const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-      const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-      const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
+      const { data, error } = await supabase
+        .from("subscriptions")
+        .select("*")
+        .eq("user_id", input.userId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-      if (!endpoint || !namespace || !token) {
-        throw new Error("Database configuration missing");
+      if (error) {
+        console.error("[subscriptions.getByUserId] Database error:", error.message);
+        throw new Error(`Failed to fetch subscription: ${error.message}`);
       }
 
-      const response = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `SELECT * FROM subscriptions WHERE userId = '${input.userId}' ORDER BY createdAt DESC LIMIT 1`,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("Database error:", errorText);
-        throw new Error(`Failed to fetch subscription: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return data[0]?.result?.[0] || null;
+      return data ? dbToSubscription(data as DbSubscription) : null;
     }),
 
   create: publicProcedure
@@ -80,60 +118,43 @@ export const subscriptionsRouter = createTRPCRouter({
       isInitialRegistration: z.boolean().optional(),
     }))
     .mutation(async ({ input }) => {
-      const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-      const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-      const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
-
-      if (!endpoint || !namespace || !token) {
-        throw new Error("Database configuration missing");
-      }
-
       const now = new Date().toISOString();
-      const id = `subscriptions:${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      
+
       // ACE-1 starts on a 7-day free trial: enrollment costs nothing and the
       // certificate fee is collected when the trial ends. `certificatePaid`
-      // is what separates a trial member from a subscriber — the trial
+      // is what separates a trial member from a subscriber - the trial
       // withholds the dispute-letter library, so this flag gates real value
       // and must never be inferred from the tier alone.
-      const trialDays = input.tier === 'ace1_student' ? ACE1_TRIAL_DAYS : 30;
+      const trialDays = input.tier === "ace1_student" ? ACE1_TRIAL_DAYS : 30;
       const expiryDate = new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000).toISOString();
 
-      const subscription = {
-        id,
-        userId: input.userId,
+      const row = {
+        user_id: input.userId,
+        plan: input.tier,
         tier: input.tier,
         status: "active",
-        monthlyFee: SUBSCRIPTION_FEES[input.tier],
-        startDate: now,
-        endDate: input.tier === 'ace1_student' ? expiryDate : undefined,
-        initialRegistrationDate: input.isInitialRegistration ? now : undefined,
-        initialRegistrationExpiry: input.isInitialRegistration ? expiryDate : undefined,
+        monthly_fee: SUBSCRIPTION_FEES[input.tier],
+        start_date: now,
+        end_date: input.tier === "ace1_student" ? expiryDate : null,
+        initial_registration_date: input.isInitialRegistration ? now : null,
+        initial_registration_expiry: input.isInitialRegistration ? expiryDate : null,
         // A new ACE-1 subscription is always a trial: nothing has been billed
         // yet. Only a completed certificate payment flips this.
-        certificatePaid: input.tier === 'ace1_student' ? false : undefined,
-        trialEndsAt: input.tier === 'ace1_student' ? expiryDate : undefined,
-        autoRenew: true,
-        referredBy: input.referredBy,
-        createdAt: now,
-        updatedAt: now,
+        certificate_paid: input.tier === "ace1_student" ? false : null,
+        trial_ends_at: input.tier === "ace1_student" ? expiryDate : null,
+        auto_renew: true,
+        referred_by: input.referredBy || null,
       };
 
-      const response = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `CREATE ${id} CONTENT ${JSON.stringify(subscription)}`,
-        }),
-      });
+      const { data, error } = await supabase
+        .from("subscriptions")
+        .insert(row)
+        .select()
+        .single();
 
-      if (!response.ok) {
-        throw new Error("Failed to create subscription");
+      if (error) {
+        console.error("[subscriptions.create] Database error:", error.message);
+        throw new Error(`Failed to create subscription: ${error.message}`);
       }
 
       if (input.referredBy && input.tier !== "free") {
@@ -141,7 +162,7 @@ export const subscriptionsRouter = createTRPCRouter({
         // the student has already paid, so a bookkeeping failure is logged
         // and reconciled rather than surfaced as a failed enrollment.
         try {
-          await processReferralBonus(input.referredBy, input.userId, input.tier, endpoint, namespace, token);
+          await processReferralBonus(input.referredBy, input.userId, input.tier);
         } catch (error) {
           console.error(
             "[subscriptions] Referral bonus failed for referrer",
@@ -151,8 +172,7 @@ export const subscriptionsRouter = createTRPCRouter({
         }
       }
 
-      const data = await response.json();
-      return data[0]?.result?.[0] || subscription;
+      return dbToSubscription(data as DbSubscription);
     }),
 
   upgrade: publicProcedure
@@ -161,118 +181,77 @@ export const subscriptionsRouter = createTRPCRouter({
       newTier: z.enum(["ace1_student", "cso_affiliate"]),
     }))
     .mutation(async ({ input }) => {
-      const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-      const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-      const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
+      const { data, error } = await supabase
+        .from("subscriptions")
+        .update({
+          plan: input.newTier,
+          tier: input.newTier,
+          monthly_fee: SUBSCRIPTION_FEES[input.newTier],
+        })
+        .eq("id", input.subscriptionId)
+        .select()
+        .single();
 
-      if (!endpoint || !namespace || !token) {
-        throw new Error("Database configuration missing");
+      if (error) {
+        console.error("[subscriptions.upgrade] Database error:", error.message);
+        throw new Error(`Failed to upgrade subscription: ${error.message}`);
       }
 
-      const now = new Date().toISOString();
-      const query = `UPDATE ${input.subscriptionId} SET 
-        tier = '${input.newTier}', 
-        monthlyFee = ${SUBSCRIPTION_FEES[input.newTier]},
-        updatedAt = '${now}'`;
-
-      const response = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({ query }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to upgrade subscription");
-      }
-
-      const data = await response.json();
-      return data[0]?.result?.[0] || null;
+      return data ? dbToSubscription(data as DbSubscription) : null;
     }),
 
   cancel: publicProcedure
     .input(z.object({ subscriptionId: z.string() }))
     .mutation(async ({ input }) => {
-      const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-      const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-      const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
-
-      if (!endpoint || !namespace || !token) {
-        throw new Error("Database configuration missing");
-      }
-
       const now = new Date().toISOString();
-      const query = `UPDATE ${input.subscriptionId} SET 
-        status = 'cancelled', 
-        autoRenew = false,
-        endDate = '${now}',
-        updatedAt = '${now}'`;
+      const { data, error } = await supabase
+        .from("subscriptions")
+        .update({
+          status: "cancelled",
+          auto_renew: false,
+          end_date: now,
+        })
+        .eq("id", input.subscriptionId)
+        .select()
+        .single();
 
-      const response = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({ query }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to cancel subscription");
+      if (error) {
+        console.error("[subscriptions.cancel] Database error:", error.message);
+        throw new Error(`Failed to cancel subscription: ${error.message}`);
       }
 
-      const data = await response.json();
-      return data[0]?.result?.[0] || null;
+      return data ? dbToSubscription(data as DbSubscription) : null;
     }),
 
   checkAccess: publicProcedure
-    .input(z.object({ 
+    .input(z.object({
       userId: z.string(),
       feature: z.enum(["courses", "ai_coach", "hire_pro_listing", "referral_program", "credit_tips"]),
     }))
     .query(async ({ input }) => {
-      const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-      const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-      const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
+      const { data, error } = await supabase
+        .from("subscriptions")
+        .select("*")
+        .eq("user_id", input.userId)
+        .eq("status", "active")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-      if (!endpoint || !namespace || !token) {
-        throw new Error("Database configuration missing");
+      if (error) {
+        console.error("[subscriptions.checkAccess] Database error:", error.message);
+        throw new Error(`Failed to check access: ${error.message}`);
       }
 
-      const response = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `SELECT * FROM subscriptions WHERE userId = '${input.userId}' AND status = 'active' ORDER BY createdAt DESC LIMIT 1`,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to check access");
-      }
-
-      const data = await response.json();
-      const subscription = data[0]?.result?.[0];
-
-      if (!subscription) {
+      if (!data) {
         return { hasAccess: input.feature === "credit_tips", tier: "free" as const };
       }
 
-      const tier = subscription.tier;
+      const subscription = data as DbSubscription;
+      const tier = subscription.tier || subscription.plan;
       const now = new Date();
-      const initialExpiry = subscription.initialRegistrationExpiry 
-        ? new Date(subscription.initialRegistrationExpiry)
+      const initialExpiry = subscription.initial_registration_expiry
+        ? new Date(subscription.initial_registration_expiry)
         : null;
       const isInInitialPeriod = initialExpiry ? now < initialExpiry : false;
 
@@ -284,68 +263,47 @@ export const subscriptionsRouter = createTRPCRouter({
         referral_program: tier === "ace1_student" || tier === "cso_affiliate",
       };
 
-      return { 
-        hasAccess: accessMap[input.feature] || false, 
+      return {
+        hasAccess: accessMap[input.feature] || false,
         tier,
         isInInitialPeriod,
-        initialExpiryDate: subscription.initialRegistrationExpiry,
+        initialExpiryDate: subscription.initial_registration_expiry,
       };
     }),
 
   getReferralStats: publicProcedure
     .input(z.object({ userId: z.string() }))
     .query(async ({ input }) => {
-      const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-      const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-      const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
+      const { data: referralRows, error: referralError } = await supabase
+        .from("referrals")
+        .select("*")
+        .eq("referrer_id", input.userId);
 
-      if (!endpoint || !namespace || !token) {
-        throw new Error("Database configuration missing");
+      if (referralError) {
+        console.error("[subscriptions.getReferralStats] Database error:", referralError.message);
+        throw new Error(`Failed to fetch referral stats: ${referralError.message}`);
       }
 
-      const response = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `SELECT * FROM referrals WHERE referrerId = '${input.userId}'`,
-        }),
-      });
+      const referrals = referralRows || [];
 
-      if (!response.ok) {
-        throw new Error("Failed to fetch referral stats");
-      }
-
-      const data = await response.json();
-      const referrals = data[0]?.result || [];
-
-      const ace1Count = referrals.filter((r: any) => r.referralType === "ace1_student" && r.status === "active").length;
-      const csoCount = referrals.filter((r: any) => r.referralType === "cso_affiliate" && r.status === "active").length;
-      const advancedCount = referrals.filter((r: any) => r.referralType === "advanced_course" && r.status === "active").length;
-      const bundleCount = referrals.filter((r: any) => r.referralType === "bundle" && r.status === "active").length;
-      const totalEarned = referrals.reduce((sum: number, r: any) => sum + (r.totalEarned || 0), 0);
+      const ace1Count = referrals.filter((r) => r.referral_type === "ace1_student" && r.status === "active").length;
+      const csoCount = referrals.filter((r) => r.referral_type === "cso_affiliate" && r.status === "active").length;
+      const advancedCount = referrals.filter((r) => r.referral_type === "advanced_course" && r.status === "active").length;
+      const bundleCount = referrals.filter((r) => r.referral_type === "bundle" && r.status === "active").length;
+      const totalEarned = referrals.reduce((sum, r) => sum + (Number(r.total_earned) || 0), 0);
 
       // The referrer's own tier decides both the ACE-1 rate and the bundle
       // split, so it is read here rather than assumed from the referral rows.
-      const subResponse = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `SELECT tier FROM subscriptions WHERE userId = '${input.userId}' AND status = 'active' ORDER BY createdAt DESC LIMIT 1`,
-        }),
-      });
+      const { data: subRow } = await supabase
+        .from("subscriptions")
+        .select("tier, plan")
+        .eq("user_id", input.userId)
+        .eq("status", "active")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-      const subData = subResponse.ok ? await subResponse.json() : null;
-      const referrerTier = subData?.[0]?.result?.[0]?.tier ?? "free";
+      const referrerTier = (subRow?.tier || subRow?.plan) ?? "free";
       const isCSO = referrerTier === "cso_affiliate";
 
       return {
@@ -364,141 +322,84 @@ export const subscriptionsRouter = createTRPCRouter({
 });
 
 async function processReferralBonus(
-  referrerId: string, 
-  referredUserId: string, 
+  referrerId: string,
+  referredUserId: string,
   tier: "ace1_student" | "cso_affiliate",
-  endpoint: string,
-  namespace: string,
-  token: string
 ) {
-  const now = new Date().toISOString();
-  const referralId = `referrals:${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const { data: referredUser } = await supabase
+    .from("users")
+    .select("name, email")
+    .eq("id", referredUserId)
+    .maybeSingle();
 
-  const userResponse = await fetch(`${endpoint}/sql`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${token}`,
-      "surreal-ns": namespace,
-      "surreal-db": "app",
-    },
-    body: JSON.stringify({
-      query: `SELECT name, email FROM users WHERE id = '${referredUserId}'`,
-    }),
-  });
-
-  const userData = await userResponse.json();
-  const referredUser = userData[0]?.result?.[0] || { name: "Unknown", email: "" };
+  const referredUserName = referredUser?.name ?? "Unknown";
+  const referredUserEmail = referredUser?.email ?? "";
 
   // The payout is set by the REFERRER's tier, not the referee's: a free member
   // earns $25 on an ACE-1 referral while an enrolled student or CSO earns $50.
-  const referrerResponse = await fetch(`${endpoint}/sql`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${token}`,
-      "surreal-ns": namespace,
-      "surreal-db": "app",
-    },
-    body: JSON.stringify({
-      query: `SELECT tier FROM subscriptions WHERE userId = '${referrerId}' AND status = 'active' ORDER BY createdAt DESC LIMIT 1`,
-    }),
-  });
+  const { data: referrerSub } = await supabase
+    .from("subscriptions")
+    .select("tier, plan")
+    .eq("user_id", referrerId)
+    .eq("status", "active")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
-  const referrerData = referrerResponse.ok ? await referrerResponse.json() : null;
-  const referrerTier = referrerData?.[0]?.result?.[0]?.tier ?? "free";
-
+  const referrerTier = (referrerSub?.tier || referrerSub?.plan) ?? "free";
   const bonusAmount = tier === "ace1_student" ? ace1BonusFor(referrerTier) : 0;
 
   // The bonus is only earned once the referred student keeps the account open
   // past the 7-day window, so it is banked as pending until that date passes.
   const qualifiesAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
-  const referral = {
-    id: referralId,
-    referrerId,
-    referredUserId,
-    referredUserName: referredUser.name,
-    referredUserEmail: referredUser.email,
-    referralType: tier,
-    status: "active",
-    referrerTierAtSignup: referrerTier,
-    qualifiesAt,
-    totalEarned: bonusAmount,
-    createdAt: now,
-    updatedAt: now,
-  };
+  const { data: referral, error: referralError } = await supabase
+    .from("referrals")
+    .insert({
+      referrer_id: referrerId,
+      referred_user_id: referredUserId,
+      referred_user_name: referredUserName,
+      referred_user_email: referredUserEmail,
+      referral_type: tier,
+      status: "active",
+      referrer_tier_at_signup: referrerTier,
+      qualifies_at: qualifiesAt,
+      total_earned: bonusAmount,
+    })
+    .select()
+    .single();
 
-  await fetch(`${endpoint}/sql`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${token}`,
-      "surreal-ns": namespace,
-      "surreal-db": "app",
-    },
-    body: JSON.stringify({
-      query: `CREATE ${referralId} CONTENT ${JSON.stringify(referral)}`,
-    }),
-  });
+  if (referralError) {
+    console.error("[processReferralBonus] Failed to create referral:", referralError.message);
+    return;
+  }
 
   if (bonusAmount > 0) {
-    const walletResponse = await fetch(`${endpoint}/sql`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${token}`,
-        "surreal-ns": namespace,
-        "surreal-db": "app",
-      },
-      body: JSON.stringify({
-        query: `SELECT * FROM wallets WHERE userId = '${referrerId}'`,
-      }),
-    });
-
-    const walletData = await walletResponse.json();
-    const wallet = walletData[0]?.result?.[0];
+    const { data: wallet } = await supabase
+      .from("wallets")
+      .select("*")
+      .eq("user_id", referrerId)
+      .maybeSingle();
 
     if (wallet) {
-      const txId = `wallet_transactions:${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      const transaction = {
-        id: txId,
-        walletId: wallet.id,
-        userId: referrerId,
+      await supabase.from("wallet_transactions").insert({
+        wallet_id: wallet.id,
+        user_id: referrerId,
         type: "referral_bonus",
         amount: bonusAmount,
         status: "pending",
-        description: `ACE-1 Referral Bonus - ${referredUser.name}`,
-        referenceId: referralId,
-        referenceType: "subscription",
-        createdAt: now,
-      };
-
-      await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `CREATE ${txId} CONTENT ${JSON.stringify(transaction)}`,
-        }),
+        description: `ACE-1 Referral Bonus - ${referredUserName}`,
+        reference_id: referral?.id,
+        reference_type: "subscription",
       });
 
-      await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `UPDATE ${wallet.id} SET pendingBalance += ${bonusAmount}, totalEarned += ${bonusAmount}, updatedAt = '${now}'`,
-        }),
-      });
+      await supabase
+        .from("wallets")
+        .update({
+          pending_balance: Number(wallet.pending_balance || 0) + bonusAmount,
+          total_earned: Number(wallet.total_earned || 0) + bonusAmount,
+        })
+        .eq("id", wallet.id);
     }
   }
 }

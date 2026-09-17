@@ -1,5 +1,35 @@
 import * as z from "zod";
 import { createTRPCRouter, publicProcedure } from "../create-context";
+// Replaces the old SurrealDB HTTP client (process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT),
+// which no longer exists after the Railway migration. Backed by the
+// `course_progress` table (migration 028) - distinct from `video_progress`,
+// which tracks a single video's playhead rather than a whole course's
+// section-by-section completion.
+import { supabaseAdmin as supabase } from "@/lib/supabase-admin";
+
+interface DbCourseProgress {
+  id: string;
+  user_id: string;
+  course_id: string;
+  sections: Record<string, { completedSteps: number; totalSteps: number; completedStepIndices?: number[] }>;
+  overall_progress: number;
+  enrolled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+function dbToProgress(db: DbCourseProgress) {
+  return {
+    id: db.id,
+    userId: db.user_id,
+    courseId: db.course_id,
+    sections: db.sections || {},
+    overallProgress: db.overall_progress ?? 0,
+    enrolled: db.enrolled ?? true,
+    createdAt: db.created_at,
+    updatedAt: db.updated_at,
+  };
+}
 
 export const progressRouter = createTRPCRouter({
   getByUserAndCourse: publicProcedure
@@ -8,85 +38,35 @@ export const progressRouter = createTRPCRouter({
       courseId: z.string(),
     }))
     .query(async ({ input }) => {
-      const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-      const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-      const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
+      const { data, error } = await supabase
+        .from("course_progress")
+        .select("*")
+        .eq("user_id", input.userId)
+        .eq("course_id", input.courseId)
+        .maybeSingle();
 
-      if (!endpoint || !namespace || !token) {
-        throw new Error("Database configuration missing");
+      if (error) {
+        console.error("[progress.getByUserAndCourse] Database error:", error.message);
+        throw new Error(`Failed to fetch progress: ${error.message}`);
       }
 
-      const response = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `SELECT * FROM progress WHERE userId = '${input.userId}' AND courseId = '${input.courseId}'`,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("Database error:", errorText);
-        throw new Error(`Failed to fetch progress: ${response.status} ${errorText}`);
-      }
-
-      const responseText = await response.text();
-      let data;
-      try {
-        data = JSON.parse(responseText);
-      } catch {
-        console.error("Failed to parse response:", responseText);
-        throw new Error("Invalid response from database");
-      }
-      
-      return data[0]?.result?.[0] || null;
+      return data ? dbToProgress(data as DbCourseProgress) : null;
     }),
 
   getAllByUser: publicProcedure
     .input(z.object({ userId: z.string() }))
     .query(async ({ input }) => {
-      const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-      const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-      const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
+      const { data, error } = await supabase
+        .from("course_progress")
+        .select("*")
+        .eq("user_id", input.userId);
 
-      if (!endpoint || !namespace || !token) {
-        throw new Error("Database configuration missing");
+      if (error) {
+        console.error("[progress.getAllByUser] Database error:", error.message);
+        throw new Error(`Failed to fetch progress: ${error.message}`);
       }
 
-      const response = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `SELECT * FROM progress WHERE userId = '${input.userId}'`,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("Database error:", errorText);
-        throw new Error(`Failed to fetch progress: ${response.status} ${errorText}`);
-      }
-
-      const responseText = await response.text();
-      let data;
-      try {
-        data = JSON.parse(responseText);
-      } catch {
-        console.error("Failed to parse response:", responseText);
-        throw new Error("Invalid response from database");
-      }
-      
-      return data[0]?.result || [];
+      return (data || []).map((row) => dbToProgress(row as DbCourseProgress));
     }),
 
   upsert: publicProcedure
@@ -98,144 +78,54 @@ export const progressRouter = createTRPCRouter({
       totalSteps: z.number(),
     }))
     .mutation(async ({ input }) => {
-      const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-      const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-      const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
+      const { data: existing, error: fetchError } = await supabase
+        .from("course_progress")
+        .select("*")
+        .eq("user_id", input.userId)
+        .eq("course_id", input.courseId)
+        .maybeSingle();
 
-      if (!endpoint || !namespace || !token) {
-        throw new Error("Database configuration missing");
+      if (fetchError) {
+        console.error("[progress.upsert] Database error:", fetchError.message);
+        throw new Error(`Failed to check progress: ${fetchError.message}`);
       }
 
-      const now = new Date().toISOString();
-      
-      const checkResponse = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `SELECT * FROM progress WHERE userId = '${input.userId}' AND courseId = '${input.courseId}'`,
-        }),
+      const sections = (existing?.sections as DbCourseProgress["sections"]) || {};
+      sections[input.sectionId] = {
+        ...sections[input.sectionId],
+        completedSteps: input.completedSteps,
+        totalSteps: input.totalSteps,
+      };
+
+      let totalCompleted = 0;
+      let totalSteps = 0;
+      Object.values(sections).forEach((section) => {
+        totalCompleted += section.completedSteps;
+        totalSteps += section.totalSteps;
       });
+      const overallProgress = totalSteps > 0 ? Math.round((totalCompleted / totalSteps) * 100) : 0;
 
-      if (!checkResponse.ok) {
-        const errorText = await checkResponse.text();
-        console.error("Database error:", errorText);
-        throw new Error(`Failed to check progress: ${checkResponse.status} ${errorText}`);
+      const { data, error } = await supabase
+        .from("course_progress")
+        .upsert(
+          {
+            user_id: input.userId,
+            course_id: input.courseId,
+            sections,
+            overall_progress: overallProgress,
+            enrolled: true,
+          },
+          { onConflict: "user_id,course_id" },
+        )
+        .select()
+        .single();
+
+      if (error) {
+        console.error("[progress.upsert] Database error:", error.message);
+        throw new Error(`Failed to update progress: ${error.message}`);
       }
 
-      const checkText = await checkResponse.text();
-      let checkData;
-      try {
-        checkData = JSON.parse(checkText);
-      } catch {
-        console.error("Failed to parse response:", checkText);
-        throw new Error("Invalid response from database");
-      }
-
-      const existingProgress = checkData[0]?.result?.[0];
-
-      if (existingProgress) {
-        const sections = existingProgress.sections || {};
-        sections[input.sectionId] = {
-          completedSteps: input.completedSteps,
-          totalSteps: input.totalSteps,
-        };
-
-        let totalCompleted = 0;
-        let totalSteps = 0;
-        Object.values(sections).forEach((section: unknown) => {
-          const s = section as { completedSteps: number; totalSteps: number };
-          totalCompleted += s.completedSteps;
-          totalSteps += s.totalSteps;
-        });
-
-        const overallProgress = totalSteps > 0 ? Math.round((totalCompleted / totalSteps) * 100) : 0;
-
-        const query = `UPDATE ${existingProgress.id} SET sections = ${JSON.stringify(sections)}, overallProgress = ${overallProgress}, updatedAt = '${now}'`;
-
-        const response = await fetch(`${endpoint}/sql`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`,
-            "surreal-ns": namespace,
-            "surreal-db": "app",
-          },
-          body: JSON.stringify({ query }),
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error("Database error:", errorText);
-          throw new Error(`Failed to update progress: ${response.status} ${errorText}`);
-        }
-
-        const responseText = await response.text();
-        let data;
-        try {
-          data = JSON.parse(responseText);
-        } catch {
-          console.error("Failed to parse response:", responseText);
-          throw new Error("Invalid response from database");
-        }
-        
-        return data[0]?.result?.[0] || null;
-      } else {
-        const id = `progress:${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        const sections = {
-          [input.sectionId]: {
-            completedSteps: input.completedSteps,
-            totalSteps: input.totalSteps,
-          },
-        };
-
-        const overallProgress = input.totalSteps > 0 ? Math.round((input.completedSteps / input.totalSteps) * 100) : 0;
-
-        const progress = {
-          id,
-          userId: input.userId,
-          courseId: input.courseId,
-          sections,
-          overallProgress,
-          enrolled: true,
-          createdAt: now,
-          updatedAt: now,
-        };
-
-        const response = await fetch(`${endpoint}/sql`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`,
-            "surreal-ns": namespace,
-            "surreal-db": "app",
-          },
-          body: JSON.stringify({
-            query: `CREATE ${id} CONTENT ${JSON.stringify(progress)}`,
-          }),
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error("Database error:", errorText);
-          throw new Error(`Failed to create progress: ${response.status} ${errorText}`);
-        }
-
-        const responseText = await response.text();
-        let data;
-        try {
-          data = JSON.parse(responseText);
-        } catch {
-          console.error("Failed to parse response:", responseText);
-          throw new Error("Invalid response from database");
-        }
-        
-        return data[0]?.result?.[0] || progress;
-      }
+      return dbToProgress(data as DbCourseProgress);
     }),
 
   enroll: publicProcedure
@@ -244,57 +134,27 @@ export const progressRouter = createTRPCRouter({
       courseId: z.string(),
     }))
     .mutation(async ({ input }) => {
-      const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-      const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-      const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
+      const { data, error } = await supabase
+        .from("course_progress")
+        .upsert(
+          {
+            user_id: input.userId,
+            course_id: input.courseId,
+            sections: {},
+            overall_progress: 0,
+            enrolled: true,
+          },
+          { onConflict: "user_id,course_id", ignoreDuplicates: false },
+        )
+        .select()
+        .single();
 
-      if (!endpoint || !namespace || !token) {
-        throw new Error("Database configuration missing");
+      if (error) {
+        console.error("[progress.enroll] Database error:", error.message);
+        throw new Error(`Failed to enroll: ${error.message}`);
       }
 
-      const now = new Date().toISOString();
-      const id = `progress:${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-      const progress = {
-        id,
-        userId: input.userId,
-        courseId: input.courseId,
-        sections: {},
-        overallProgress: 0,
-        enrolled: true,
-        createdAt: now,
-        updatedAt: now,
-      };
-
-      const response = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `CREATE ${id} CONTENT ${JSON.stringify(progress)}`,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("Database error:", errorText);
-        throw new Error(`Failed to enroll: ${response.status} ${errorText}`);
-      }
-
-      const responseText = await response.text();
-      let data;
-      try {
-        data = JSON.parse(responseText);
-      } catch {
-        console.error("Failed to parse response:", responseText);
-        throw new Error("Invalid response from database");
-      }
-      
-      return data[0]?.result?.[0] || progress;
+      return dbToProgress(data as DbCourseProgress);
     }),
 
   completeStep: publicProcedure
@@ -306,153 +166,65 @@ export const progressRouter = createTRPCRouter({
       totalStepsInSection: z.number(),
     }))
     .mutation(async ({ input }) => {
-      const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-      const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-      const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
+      const { data: existing, error: fetchError } = await supabase
+        .from("course_progress")
+        .select("*")
+        .eq("user_id", input.userId)
+        .eq("course_id", input.courseId)
+        .maybeSingle();
 
-      if (!endpoint || !namespace || !token) {
-        throw new Error("Database configuration missing");
+      if (fetchError) {
+        console.error("[progress.completeStep] Database error:", fetchError.message);
+        throw new Error(`Failed to check progress: ${fetchError.message}`);
       }
 
-      const now = new Date().toISOString();
-      
-      const checkResponse = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `SELECT * FROM progress WHERE userId = '${input.userId}' AND courseId = '${input.courseId}'`,
-        }),
+      const sections = (existing?.sections as DbCourseProgress["sections"]) || {};
+      const currentSection = sections[input.sectionId] || {
+        completedSteps: 0,
+        totalSteps: input.totalStepsInSection,
+        completedStepIndices: [] as number[],
+      };
+
+      if (!currentSection.completedStepIndices) {
+        currentSection.completedStepIndices = [];
+      }
+
+      if (!currentSection.completedStepIndices.includes(input.stepIndex)) {
+        currentSection.completedStepIndices.push(input.stepIndex);
+        currentSection.completedSteps = currentSection.completedStepIndices.length;
+      }
+
+      currentSection.totalSteps = input.totalStepsInSection;
+      sections[input.sectionId] = currentSection;
+
+      let totalCompleted = 0;
+      let totalSteps = 0;
+      Object.values(sections).forEach((section) => {
+        totalCompleted += section.completedSteps;
+        totalSteps += section.totalSteps;
       });
+      const overallProgress = totalSteps > 0 ? Math.round((totalCompleted / totalSteps) * 100) : 0;
 
-      if (!checkResponse.ok) {
-        const errorText = await checkResponse.text();
-        console.error("Database error:", errorText);
-        throw new Error(`Failed to check progress: ${checkResponse.status} ${errorText}`);
+      const { data, error } = await supabase
+        .from("course_progress")
+        .upsert(
+          {
+            user_id: input.userId,
+            course_id: input.courseId,
+            sections,
+            overall_progress: overallProgress,
+            enrolled: true,
+          },
+          { onConflict: "user_id,course_id" },
+        )
+        .select()
+        .single();
+
+      if (error) {
+        console.error("[progress.completeStep] Database error:", error.message);
+        throw new Error(`Failed to update progress: ${error.message}`);
       }
 
-      const checkText = await checkResponse.text();
-      let checkData;
-      try {
-        checkData = JSON.parse(checkText);
-      } catch {
-        console.error("Failed to parse response:", checkText);
-        throw new Error("Invalid response from database");
-      }
-
-      const existingProgress = checkData[0]?.result?.[0];
-
-      if (existingProgress) {
-        const sections = existingProgress.sections || {};
-        const currentSection = sections[input.sectionId] || { completedSteps: 0, totalSteps: input.totalStepsInSection, completedStepIndices: [] };
-        
-        if (!currentSection.completedStepIndices) {
-          currentSection.completedStepIndices = [];
-        }
-        
-        if (!currentSection.completedStepIndices.includes(input.stepIndex)) {
-          currentSection.completedStepIndices.push(input.stepIndex);
-          currentSection.completedSteps = currentSection.completedStepIndices.length;
-        }
-        
-        currentSection.totalSteps = input.totalStepsInSection;
-        sections[input.sectionId] = currentSection;
-
-        let totalCompleted = 0;
-        let totalSteps = 0;
-        Object.values(sections).forEach((section: unknown) => {
-          const s = section as { completedSteps: number; totalSteps: number };
-          totalCompleted += s.completedSteps;
-          totalSteps += s.totalSteps;
-        });
-
-        const overallProgress = totalSteps > 0 ? Math.round((totalCompleted / totalSteps) * 100) : 0;
-
-        const query = `UPDATE ${existingProgress.id} SET sections = ${JSON.stringify(sections)}, overallProgress = ${overallProgress}, updatedAt = '${now}'`;
-
-        const response = await fetch(`${endpoint}/sql`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`,
-            "surreal-ns": namespace,
-            "surreal-db": "app",
-          },
-          body: JSON.stringify({ query }),
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error("Database error:", errorText);
-          throw new Error(`Failed to update progress: ${response.status} ${errorText}`);
-        }
-
-        const responseText = await response.text();
-        let data;
-        try {
-          data = JSON.parse(responseText);
-        } catch {
-          console.error("Failed to parse response:", responseText);
-          throw new Error("Invalid response from database");
-        }
-        
-        return data[0]?.result?.[0] || null;
-      } else {
-        const id = `progress:${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        const sections = {
-          [input.sectionId]: {
-            completedSteps: 1,
-            totalSteps: input.totalStepsInSection,
-            completedStepIndices: [input.stepIndex],
-          },
-        };
-
-        const overallProgress = input.totalStepsInSection > 0 ? Math.round((1 / input.totalStepsInSection) * 100) : 0;
-
-        const progress = {
-          id,
-          userId: input.userId,
-          courseId: input.courseId,
-          sections,
-          overallProgress,
-          enrolled: true,
-          createdAt: now,
-          updatedAt: now,
-        };
-
-        const response = await fetch(`${endpoint}/sql`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`,
-            "surreal-ns": namespace,
-            "surreal-db": "app",
-          },
-          body: JSON.stringify({
-            query: `CREATE ${id} CONTENT ${JSON.stringify(progress)}`,
-          }),
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error("Database error:", errorText);
-          throw new Error(`Failed to create progress: ${response.status} ${errorText}`);
-        }
-
-        const responseText = await response.text();
-        let data;
-        try {
-          data = JSON.parse(responseText);
-        } catch {
-          console.error("Failed to parse response:", responseText);
-          throw new Error("Invalid response from database");
-        }
-        
-        return data[0]?.result?.[0] || progress;
-      }
+      return dbToProgress(data as DbCourseProgress);
     }),
 });

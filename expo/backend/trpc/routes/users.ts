@@ -169,49 +169,34 @@ export const usersRouter = createTRPCRouter({
         console.log("[Users] Creating", tier, "subscription for:", data.id, isPromoApplied ? "(promo applied)" : "");
         
         const now = new Date().toISOString();
-        const subscriptionId = `subscriptions:${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         const expiryDate = new Date();
         expiryDate.setDate(expiryDate.getDate() + 7);
-        
-        const subscription = {
-          id: subscriptionId,
-          userId: data.id,
-          tier: tier || 'ace1_student',
-          status: 'active',
-          monthlyFee: 25,
-          startDate: now,
-          initialRegistrationDate: now,
-          initialRegistrationExpiry: expiryDate.toISOString(),
-          autoRenew: true,
-          promoApplied: isPromoApplied,
-          createdAt: now,
-          updatedAt: now,
-        };
 
+        // Writes to the `subscriptions` table directly (same client as
+        // everywhere else in the backend) instead of the old SurrealDB HTTP
+        // endpoint, which no longer exists after the Railway migration and
+        // made this insert silently no-op - the account was created but no
+        // subscription ever existed to persist past a logout.
         try {
-          const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-          const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-          const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
-
-          if (endpoint && namespace && token) {
-            const response = await fetch(`${endpoint}/sql`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${token}`,
-                "surreal-ns": namespace,
-                "surreal-db": "app",
-              },
-              body: JSON.stringify({
-                query: `CREATE ${subscriptionId} CONTENT ${JSON.stringify(subscription)}`,
-              }),
+          const { error: subError } = await supabase
+            .from('subscriptions')
+            .insert({
+              user_id: data.id,
+              plan: tier || 'ace1_student',
+              tier: tier || 'ace1_student',
+              status: 'active',
+              monthly_fee: 25,
+              start_date: now,
+              initial_registration_date: now,
+              initial_registration_expiry: expiryDate.toISOString(),
+              auto_renew: true,
+              promo_applied: isPromoApplied,
             });
 
-            if (!response.ok) {
-              console.warn("[Users] Failed to create subscription, but user account created successfully");
-            } else {
-              console.log("[Users] Subscription created successfully");
-            }
+          if (subError) {
+            console.warn("[Users] Failed to create subscription, but user account created successfully:", subError.message);
+          } else {
+            console.log("[Users] Subscription created successfully");
           }
         } catch (error) {
           console.error("[Users] Error creating subscription:", error);
