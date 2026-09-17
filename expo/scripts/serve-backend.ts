@@ -36,14 +36,16 @@ import { serve } from "@hono/node-server";
 
 import app from "../backend/hono";
 
-const port = Number(process.env.BACKEND_PORT ?? 3000);
+// Railway (and most Node hosts) inject the port to bind to via process.env.PORT.
+// Fall back to BACKEND_PORT for local dev, then 3000 as a last resort.
+const port = Number(process.env.PORT ?? process.env.BACKEND_PORT ?? 3000);
 
-const hasUrl = Boolean(process.env.EXPO_PUBLIC_SUPABASE_URL);
-const hasAnon = Boolean(process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY);
+const hasUrl = Boolean(process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL);
+const hasAnon = Boolean(process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY);
 const hasService = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
 const mark = (ok: boolean) => (ok ? "yes" : "NO");
 
-serve({ fetch: app.fetch, port }, (info) => {
+serve({ fetch: app.fetch, port, hostname: "0.0.0.0" }, (info) => {
   const url = `http://localhost:${info.port}`;
   console.log("");
   console.log("  Western Credit backend is running");
