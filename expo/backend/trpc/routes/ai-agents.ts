@@ -58,6 +58,19 @@ const MAX_USERS_PER_AGENT = 25;
 const TOTAL_AGENTS = 10000;
 
 // ============================================================
+// Validation Helpers
+// ============================================================
+
+/**
+ * Check if a string is a valid UUID (v4).
+ * Rejects mock user IDs like "1", "demo-123", etc.
+ */
+function isValidUUID(id: string): boolean {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(id);
+}
+
+// ============================================================
 // Diagnostics
 //
 // Agent assignment can fail for several very different reasons, and
@@ -2225,6 +2238,21 @@ export const aiAgentsRouter = createTRPCRouter({
     )
     .mutation(async ({ input }) => {
       console.log("[AI Agents] Direct letter generation:", input.letterType);
+
+      // Validate that userId is a real UUID (not a demo/mock ID like "1")
+      if (!isValidUUID(input.userId)) {
+        console.warn(
+          `[AI Agents] Invalid user ID format: "${input.userId}" is not a valid UUID`
+        );
+        return {
+          success: false,
+          saveError:
+            "Your account isn't fully set up in the database yet (invalid user ID), so this couldn't be saved. Try logging out and back in, or creating a real account instead of continuing in demo mode.",
+          letterContent: "",
+          letterType: input.letterType,
+          disputeId: undefined,
+        };
+      }
 
       // Fetch user info for the letter header (name/phone only — the
       // `users` table has no mailing-address columns).
