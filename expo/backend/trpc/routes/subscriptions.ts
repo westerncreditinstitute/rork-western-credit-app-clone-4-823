@@ -319,6 +319,61 @@ export const subscriptionsRouter = createTRPCRouter({
         bundleCommissionRate: isCSO ? REFERRAL_BONUSES.bundle_cso : REFERRAL_BONUSES.bundle_standard,
       };
     }),
+
+  /**
+   * SANDBOX TESTING ONLY: Mark an ACE-1 subscription as paid without requiring
+   * actual payment processing. This is used during development and testing to
+   * simulate a user who has completed the certificate payment and should have
+   * full access to the Credit Repair Tool.
+   *
+   * In production, this will be replaced with a webhook handler that updates
+   * `certificate_paid` when the actual payment processor (PayPal, Stripe, etc.)
+   * confirms payment completion.
+   *
+   * Usage: Call this after the trial period ends or when you want to test
+   * paid functionality without processing an actual payment.
+   */
+  markCertificatePaid: publicProcedure
+    .input(z.object({
+      userId: z.string().uuid("userId must be a valid UUID"),
+      subscriptionId: z.string().uuid("subscriptionId must be a valid UUID"),
+    }))
+    .mutation(async ({ input }) => {
+      console.log(
+        `[subscriptions.markCertificatePaid] Marking subscription ${input.subscriptionId} as paid for user ${input.userId}`
+      );
+
+      const { data, error } = await supabase
+        .from("subscriptions")
+        .update({
+          certificate_paid: true,
+          // Also set the billing start date to now (trial has ended)
+          start_date: new Date().toISOString(),
+        })
+        .eq("id", input.subscriptionId)
+        .eq("user_id", input.userId)
+        .select()
+        .single();
+
+      if (error) {
+        console.error("[subscriptions.markCertificatePaid] Database error:", error.message);
+        throw new Error(`Failed to mark certificate as paid: ${error.message}`);
+      }
+
+      if (!data) {
+        throw new Error(
+          `Subscription not found or does not belong to this user. ID: ${input.subscriptionId}`
+        );
+      }
+
+      console.log("[subscriptions.markCertificatePaid] Successfully marked as paid");
+
+      return {
+        success: true,
+        subscription: data ? dbToSubscription(data as DbSubscription) : null,
+        message: "Subscription marked as paid. Credit Repair Tool access should now be available.",
+      };
+    }),
 });
 
 async function processReferralBonus(
