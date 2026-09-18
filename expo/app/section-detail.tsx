@@ -43,6 +43,7 @@ import Colors from "@/constants/colors";
 import { courses } from "@/mocks/data";
 import { trpc } from "@/lib/trpc";
 import { useSubscription } from "@/contexts/SubscriptionContext";
+import { useUser } from "@/contexts/UserContext";
 import BunnyVideoPlayer from "@/components/BunnyVideoPlayer";
 
 interface VideoItem {
@@ -65,8 +66,6 @@ interface VideoNote {
   videoTitle?: string;
   createdAt: string;
 }
-
-const MOCK_USER_ID = "user_demo_123";
 
 /** Parses "h:mm:ss" / "mm:ss" / "ss" duration strings into seconds. */
 const parseDurationSeconds = (duration?: string): number => {
@@ -193,6 +192,8 @@ export default function SectionDetailScreen() {
   }>();
   const router = useRouter();
   const { canAccessInteractiveCoach } = useSubscription();
+  const { user: currentUser } = useUser();
+  const userId = currentUser?.id || "";
   const [activeVideoIndex, setActiveVideoIndex] = useState<number | null>(null);
   const [showNotes, setShowNotes] = useState(false);
   const [noteInput, setNoteInput] = useState("");
@@ -247,15 +248,15 @@ export default function SectionDetailScreen() {
   );
 
   const progressQuery = trpc.videoProgress.getAllProgress.useQuery(
-    { userId: MOCK_USER_ID, courseId, sectionId },
-    { enabled: !!courseId && !!sectionId }
+    { userId: userId, courseId, sectionId },
+    { enabled: !!userId && !!courseId && !!sectionId }
   );
 
   const activeVideo = activeVideoIndex !== null ? videosQuery.data?.[activeVideoIndex] : null;
 
   const notesQuery = trpc.videoNotes.getAll.useQuery(
-    { userId: MOCK_USER_ID, videoId: activeVideo?.id || "" },
-    { enabled: !!activeVideo?.id }
+    { userId: userId, videoId: activeVideo?.id || "" },
+    { enabled: !!userId && !!activeVideo?.id }
   );
 
   const createNoteMutation = trpc.videoNotes.create.useMutation({
@@ -356,7 +357,7 @@ export default function SectionDetailScreen() {
       });
     } else {
       createNoteMutation.mutate({
-        userId: MOCK_USER_ID,
+        userId: userId,
         videoId: activeVideo.id,
         courseId: courseId || "",
         sectionId: sectionId || "",
@@ -675,7 +676,7 @@ export default function SectionDetailScreen() {
                 isLocked={!isEnrolled}
                 onUnlockPress={handleUnlock}
                 autoPlay
-                userId={MOCK_USER_ID}
+                userId={userId}
                 courseId={courseId}
                 sectionId={sectionId}
                 dbVideoId={videos[activeVideoIndex].id}

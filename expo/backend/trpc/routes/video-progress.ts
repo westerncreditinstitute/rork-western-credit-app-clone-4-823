@@ -1,8 +1,52 @@
 import * as z from "zod";
 import { createTRPCRouter, publicProcedure } from "../create-context";
+// Replaces the old SurrealDB HTTP client (process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT),
+// which no longer exists after the Railway migration. Backed by the
+// pre-existing `video_progress` Supabase table (per-video playhead / percent
+// complete), distinct from `course_progress` (whole-course, section-by-section
+// completion used by the enrollment flow in progress.ts).
+import { supabaseAdmin as supabase } from "@/lib/supabase-admin";
 
 const CERTIFICATION_THRESHOLD = 80;
 const ACE_COURSE_IDS = ["3", "4", "5", "9"];
+
+interface DbVideoProgress {
+  id: string;
+  user_id: string;
+  video_id: string;
+  progress: number;
+  completed: boolean;
+  last_position: number;
+  created_at: string;
+  updated_at: string;
+}
+
+interface DbVideo {
+  id: string;
+  course_id: string;
+  section_id: string;
+  title: string;
+  duration: string;
+}
+
+function dbToProgress(db: DbVideoProgress, courseId?: string, sectionId?: string) {
+  const progressPercent = Number(db.progress) || 0;
+  return {
+    id: db.id,
+    userId: db.user_id,
+    videoId: db.video_id,
+    courseId: courseId ?? "",
+    sectionId: sectionId ?? "",
+    currentTime: db.last_position ?? 0,
+    duration: 0,
+    progressPercent,
+    completed: db.completed ?? false,
+    certificationEligible: progressPercent >= CERTIFICATION_THRESHOLD,
+    lastWatchedAt: db.updated_at,
+    createdAt: db.created_at,
+    updatedAt: db.updated_at,
+  };
+}
 
 export const videoProgressRouter = createTRPCRouter({
   getProgress: publicProcedure
@@ -11,34 +55,19 @@ export const videoProgressRouter = createTRPCRouter({
       videoId: z.string(),
     }))
     .query(async ({ input }) => {
-      const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-      const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-      const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
+      const { data, error } = await supabase
+        .from("video_progress")
+        .select("*")
+        .eq("user_id", input.userId)
+        .eq("video_id", input.videoId)
+        .maybeSingle();
 
-      if (!endpoint || !namespace || !token) {
-        throw new Error("Database configuration missing");
-      }
-
-      const response = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `SELECT * FROM video_progress WHERE userId = '${input.userId}' AND videoId = '${input.videoId}'`,
-        }),
-      });
-
-      if (!response.ok) {
-        console.error("Database error:", await response.text());
+      if (error) {
+        console.error("[VideoProgress] getProgress error:", error);
         return null;
       }
 
-      const data = await response.json();
-      return data[0]?.result?.[0] || null;
+      return data ? dbToProgress(data as DbVideoProgress) : null;
     }),
 
   getAllProgress: publicProcedure
@@ -48,41 +77,47 @@ export const videoProgressRouter = createTRPCRouter({
       sectionId: z.string().optional(),
     }))
     .query(async ({ input }) => {
-      const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-      const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-      const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
+      const { data: progressRows, error } = await supabase
+        .from("video_progress")
+        .select("*")
+        .eq("user_id", input.userId);
 
-      if (!endpoint || !namespace || !token) {
-        throw new Error("Database configuration missing");
-      }
-
-      let query = `SELECT * FROM video_progress WHERE userId = '${input.userId}'`;
-      
-      if (input.courseId) {
-        query += ` AND courseId = '${input.courseId}'`;
-      }
-      if (input.sectionId) {
-        query += ` AND sectionId = '${input.sectionId}'`;
-      }
-
-      const response = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({ query }),
-      });
-
-      if (!response.ok) {
-        console.error("Database error:", await response.text());
+      if (error) {
+        console.error("[VideoProgress] getAllProgress error:", error);
         return [];
       }
 
-      const data = await response.json();
-      return data[0]?.result || [];
+      const rows = (progressRows || []) as DbVideoProgress[];
+      if (rows.length === 0) return [];
+
+      // video_progress only stores video_id, so course/section filtering
+      // requires joining against `videos` for the ids the client asked about.
+      if (!input.courseId && !input.sectionId) {
+        return rows.map((r) => dbToProgress(r));
+      }
+
+      const videoIds = rows.map((r) => r.video_id);
+      let videosQuery = supabase
+        .from("videos")
+        .select("id, course_id, section_id")
+        .in("id", videoIds);
+
+      if (input.courseId) videosQuery = videosQuery.eq("course_id", input.courseId);
+      if (input.sectionId) videosQuery = videosQuery.eq("section_id", input.sectionId);
+
+      const { data: videos, error: videosError } = await videosQuery;
+      if (videosError) {
+        console.error("[VideoProgress] getAllProgress videos lookup error:", videosError);
+        return [];
+      }
+
+      const videoMap = new Map((videos || []).map((v: any) => [v.id, v]));
+      return rows
+        .filter((r) => videoMap.has(r.video_id))
+        .map((r) => {
+          const v = videoMap.get(r.video_id);
+          return dbToProgress(r, v?.course_id, v?.section_id);
+        });
     }),
 
   updateProgress: publicProcedure
@@ -96,87 +131,33 @@ export const videoProgressRouter = createTRPCRouter({
       completed: z.boolean().optional(),
     }))
     .mutation(async ({ input }) => {
-      const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-      const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-      const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
-
-      if (!endpoint || !namespace || !token) {
-        throw new Error("Database configuration missing");
-      }
-
-      const progressPercent = input.duration > 0 
-        ? Math.round((input.currentTime / input.duration) * 100) 
+      const progressPercent = input.duration > 0
+        ? Math.round((input.currentTime / input.duration) * 100)
         : 0;
-      
+
       const isCompleted = input.completed ?? progressPercent >= 90;
-      const certificationEligible = progressPercent >= CERTIFICATION_THRESHOLD;
-      const now = new Date().toISOString();
 
-      const checkResponse = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `SELECT * FROM video_progress WHERE userId = '${input.userId}' AND videoId = '${input.videoId}'`,
-        }),
-      });
+      const { data, error } = await supabase
+        .from("video_progress")
+        .upsert(
+          {
+            user_id: input.userId,
+            video_id: input.videoId,
+            progress: progressPercent,
+            completed: isCompleted,
+            last_position: Math.round(input.currentTime),
+          },
+          { onConflict: "user_id,video_id" }
+        )
+        .select()
+        .single();
 
-      const checkData = await checkResponse.json();
-      const existingProgress = checkData[0]?.result?.[0];
-
-      let query: string;
-      if (existingProgress) {
-        query = `UPDATE ${existingProgress.id} SET 
-          currentTime = ${input.currentTime}, 
-          duration = ${input.duration}, 
-          progressPercent = ${progressPercent}, 
-          completed = ${isCompleted}, 
-          certificationEligible = ${certificationEligible},
-          lastWatchedAt = '${now}', 
-          updatedAt = '${now}'`;
-      } else {
-        const id = `video_progress:${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        const progressData = {
-          id,
-          userId: input.userId,
-          videoId: input.videoId,
-          courseId: input.courseId,
-          sectionId: input.sectionId,
-          currentTime: input.currentTime,
-          duration: input.duration,
-          progressPercent,
-          completed: isCompleted,
-          certificationEligible,
-          lastWatchedAt: now,
-          createdAt: now,
-          updatedAt: now,
-        };
-        query = `CREATE ${id} CONTENT ${JSON.stringify(progressData)}`;
+      if (error) {
+        console.error("[VideoProgress] updateProgress error:", error);
+        throw new Error(`Failed to update progress: ${error.message}`);
       }
 
-      const response = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({ query }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("Database error:", errorText);
-        throw new Error(`Failed to update progress: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return data[0]?.result?.[0] || { success: true };
+      return dbToProgress(data as DbVideoProgress, input.courseId, input.sectionId);
     }),
 
   markCompleted: publicProcedure
@@ -187,71 +168,20 @@ export const videoProgressRouter = createTRPCRouter({
       sectionId: z.string(),
     }))
     .mutation(async ({ input }) => {
-      const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-      const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-      const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
+      const { error } = await supabase
+        .from("video_progress")
+        .upsert(
+          {
+            user_id: input.userId,
+            video_id: input.videoId,
+            progress: 100,
+            completed: true,
+          },
+          { onConflict: "user_id,video_id" }
+        );
 
-      if (!endpoint || !namespace || !token) {
-        throw new Error("Database configuration missing");
-      }
-
-      const now = new Date().toISOString();
-
-      const checkResponse = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `SELECT * FROM video_progress WHERE userId = '${input.userId}' AND videoId = '${input.videoId}'`,
-        }),
-      });
-
-      const checkData = await checkResponse.json();
-      const existingProgress = checkData[0]?.result?.[0];
-
-      let query: string;
-      if (existingProgress) {
-        query = `UPDATE ${existingProgress.id} SET 
-          completed = true, 
-          progressPercent = 100,
-          completedAt = '${now}', 
-          updatedAt = '${now}'`;
-      } else {
-        const id = `video_progress:${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        const progressData = {
-          id,
-          userId: input.userId,
-          videoId: input.videoId,
-          courseId: input.courseId,
-          sectionId: input.sectionId,
-          currentTime: 0,
-          duration: 0,
-          progressPercent: 100,
-          completed: true,
-          completedAt: now,
-          lastWatchedAt: now,
-          createdAt: now,
-          updatedAt: now,
-        };
-        query = `CREATE ${id} CONTENT ${JSON.stringify(progressData)}`;
-      }
-
-      const response = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({ query }),
-      });
-
-      if (!response.ok) {
+      if (error) {
+        console.error("[VideoProgress] markCompleted error:", error);
         throw new Error("Failed to mark video as completed");
       }
 
@@ -264,14 +194,6 @@ export const videoProgressRouter = createTRPCRouter({
       courseId: z.string(),
     }))
     .query(async ({ input }) => {
-      const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-      const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-      const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
-
-      if (!endpoint || !namespace || !token) {
-        throw new Error("Database configuration missing");
-      }
-
       const isACECourse = ACE_COURSE_IDS.includes(input.courseId);
       if (!isACECourse) {
         return {
@@ -284,42 +206,36 @@ export const videoProgressRouter = createTRPCRouter({
         };
       }
 
-      const videosResponse = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `SELECT * FROM videos WHERE courseId = '${input.courseId}' ORDER BY sectionId, order`,
-        }),
-      });
+      const { data: videos, error: videosError } = await supabase
+        .from("videos")
+        .select("id, title, section_id")
+        .eq("course_id", input.courseId)
+        .order("section_id", { ascending: true })
+        .order("order_index", { ascending: true });
 
-      const videosData = await videosResponse.json();
-      const videos = videosData[0]?.result || [];
+      if (videosError) {
+        console.error("[VideoProgress] getCertificationEligibility videos error:", videosError);
+      }
 
-      const progressResponse = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `SELECT * FROM video_progress WHERE userId = '${input.userId}' AND courseId = '${input.courseId}'`,
-        }),
-      });
+      const videoList = videos || [];
+      const videoIds = videoList.map((v: any) => v.id);
 
-      const progressData = await progressResponse.json();
-      const progressRecords = progressData[0]?.result || [];
+      let progressRows: DbVideoProgress[] = [];
+      if (videoIds.length > 0) {
+        const { data: progressData, error: progressError } = await supabase
+          .from("video_progress")
+          .select("*")
+          .eq("user_id", input.userId)
+          .in("video_id", videoIds);
 
-      const progressMap = new Map();
-      progressRecords.forEach((p: { videoId: string; progressPercent: number; certificationEligible?: boolean }) => {
-        progressMap.set(p.videoId, p);
-      });
+        if (progressError) {
+          console.error("[VideoProgress] getCertificationEligibility progress error:", progressError);
+        } else {
+          progressRows = (progressData || []) as DbVideoProgress[];
+        }
+      }
+
+      const progressMap = new Map(progressRows.map((p) => [p.video_id, p]));
 
       const incompleteVideos: {
         videoId: string;
@@ -331,9 +247,9 @@ export const videoProgressRouter = createTRPCRouter({
 
       let eligibleCount = 0;
 
-      videos.forEach((video: { id: string; title: string; sectionId: string }) => {
+      videoList.forEach((video: any) => {
         const progress = progressMap.get(video.id);
-        const progressPercent = progress?.progressPercent || 0;
+        const progressPercent = Number(progress?.progress) || 0;
         const isEligible = progressPercent >= CERTIFICATION_THRESHOLD;
 
         if (isEligible) {
@@ -342,7 +258,7 @@ export const videoProgressRouter = createTRPCRouter({
           incompleteVideos.push({
             videoId: video.id,
             title: video.title,
-            sectionId: video.sectionId,
+            sectionId: video.section_id,
             progressPercent,
             requiredPercent: CERTIFICATION_THRESHOLD,
           });
@@ -353,7 +269,7 @@ export const videoProgressRouter = createTRPCRouter({
         isEligible: incompleteVideos.length === 0,
         requiresCertification: true,
         incompleteVideos,
-        totalVideos: videos.length,
+        totalVideos: videoList.length,
         eligibleVideos: eligibleCount,
         threshold: CERTIFICATION_THRESHOLD,
       };
@@ -364,14 +280,6 @@ export const videoProgressRouter = createTRPCRouter({
       userId: z.string(),
     }))
     .query(async ({ input }) => {
-      const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-      const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-      const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
-
-      if (!endpoint || !namespace || !token) {
-        throw new Error("Database configuration missing");
-      }
-
       const results: Record<string, {
         isEligible: boolean;
         incompleteCount: number;
@@ -380,49 +288,41 @@ export const videoProgressRouter = createTRPCRouter({
       }> = {};
 
       for (const courseId of ACE_COURSE_IDS) {
-        const videosResponse = await fetch(`${endpoint}/sql`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`,
-            "surreal-ns": namespace,
-            "surreal-db": "app",
-          },
-          body: JSON.stringify({
-            query: `SELECT * FROM videos WHERE courseId = '${courseId}'`,
-          }),
-        });
+        const { data: videos, error: videosError } = await supabase
+          .from("videos")
+          .select("id")
+          .eq("course_id", courseId);
 
-        const videosData = await videosResponse.json();
-        const videos = videosData[0]?.result || [];
+        if (videosError) {
+          console.error("[VideoProgress] getAllCoursesEligibility videos error:", videosError);
+        }
 
-        const progressResponse = await fetch(`${endpoint}/sql`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`,
-            "surreal-ns": namespace,
-            "surreal-db": "app",
-          },
-          body: JSON.stringify({
-            query: `SELECT * FROM video_progress WHERE userId = '${input.userId}' AND courseId = '${courseId}'`,
-          }),
-        });
+        const videoList = videos || [];
+        const videoIds = videoList.map((v: any) => v.id);
 
-        const progressData = await progressResponse.json();
-        const progressRecords = progressData[0]?.result || [];
+        let progressRows: DbVideoProgress[] = [];
+        if (videoIds.length > 0) {
+          const { data: progressData, error: progressError } = await supabase
+            .from("video_progress")
+            .select("*")
+            .eq("user_id", input.userId)
+            .in("video_id", videoIds);
 
-        const progressMap = new Map();
-        progressRecords.forEach((p: { videoId: string; progressPercent: number }) => {
-          progressMap.set(p.videoId, p);
-        });
+          if (progressError) {
+            console.error("[VideoProgress] getAllCoursesEligibility progress error:", progressError);
+          } else {
+            progressRows = (progressData || []) as DbVideoProgress[];
+          }
+        }
+
+        const progressMap = new Map(progressRows.map((p) => [p.video_id, p]));
 
         let eligibleCount = 0;
         let incompleteCount = 0;
 
-        videos.forEach((video: { id: string }) => {
+        videoList.forEach((video: any) => {
           const progress = progressMap.get(video.id);
-          const progressPercent = progress?.progressPercent || 0;
+          const progressPercent = Number(progress?.progress) || 0;
           if (progressPercent >= CERTIFICATION_THRESHOLD) {
             eligibleCount++;
           } else {
@@ -431,9 +331,9 @@ export const videoProgressRouter = createTRPCRouter({
         });
 
         results[courseId] = {
-          isEligible: incompleteCount === 0 && videos.length > 0,
+          isEligible: incompleteCount === 0 && videoList.length > 0,
           incompleteCount,
-          totalVideos: videos.length,
+          totalVideos: videoList.length,
           eligibleVideos: eligibleCount,
         };
       }
@@ -455,52 +355,41 @@ export const videoProgressRouter = createTRPCRouter({
       courseId: z.string(),
     }))
     .query(async ({ input }) => {
-      const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-      const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-      const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
+      const { data: videos, error: videosError } = await supabase
+        .from("videos")
+        .select("id")
+        .eq("course_id", input.courseId);
 
-      if (!endpoint || !namespace || !token) {
-        throw new Error("Database configuration missing");
+      if (videosError) {
+        console.error("[VideoProgress] getCourseProgress videos error:", videosError);
       }
 
-      const progressResponse = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `SELECT * FROM video_progress WHERE userId = '${input.userId}' AND courseId = '${input.courseId}'`,
-        }),
-      });
+      const videoList = (videos || []) as DbVideo[];
+      const totalVideos = videoList.length;
+      const videoIds = videoList.map((v) => v.id);
 
-      const progressData = await progressResponse.json();
-      const progressRecords = progressData[0]?.result || [];
+      let progressRecords: DbVideoProgress[] = [];
+      if (videoIds.length > 0) {
+        const { data: progressData, error: progressError } = await supabase
+          .from("video_progress")
+          .select("*")
+          .eq("user_id", input.userId)
+          .in("video_id", videoIds);
 
-      const videosResponse = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `SELECT * FROM videos WHERE courseId = '${input.courseId}'`,
-        }),
-      });
+        if (progressError) {
+          console.error("[VideoProgress] getCourseProgress progress error:", progressError);
+        } else {
+          progressRecords = (progressData || []) as DbVideoProgress[];
+        }
+      }
 
-      const videosData = await videosResponse.json();
-      const totalVideos = videosData[0]?.result?.length || 0;
-      const completedVideos = progressRecords.filter((p: { completed: boolean }) => p.completed).length;
+      const completedVideos = progressRecords.filter((p) => p.completed).length;
 
       return {
         totalVideos,
         completedVideos,
         progressPercent: totalVideos > 0 ? Math.round((completedVideos / totalVideos) * 100) : 0,
-        progressRecords,
+        progressRecords: progressRecords.map((p) => dbToProgress(p, input.courseId)),
       };
     }),
 });

@@ -1,8 +1,113 @@
 import * as z from "zod";
 import { createTRPCRouter, publicProcedure } from "../create-context";
+// Replaces the old SurrealDB HTTP client (process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT),
+// which no longer exists after the Railway migration. Backed by the new
+// `cso_providers` / `cso_reviews` / `consultations` Supabase tables
+// (see migrations/029_providers_avatars_muso_supabase.sql).
+import { supabaseAdmin as supabase } from "@/lib/supabase-admin";
 
 const CONSULTATION_FEE = 99.99;
 const PLATFORM_FEE = 25.00;
+
+interface DbProvider {
+  id: string;
+  user_id: string | null;
+  name: string;
+  email: string;
+  phone: string | null;
+  avatar: string | null;
+  bio: string | null;
+  specialties: string[] | null;
+  years_experience: number | null;
+  location: string | null;
+  rating: number | null;
+  review_count: number | null;
+  consultation_fee: number | null;
+  is_available: boolean | null;
+  certified_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface DbReview {
+  id: string;
+  provider_id: string;
+  reviewer_id: string | null;
+  reviewer_name: string | null;
+  reviewer_avatar: string | null;
+  rating: number;
+  comment: string | null;
+  created_at: string;
+}
+
+interface DbConsultation {
+  id: string;
+  provider_id: string | null;
+  provider_name: string | null;
+  client_id: string | null;
+  client_name: string | null;
+  client_email: string | null;
+  amount: number;
+  platform_fee: number;
+  provider_payout: number;
+  status: string;
+  payment_date: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+function dbToProvider(db: DbProvider) {
+  return {
+    id: db.id,
+    userId: db.user_id ?? "",
+    name: db.name,
+    email: db.email,
+    phone: db.phone ?? "",
+    avatar: db.avatar ?? "",
+    bio: db.bio ?? "",
+    specialties: db.specialties ?? [],
+    yearsExperience: db.years_experience ?? 0,
+    location: db.location ?? "",
+    rating: Number(db.rating) || 0,
+    reviewCount: db.review_count ?? 0,
+    consultationFee: Number(db.consultation_fee) || CONSULTATION_FEE,
+    isAvailable: db.is_available ?? true,
+    certifiedAt: db.certified_at ?? db.created_at,
+    createdAt: db.created_at,
+    updatedAt: db.updated_at,
+  };
+}
+
+function dbToReview(db: DbReview) {
+  return {
+    id: db.id,
+    providerId: db.provider_id,
+    reviewerId: db.reviewer_id ?? "",
+    reviewerName: db.reviewer_name ?? "",
+    reviewerAvatar: db.reviewer_avatar ?? "",
+    rating: db.rating,
+    comment: db.comment ?? "",
+    createdAt: db.created_at,
+  };
+}
+
+function dbToConsultation(db: DbConsultation) {
+  return {
+    id: db.id,
+    providerId: db.provider_id ?? "",
+    providerName: db.provider_name ?? "",
+    clientId: db.client_id ?? "",
+    clientName: db.client_name ?? "",
+    clientEmail: db.client_email ?? "",
+    amount: Number(db.amount) || 0,
+    platformFee: Number(db.platform_fee) || 0,
+    providerPayout: Number(db.provider_payout) || 0,
+    status: db.status as "pending" | "paid" | "completed" | "refunded",
+    paymentDate: db.payment_date ?? undefined,
+    createdAt: db.created_at,
+    updatedAt: db.updated_at,
+  };
+}
 
 export const providersRouter = createTRPCRouter({
   getAll: publicProcedure
@@ -12,53 +117,29 @@ export const providersRouter = createTRPCRouter({
       minRating: z.number().optional(),
     }).optional())
     .query(async ({ input }) => {
-      const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-      const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-      const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
+      let query = supabase
+        .from("cso_providers")
+        .select("*")
+        .eq("is_available", true);
 
-      if (!endpoint || !namespace || !token) {
-        throw new Error("Database configuration missing");
-      }
-
-      let query = "SELECT * FROM cso_providers WHERE isAvailable = true";
-      
       if (input?.minRating) {
-        query += ` AND rating >= ${input.minRating}`;
+        query = query.gte("rating", input.minRating);
       }
 
-      query += " ORDER BY rating DESC, reviewCount DESC";
+      query = query.order("rating", { ascending: false }).order("review_count", { ascending: false });
 
-      const response = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({ query }),
-      });
+      const { data, error } = await query;
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("Database error:", errorText);
-        throw new Error(`Failed to fetch providers: ${response.status}`);
+      if (error) {
+        console.error("Database error:", error);
+        throw new Error(`Failed to fetch providers: ${error.message}`);
       }
 
-      const responseText = await response.text();
-      let data;
-      try {
-        data = JSON.parse(responseText);
-      } catch {
-        console.error("Failed to parse response:", responseText);
-        return [];
-      }
-
-      let providers = data[0]?.result || [];
+      let providers = ((data ?? []) as DbProvider[]).map(dbToProvider);
 
       if (input?.search) {
         const searchLower = input.search.toLowerCase();
-        providers = providers.filter((p: { name?: string; bio?: string; location?: string }) => 
+        providers = providers.filter((p) =>
           p.name?.toLowerCase().includes(searchLower) ||
           p.bio?.toLowerCase().includes(searchLower) ||
           p.location?.toLowerCase().includes(searchLower)
@@ -66,7 +147,7 @@ export const providersRouter = createTRPCRouter({
       }
 
       if (input?.specialty) {
-        providers = providers.filter((p: { specialties?: string[] }) => 
+        providers = providers.filter((p) =>
           p.specialties?.includes(input.specialty!)
         );
       }
@@ -77,67 +158,35 @@ export const providersRouter = createTRPCRouter({
   getById: publicProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ input }) => {
-      const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-      const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-      const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
+      const { data, error } = await supabase
+        .from("cso_providers")
+        .select("*")
+        .eq("id", input.id)
+        .maybeSingle();
 
-      if (!endpoint || !namespace || !token) {
-        throw new Error("Database configuration missing");
+      if (error) {
+        throw new Error(`Failed to fetch provider: ${error.message}`);
       }
 
-      const response = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `SELECT * FROM cso_providers WHERE id = '${input.id}'`,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch provider");
-      }
-
-      const responseText = await response.text();
-      const data = JSON.parse(responseText);
-      return data[0]?.result?.[0] || null;
+      return data ? dbToProvider(data as DbProvider) : null;
     }),
 
   getByUserId: publicProcedure
     .input(z.object({ userId: z.string() }))
     .query(async ({ input }) => {
-      const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-      const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-      const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
+      if (!input.userId) return null;
 
-      if (!endpoint || !namespace || !token) {
-        throw new Error("Database configuration missing");
+      const { data, error } = await supabase
+        .from("cso_providers")
+        .select("*")
+        .eq("user_id", input.userId)
+        .maybeSingle();
+
+      if (error) {
+        throw new Error(`Failed to fetch provider by user ID: ${error.message}`);
       }
 
-      const response = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `SELECT * FROM cso_providers WHERE userId = '${input.userId}'`,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch provider by user ID");
-      }
-
-      const responseText = await response.text();
-      const data = JSON.parse(responseText);
-      return data[0]?.result?.[0] || null;
+      return data ? dbToProvider(data as DbProvider) : null;
     }),
 
   create: publicProcedure
@@ -153,82 +202,48 @@ export const providersRouter = createTRPCRouter({
       location: z.string(),
     }))
     .mutation(async ({ input }) => {
-      const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-      const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-      const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
+      const { data, error } = await supabase
+        .from("cso_providers")
+        .insert({
+          user_id: input.userId,
+          name: input.name,
+          email: input.email,
+          phone: input.phone ?? "",
+          avatar: input.avatar,
+          bio: input.bio,
+          specialties: input.specialties,
+          years_experience: input.yearsExperience,
+          location: input.location,
+          rating: 0,
+          review_count: 0,
+          consultation_fee: CONSULTATION_FEE,
+          is_available: true,
+          certified_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
 
-      if (!endpoint || !namespace || !token) {
-        throw new Error("Database configuration missing");
+      if (error) {
+        throw new Error(`Failed to create provider: ${error.message}`);
       }
 
-      const now = new Date().toISOString();
-      const id = `cso_providers:${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-      const provider = {
-        id,
-        ...input,
-        rating: 0,
-        reviewCount: 0,
-        consultationFee: CONSULTATION_FEE,
-        isAvailable: true,
-        certifiedAt: now,
-        createdAt: now,
-        updatedAt: now,
-      };
-
-      const response = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `CREATE ${id} CONTENT ${JSON.stringify(provider)}`,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to create provider");
-      }
-
-      const responseText = await response.text();
-      const data = JSON.parse(responseText);
-      return data[0]?.result?.[0] || provider;
+      return dbToProvider(data as DbProvider);
     }),
 
   getReviews: publicProcedure
     .input(z.object({ providerId: z.string() }))
     .query(async ({ input }) => {
-      const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-      const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-      const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
+      const { data, error } = await supabase
+        .from("cso_reviews")
+        .select("*")
+        .eq("provider_id", input.providerId)
+        .order("created_at", { ascending: false });
 
-      if (!endpoint || !namespace || !token) {
-        throw new Error("Database configuration missing");
+      if (error) {
+        throw new Error(`Failed to fetch reviews: ${error.message}`);
       }
 
-      const response = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `SELECT * FROM cso_reviews WHERE providerId = '${input.providerId}' ORDER BY createdAt DESC`,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch reviews");
-      }
-
-      const responseText = await response.text();
-      const data = JSON.parse(responseText);
-      return data[0]?.result || [];
+      return ((data ?? []) as DbReview[]).map(dbToReview);
     }),
 
   createReview: publicProcedure
@@ -241,75 +256,43 @@ export const providersRouter = createTRPCRouter({
       comment: z.string(),
     }))
     .mutation(async ({ input }) => {
-      const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-      const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-      const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
+      const { data, error } = await supabase
+        .from("cso_reviews")
+        .insert({
+          provider_id: input.providerId,
+          reviewer_id: input.reviewerId,
+          reviewer_name: input.reviewerName,
+          reviewer_avatar: input.reviewerAvatar,
+          rating: input.rating,
+          comment: input.comment,
+        })
+        .select()
+        .single();
 
-      if (!endpoint || !namespace || !token) {
-        throw new Error("Database configuration missing");
+      if (error) {
+        throw new Error(`Failed to create review: ${error.message}`);
       }
 
-      const now = new Date().toISOString();
-      const id = `cso_reviews:${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const { data: allReviews, error: allReviewsError } = await supabase
+        .from("cso_reviews")
+        .select("rating")
+        .eq("provider_id", input.providerId);
 
-      const review = {
-        id,
-        ...input,
-        createdAt: now,
-      };
+      if (!allReviewsError && allReviews && allReviews.length > 0) {
+        const avgRating =
+          allReviews.reduce((sum: number, r: { rating: number }) => sum + r.rating, 0) /
+          allReviews.length;
 
-      const response = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `CREATE ${id} CONTENT ${JSON.stringify(review)}`,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to create review");
+        await supabase
+          .from("cso_providers")
+          .update({
+            rating: Number(avgRating.toFixed(1)),
+            review_count: allReviews.length,
+          })
+          .eq("id", input.providerId);
       }
 
-      const allReviewsResponse = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `SELECT * FROM cso_reviews WHERE providerId = '${input.providerId}'`,
-        }),
-      });
-
-      if (allReviewsResponse.ok) {
-        const reviewsText = await allReviewsResponse.text();
-        const reviewsData = JSON.parse(reviewsText);
-        const reviews = reviewsData[0]?.result || [];
-        
-        const avgRating = reviews.reduce((sum: number, r: { rating: number }) => sum + r.rating, 0) / reviews.length;
-        
-        await fetch(`${endpoint}/sql`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`,
-            "surreal-ns": namespace,
-            "surreal-db": "app",
-          },
-          body: JSON.stringify({
-            query: `UPDATE ${input.providerId} SET rating = ${avgRating.toFixed(1)}, reviewCount = ${reviews.length}, updatedAt = '${now}'`,
-          }),
-        });
-      }
-
-      return review;
+      return dbToReview(data as DbReview);
     }),
 
   createConsultation: publicProcedure
@@ -321,50 +304,29 @@ export const providersRouter = createTRPCRouter({
       clientEmail: z.string().email(),
     }))
     .mutation(async ({ input }) => {
-      const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-      const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-      const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
-
-      if (!endpoint || !namespace || !token) {
-        throw new Error("Database configuration missing");
-      }
-
-      const now = new Date().toISOString();
-      const id = `consultations:${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
       const providerPayout = CONSULTATION_FEE - PLATFORM_FEE;
 
-      const consultation = {
-        id,
-        ...input,
-        amount: CONSULTATION_FEE,
-        platformFee: PLATFORM_FEE,
-        providerPayout: providerPayout,
-        status: "pending",
-        createdAt: now,
-        updatedAt: now,
-      };
+      const { data, error } = await supabase
+        .from("consultations")
+        .insert({
+          provider_id: input.providerId,
+          provider_name: input.providerName,
+          client_id: input.clientId,
+          client_name: input.clientName,
+          client_email: input.clientEmail,
+          amount: CONSULTATION_FEE,
+          platform_fee: PLATFORM_FEE,
+          provider_payout: providerPayout,
+          status: "pending",
+        })
+        .select()
+        .single();
 
-      const response = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `CREATE ${id} CONTENT ${JSON.stringify(consultation)}`,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to create consultation");
+      if (error) {
+        throw new Error(`Failed to create consultation: ${error.message}`);
       }
 
-      const responseText = await response.text();
-      const data = JSON.parse(responseText);
-      return data[0]?.result?.[0] || consultation;
+      return dbToConsultation(data as DbConsultation);
     }),
 
   updateConsultationStatus: publicProcedure
@@ -373,72 +335,40 @@ export const providersRouter = createTRPCRouter({
       status: z.enum(["pending", "paid", "completed", "refunded"]),
     }))
     .mutation(async ({ input }) => {
-      const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-      const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-      const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
+      const updatePayload: Record<string, unknown> = { status: input.status };
 
-      if (!endpoint || !namespace || !token) {
-        throw new Error("Database configuration missing");
-      }
-
-      const now = new Date().toISOString();
-      let query = `UPDATE ${input.id} SET status = '${input.status}', updatedAt = '${now}'`;
-      
       if (input.status === "paid") {
-        query = `UPDATE ${input.id} SET status = '${input.status}', paymentDate = '${now}', updatedAt = '${now}'`;
+        updatePayload.payment_date = new Date().toISOString();
       }
 
-      const response = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({ query }),
-      });
+      const { data, error } = await supabase
+        .from("consultations")
+        .update(updatePayload)
+        .eq("id", input.id)
+        .select()
+        .maybeSingle();
 
-      if (!response.ok) {
-        throw new Error("Failed to update consultation");
+      if (error) {
+        throw new Error(`Failed to update consultation: ${error.message}`);
       }
 
-      const responseText = await response.text();
-      const data = JSON.parse(responseText);
-      return data[0]?.result?.[0] || null;
+      return data ? dbToConsultation(data as DbConsultation) : null;
     }),
 
   getClientConsultations: publicProcedure
     .input(z.object({ clientId: z.string() }))
     .query(async ({ input }) => {
-      const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-      const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-      const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
+      const { data, error } = await supabase
+        .from("consultations")
+        .select("*")
+        .eq("client_id", input.clientId)
+        .order("created_at", { ascending: false });
 
-      if (!endpoint || !namespace || !token) {
-        throw new Error("Database configuration missing");
+      if (error) {
+        throw new Error(`Failed to fetch consultations: ${error.message}`);
       }
 
-      const response = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `SELECT * FROM consultations WHERE clientId = '${input.clientId}' ORDER BY createdAt DESC`,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch consultations");
-      }
-
-      const responseText = await response.text();
-      const data = JSON.parse(responseText);
-      return data[0]?.result || [];
+      return ((data ?? []) as DbConsultation[]).map(dbToConsultation);
     }),
 
   checkAccess: publicProcedure
@@ -447,35 +377,19 @@ export const providersRouter = createTRPCRouter({
       providerId: z.string(),
     }))
     .query(async ({ input }) => {
-      const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-      const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-      const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
+      const { data, error } = await supabase
+        .from("consultations")
+        .select("*")
+        .eq("client_id", input.clientId)
+        .eq("provider_id", input.providerId)
+        .eq("status", "paid");
 
-      if (!endpoint || !namespace || !token) {
-        throw new Error("Database configuration missing");
+      if (error) {
+        throw new Error(`Failed to check access: ${error.message}`);
       }
 
-      const response = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `SELECT * FROM consultations WHERE clientId = '${input.clientId}' AND providerId = '${input.providerId}' AND status = 'paid'`,
-        }),
-      });
+      const consultations = ((data ?? []) as DbConsultation[]).map(dbToConsultation);
 
-      if (!response.ok) {
-        throw new Error("Failed to check access");
-      }
-
-      const responseText = await response.text();
-      const data = JSON.parse(responseText);
-      const consultations = data[0]?.result || [];
-      
       return {
         hasAccess: consultations.length > 0,
         consultation: consultations[0] || null,

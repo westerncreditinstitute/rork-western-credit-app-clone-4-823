@@ -1,5 +1,13 @@
 import * as z from "zod";
 import { createTRPCRouter, publicProcedure } from "../create-context";
+// Replaces the old SurrealDB HTTP client (process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT),
+// which no longer exists after the Railway migration. Backed by the new
+// `muso_wallets` / `muso_transactions` / `muso_swap_registrations` Supabase
+// tables (see migrations/029_providers_avatars_muso_supabase.sql).
+// NOTE: as of this fix, no UI code calls this router (it is separate from the
+// in-game `GameContext` `musoToken` local state), but it is fixed for
+// correctness per explicit request.
+import { supabaseAdmin as supabase } from "@/lib/supabase-admin";
 
 const TOKEN_CONFIG = {
   name: "Moola Social",
@@ -18,90 +26,155 @@ const MAINNET_SWAP_CONFIG = {
   description: "Testnet MUSO tokens will be eligible for mainnet token swap when MUSO launches on major exchanges. The swap ratio will be announced prior to mainnet launch.",
 };
 
+interface DbWallet {
+  id: string;
+  player_id: string;
+  address: string;
+  balance: number;
+  total_minted: number;
+  total_burned: number;
+  last_updated: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface DbTransaction {
+  id: string;
+  player_id: string;
+  wallet_id: string | null;
+  type: string;
+  amount: number;
+  reason: string | null;
+  balance_after: number;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
+interface DbSwapRegistration {
+  id: string;
+  player_id: string;
+  email: string | null;
+  agreed_to_terms: boolean;
+  registered_at: number | null;
+  snapshot_balance: number;
+  snapshot_total_minted: number;
+  last_balance_update: number | null;
+  status: string;
+  eligible: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+function dbToWallet(db: DbWallet) {
+  return {
+    id: db.id,
+    playerId: db.player_id,
+    address: db.address,
+    musoToken: {
+      balance: Number(db.balance) || 0,
+      totalMinted: Number(db.total_minted) || 0,
+      totalBurned: Number(db.total_burned) || 0,
+      lastUpdated: db.last_updated ?? Date.parse(db.updated_at),
+    },
+    createdAt: Date.parse(db.created_at),
+    updatedAt: Date.parse(db.updated_at),
+  };
+}
+
+function dbToTransaction(db: DbTransaction) {
+  return {
+    id: db.id,
+    playerId: db.player_id,
+    walletId: db.wallet_id,
+    type: db.type as "mint" | "burn",
+    amount: Number(db.amount) || 0,
+    reason: db.reason ?? "",
+    timestamp: Date.parse(db.created_at),
+    balanceAfter: Number(db.balance_after) || 0,
+    metadata: db.metadata ?? {},
+  };
+}
+
+function dbToRegistration(db: DbSwapRegistration) {
+  return {
+    id: db.id,
+    playerId: db.player_id,
+    email: db.email,
+    agreedToTerms: db.agreed_to_terms,
+    registeredAt: db.registered_at ?? Date.parse(db.created_at),
+    snapshotBalance: Number(db.snapshot_balance) || 0,
+    snapshotTotalMinted: Number(db.snapshot_total_minted) || 0,
+    lastBalanceUpdate: db.last_balance_update ?? Date.parse(db.updated_at),
+    status: db.status,
+    eligible: db.eligible,
+  };
+}
+
+function makeWalletAddress(playerId: string): string {
+  return `0x${playerId.replace(/[^a-zA-Z0-9]/g, "").slice(0, 40).padEnd(40, "0")}`;
+}
+
+async function getOrCreateWallet(playerId: string, initialBalance = 0): Promise<DbWallet> {
+  const { data: existing, error: fetchError } = await supabase
+    .from("muso_wallets")
+    .select("*")
+    .eq("player_id", playerId)
+    .maybeSingle();
+
+  if (fetchError) {
+    throw new Error(`Failed to fetch wallet: ${fetchError.message}`);
+  }
+
+  if (existing) {
+    return existing as DbWallet;
+  }
+
+  const now = Date.now();
+  const { data: created, error: createError } = await supabase
+    .from("muso_wallets")
+    .insert({
+      player_id: playerId,
+      address: makeWalletAddress(playerId),
+      balance: initialBalance,
+      total_minted: initialBalance,
+      total_burned: 0,
+      last_updated: now,
+    })
+    .select()
+    .single();
+
+  if (createError) {
+    throw new Error(`Failed to create wallet: ${createError.message}`);
+  }
+
+  return created as DbWallet;
+}
+
 export const musoTokenRouter = createTRPCRouter({
   getWallet: publicProcedure
     .input(z.object({ playerId: z.string() }))
     .query(async ({ input }) => {
-      const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-      const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-      const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
+      const { data, error } = await supabase
+        .from("muso_wallets")
+        .select("*")
+        .eq("player_id", input.playerId)
+        .maybeSingle();
 
-      if (!endpoint || !namespace || !token) {
-        throw new Error("Database configuration missing");
+      if (error) {
+        throw new Error(`Failed to fetch token wallet: ${error.message}`);
       }
 
-      const response = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `SELECT * FROM muso_wallets WHERE playerId = '${input.playerId}'`,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch token wallet");
-      }
-
-      const data = await response.json();
-      return data[0]?.result?.[0] || null;
+      return data ? dbToWallet(data as DbWallet) : null;
     }),
 
   createWallet: publicProcedure
-    .input(z.object({ 
+    .input(z.object({
       playerId: z.string(),
       initialBalance: z.number().optional().default(0),
     }))
     .mutation(async ({ input }) => {
-      const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-      const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-      const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
-
-      if (!endpoint || !namespace || !token) {
-        throw new Error("Database configuration missing");
-      }
-
-      const now = Date.now();
-      const walletAddress = `0x${input.playerId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 40).padEnd(40, '0')}`;
-      const id = `muso_wallets:${input.playerId}`;
-
-      const wallet = {
-        id,
-        playerId: input.playerId,
-        address: walletAddress,
-        musoToken: {
-          balance: input.initialBalance,
-          totalMinted: input.initialBalance,
-          totalBurned: 0,
-          lastUpdated: now,
-        },
-        createdAt: now,
-        updatedAt: now,
-      };
-
-      const response = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `CREATE ${id} CONTENT ${JSON.stringify(wallet)}`,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to create token wallet");
-      }
-
-      const data = await response.json();
-      return data[0]?.result?.[0] || wallet;
+      const wallet = await getOrCreateWallet(input.playerId, input.initialBalance);
+      return dbToWallet(wallet);
     }),
 
   mintTokens: publicProcedure
@@ -116,113 +189,47 @@ export const musoTokenRouter = createTRPCRouter({
       }).optional(),
     }))
     .mutation(async ({ input }) => {
-      const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-      const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-      const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
-
-      if (!endpoint || !namespace || !token) {
-        throw new Error("Database configuration missing");
-      }
-
       const now = Date.now();
-      const walletId = `muso_wallets:${input.playerId}`;
+      const wallet = await getOrCreateWallet(input.playerId);
 
-      const walletResponse = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `SELECT * FROM muso_wallets WHERE id = '${walletId}'`,
-        }),
-      });
+      const newBalance = Number(wallet.balance) + input.amount;
+      const newTotalMinted = Number(wallet.total_minted) + input.amount;
 
-      const walletData = await walletResponse.json();
-      let wallet = walletData[0]?.result?.[0];
+      const { error: updateError } = await supabase
+        .from("muso_wallets")
+        .update({
+          balance: newBalance,
+          total_minted: newTotalMinted,
+          last_updated: now,
+        })
+        .eq("id", wallet.id);
 
-      if (!wallet) {
-        const walletAddress = `0x${input.playerId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 40).padEnd(40, '0')}`;
-        wallet = {
-          id: walletId,
-          playerId: input.playerId,
-          address: walletAddress,
-          musoToken: {
-            balance: 0,
-            totalMinted: 0,
-            totalBurned: 0,
-            lastUpdated: now,
-          },
-          createdAt: now,
-          updatedAt: now,
-        };
-
-        await fetch(`${endpoint}/sql`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`,
-            "surreal-ns": namespace,
-            "surreal-db": "app",
-          },
-          body: JSON.stringify({
-            query: `CREATE ${walletId} CONTENT ${JSON.stringify(wallet)}`,
-          }),
-        });
+      if (updateError) {
+        throw new Error(`Failed to update wallet: ${updateError.message}`);
       }
 
-      const newBalance = wallet.musoToken.balance + input.amount;
-      const newTotalMinted = wallet.musoToken.totalMinted + input.amount;
+      const { data: txData, error: txError } = await supabase
+        .from("muso_transactions")
+        .insert({
+          player_id: input.playerId,
+          wallet_id: wallet.id,
+          type: "mint",
+          amount: input.amount,
+          reason: input.reason,
+          balance_after: newBalance,
+          metadata: input.metadata ?? {},
+        })
+        .select()
+        .single();
 
-      await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `UPDATE ${walletId} SET 
-            musoToken.balance = ${newBalance}, 
-            musoToken.totalMinted = ${newTotalMinted}, 
-            musoToken.lastUpdated = ${now},
-            updatedAt = ${now}`,
-        }),
-      });
-
-      const txId = `muso_transactions:${now}_${Math.random().toString(36).substr(2, 9)}`;
-      const transaction = {
-        id: txId,
-        playerId: input.playerId,
-        walletId,
-        type: "mint",
-        amount: input.amount,
-        reason: input.reason,
-        timestamp: now,
-        balanceAfter: newBalance,
-        metadata: input.metadata || {},
-      };
-
-      await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `CREATE ${txId} CONTENT ${JSON.stringify(transaction)}`,
-        }),
-      });
+      if (txError) {
+        throw new Error(`Failed to record transaction: ${txError.message}`);
+      }
 
       return {
         success: true,
         newBalance,
-        transaction,
+        transaction: dbToTransaction(txData as DbTransaction),
       };
     }),
 
@@ -238,91 +245,66 @@ export const musoTokenRouter = createTRPCRouter({
       }).optional(),
     }))
     .mutation(async ({ input }) => {
-      const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-      const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-      const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
+      const now = Date.now();
 
-      if (!endpoint || !namespace || !token) {
-        throw new Error("Database configuration missing");
+      const { data: existing, error: fetchError } = await supabase
+        .from("muso_wallets")
+        .select("*")
+        .eq("player_id", input.playerId)
+        .maybeSingle();
+
+      if (fetchError) {
+        throw new Error(`Failed to fetch wallet: ${fetchError.message}`);
       }
 
-      const now = Date.now();
-      const walletId = `muso_wallets:${input.playerId}`;
-
-      const walletResponse = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `SELECT * FROM muso_wallets WHERE id = '${walletId}'`,
-        }),
-      });
-
-      const walletData = await walletResponse.json();
-      const wallet = walletData[0]?.result?.[0];
-
-      if (!wallet) {
+      if (!existing) {
         throw new Error("Wallet not found");
       }
 
-      if (wallet.musoToken.balance < input.amount) {
+      const wallet = existing as DbWallet;
+
+      if (Number(wallet.balance) < input.amount) {
         throw new Error("Insufficient token balance");
       }
 
-      const newBalance = wallet.musoToken.balance - input.amount;
-      const newTotalBurned = wallet.musoToken.totalBurned + input.amount;
+      const newBalance = Number(wallet.balance) - input.amount;
+      const newTotalBurned = Number(wallet.total_burned) + input.amount;
 
-      await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `UPDATE ${walletId} SET 
-            musoToken.balance = ${newBalance}, 
-            musoToken.totalBurned = ${newTotalBurned}, 
-            musoToken.lastUpdated = ${now},
-            updatedAt = ${now}`,
-        }),
-      });
+      const { error: updateError } = await supabase
+        .from("muso_wallets")
+        .update({
+          balance: newBalance,
+          total_burned: newTotalBurned,
+          last_updated: now,
+        })
+        .eq("id", wallet.id);
 
-      const txId = `muso_transactions:${now}_${Math.random().toString(36).substr(2, 9)}`;
-      const transaction = {
-        id: txId,
-        playerId: input.playerId,
-        walletId,
-        type: "burn",
-        amount: input.amount,
-        reason: input.reason,
-        timestamp: now,
-        balanceAfter: newBalance,
-        metadata: input.metadata || {},
-      };
+      if (updateError) {
+        throw new Error(`Failed to update wallet: ${updateError.message}`);
+      }
 
-      await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `CREATE ${txId} CONTENT ${JSON.stringify(transaction)}`,
-        }),
-      });
+      const { data: txData, error: txError } = await supabase
+        .from("muso_transactions")
+        .insert({
+          player_id: input.playerId,
+          wallet_id: wallet.id,
+          type: "burn",
+          amount: input.amount,
+          reason: input.reason,
+          balance_after: newBalance,
+          metadata: input.metadata ?? {},
+        })
+        .select()
+        .single();
+
+      if (txError) {
+        throw new Error(`Failed to record transaction: ${txError.message}`);
+      }
 
       return {
         success: true,
         newBalance,
-        transaction,
+        transaction: dbToTransaction(txData as DbTransaction),
       };
     }),
 
@@ -333,33 +315,18 @@ export const musoTokenRouter = createTRPCRouter({
       offset: z.number().optional().default(0),
     }))
     .query(async ({ input }) => {
-      const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-      const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-      const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
+      const { data, error } = await supabase
+        .from("muso_transactions")
+        .select("*")
+        .eq("player_id", input.playerId)
+        .order("created_at", { ascending: false })
+        .range(input.offset, input.offset + input.limit - 1);
 
-      if (!endpoint || !namespace || !token) {
-        throw new Error("Database configuration missing");
+      if (error) {
+        throw new Error(`Failed to fetch transactions: ${error.message}`);
       }
 
-      const response = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `SELECT * FROM muso_transactions WHERE playerId = '${input.playerId}' ORDER BY timestamp DESC LIMIT ${input.limit} START ${input.offset}`,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch transactions");
-      }
-
-      const data = await response.json();
-      return data[0]?.result || [];
+      return ((data ?? []) as DbTransaction[]).map(dbToTransaction);
     }),
 
   syncWithGameBalance: publicProcedure
@@ -368,123 +335,69 @@ export const musoTokenRouter = createTRPCRouter({
       gameBalance: z.number(),
     }))
     .mutation(async ({ input }) => {
-      const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-      const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-      const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
-
-      if (!endpoint || !namespace || !token) {
-        throw new Error("Database configuration missing");
-      }
-
       const now = Date.now();
-      const walletId = `muso_wallets:${input.playerId}`;
-
-      const walletResponse = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `SELECT * FROM muso_wallets WHERE id = '${walletId}'`,
-        }),
-      });
-
-      const walletData = await walletResponse.json();
-      let wallet = walletData[0]?.result?.[0];
-
       const targetBalance = Math.max(0, Math.round(input.gameBalance * TOKEN_CONFIG.exchangeRate * 100) / 100);
 
-      if (!wallet) {
-        const walletAddress = `0x${input.playerId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 40).padEnd(40, '0')}`;
-        wallet = {
-          id: walletId,
-          playerId: input.playerId,
-          address: walletAddress,
-          musoToken: {
-            balance: targetBalance,
-            totalMinted: targetBalance,
-            totalBurned: 0,
-            lastUpdated: now,
-          },
-          createdAt: now,
-          updatedAt: now,
-        };
+      const { data: existing, error: fetchError } = await supabase
+        .from("muso_wallets")
+        .select("*")
+        .eq("player_id", input.playerId)
+        .maybeSingle();
 
-        await fetch(`${endpoint}/sql`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`,
-            "surreal-ns": namespace,
-            "surreal-db": "app",
-          },
-          body: JSON.stringify({
-            query: `CREATE ${walletId} CONTENT ${JSON.stringify(wallet)}`,
-          }),
+      if (fetchError) {
+        throw new Error(`Failed to fetch wallet: ${fetchError.message}`);
+      }
+
+      if (!existing) {
+        await supabase.from("muso_wallets").insert({
+          player_id: input.playerId,
+          address: makeWalletAddress(input.playerId),
+          balance: targetBalance,
+          total_minted: targetBalance,
+          total_burned: 0,
+          last_updated: now,
         });
 
         return { success: true, newBalance: targetBalance, synced: true };
       }
 
-      const currentBalance = wallet.musoToken.balance;
+      const wallet = existing as DbWallet;
+      const currentBalance = Number(wallet.balance);
       const difference = targetBalance - currentBalance;
 
       if (Math.abs(difference) < 0.01) {
         return { success: true, newBalance: currentBalance, synced: false };
       }
 
-      const newTotalMinted = difference > 0 
-        ? wallet.musoToken.totalMinted + difference 
-        : wallet.musoToken.totalMinted;
-      const newTotalBurned = difference < 0 
-        ? wallet.musoToken.totalBurned + Math.abs(difference) 
-        : wallet.musoToken.totalBurned;
+      const newTotalMinted = difference > 0
+        ? Number(wallet.total_minted) + difference
+        : Number(wallet.total_minted);
+      const newTotalBurned = difference < 0
+        ? Number(wallet.total_burned) + Math.abs(difference)
+        : Number(wallet.total_burned);
 
-      await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `UPDATE ${walletId} SET 
-            musoToken.balance = ${targetBalance}, 
-            musoToken.totalMinted = ${newTotalMinted},
-            musoToken.totalBurned = ${newTotalBurned},
-            musoToken.lastUpdated = ${now},
-            updatedAt = ${now}`,
-        }),
-      });
+      const { error: updateError } = await supabase
+        .from("muso_wallets")
+        .update({
+          balance: targetBalance,
+          total_minted: newTotalMinted,
+          total_burned: newTotalBurned,
+          last_updated: now,
+        })
+        .eq("id", wallet.id);
 
-      const txId = `muso_transactions:${now}_${Math.random().toString(36).substr(2, 9)}`;
-      const transaction = {
-        id: txId,
-        playerId: input.playerId,
-        walletId,
+      if (updateError) {
+        throw new Error(`Failed to update wallet: ${updateError.message}`);
+      }
+
+      await supabase.from("muso_transactions").insert({
+        player_id: input.playerId,
+        wallet_id: wallet.id,
         type: difference > 0 ? "mint" : "burn",
         amount: Math.abs(difference),
         reason: "Game balance sync",
-        timestamp: now,
-        balanceAfter: targetBalance,
+        balance_after: targetBalance,
         metadata: { source: "game_sync", category: "automatic" },
-      };
-
-      await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `CREATE ${txId} CONTENT ${JSON.stringify(transaction)}`,
-        }),
       });
 
       return { success: true, newBalance: targetBalance, synced: true };
@@ -508,73 +421,49 @@ export const musoTokenRouter = createTRPCRouter({
       agreedToTerms: z.boolean(),
     }))
     .mutation(async ({ input }) => {
-      const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-      const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-      const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
-
-      if (!endpoint || !namespace || !token) {
-        throw new Error("Database configuration missing");
-      }
-
       if (!input.agreedToTerms) {
         throw new Error("Must agree to swap terms");
       }
 
       const now = Date.now();
-      const registrationId = `muso_swap_registrations:${input.playerId}`;
 
-      const walletResponse = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `SELECT * FROM muso_wallets WHERE playerId = '${input.playerId}'`,
-        }),
-      });
+      const { data: walletData } = await supabase
+        .from("muso_wallets")
+        .select("*")
+        .eq("player_id", input.playerId)
+        .maybeSingle();
 
-      const walletData = await walletResponse.json();
-      const wallet = walletData[0]?.result?.[0];
+      const wallet = walletData as DbWallet | null;
+      const currentBalance = wallet ? Number(wallet.balance) : 0;
+      const totalMinted = wallet ? Number(wallet.total_minted) : 0;
+      const eligible = currentBalance >= MAINNET_SWAP_CONFIG.minTokensForEligibility;
 
-      const currentBalance = wallet?.musoToken?.balance || 0;
-      const totalMinted = wallet?.musoToken?.totalMinted || 0;
+      const { data, error } = await supabase
+        .from("muso_swap_registrations")
+        .upsert(
+          {
+            player_id: input.playerId,
+            email: input.email ?? null,
+            agreed_to_terms: true,
+            registered_at: now,
+            snapshot_balance: currentBalance,
+            snapshot_total_minted: totalMinted,
+            last_balance_update: now,
+            status: "registered",
+            eligible,
+          },
+          { onConflict: "player_id" }
+        )
+        .select()
+        .single();
 
-      const registration = {
-        id: registrationId,
-        playerId: input.playerId,
-        email: input.email || null,
-        agreedToTerms: true,
-        registeredAt: now,
-        snapshotBalance: currentBalance,
-        snapshotTotalMinted: totalMinted,
-        lastBalanceUpdate: now,
-        status: "registered",
-        eligible: currentBalance >= MAINNET_SWAP_CONFIG.minTokensForEligibility,
-      };
-
-      await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `CREATE ${registrationId} CONTENT ${JSON.stringify(registration)} ON DUPLICATE KEY UPDATE 
-            snapshotBalance = ${currentBalance},
-            snapshotTotalMinted = ${totalMinted},
-            lastBalanceUpdate = ${now},
-            eligible = ${currentBalance >= MAINNET_SWAP_CONFIG.minTokensForEligibility}`,
-        }),
-      });
+      if (error) {
+        throw new Error(`Failed to register for swap: ${error.message}`);
+      }
 
       return {
         success: true,
-        registration,
+        registration: dbToRegistration(data as DbSwapRegistration),
         message: "Successfully registered for mainnet swap program",
       };
     }),
@@ -582,93 +471,61 @@ export const musoTokenRouter = createTRPCRouter({
   getSwapRegistration: publicProcedure
     .input(z.object({ playerId: z.string() }))
     .query(async ({ input }) => {
-      const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-      const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-      const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
+      const { data, error } = await supabase
+        .from("muso_swap_registrations")
+        .select("*")
+        .eq("player_id", input.playerId)
+        .maybeSingle();
 
-      if (!endpoint || !namespace || !token) {
-        throw new Error("Database configuration missing");
+      if (error) {
+        throw new Error(`Failed to fetch swap registration: ${error.message}`);
       }
 
-      const response = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `SELECT * FROM muso_swap_registrations WHERE playerId = '${input.playerId}'`,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch swap registration");
-      }
-
-      const data = await response.json();
-      return data[0]?.result?.[0] || null;
+      return data ? dbToRegistration(data as DbSwapRegistration) : null;
     }),
 
   updateSwapSnapshot: publicProcedure
     .input(z.object({ playerId: z.string() }))
     .mutation(async ({ input }) => {
-      const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-      const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-      const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
+      const now = Date.now();
 
-      if (!endpoint || !namespace || !token) {
-        throw new Error("Database configuration missing");
+      const { data: walletData, error: walletError } = await supabase
+        .from("muso_wallets")
+        .select("*")
+        .eq("player_id", input.playerId)
+        .maybeSingle();
+
+      if (walletError) {
+        throw new Error(`Failed to fetch wallet: ${walletError.message}`);
       }
 
-      const now = Date.now();
-      const registrationId = `muso_swap_registrations:${input.playerId}`;
-
-      const walletResponse = await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `SELECT * FROM muso_wallets WHERE playerId = '${input.playerId}'`,
-        }),
-      });
-
-      const walletData = await walletResponse.json();
-      const wallet = walletData[0]?.result?.[0];
-
-      if (!wallet) {
+      if (!walletData) {
         throw new Error("Wallet not found");
       }
 
-      const currentBalance = wallet.musoToken.balance;
-      const totalMinted = wallet.musoToken.totalMinted;
+      const wallet = walletData as DbWallet;
+      const currentBalance = Number(wallet.balance);
+      const totalMinted = Number(wallet.total_minted);
+      const eligible = currentBalance >= MAINNET_SWAP_CONFIG.minTokensForEligibility;
 
-      await fetch(`${endpoint}/sql`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-          "surreal-ns": namespace,
-          "surreal-db": "app",
-        },
-        body: JSON.stringify({
-          query: `UPDATE ${registrationId} SET 
-            snapshotBalance = ${currentBalance},
-            snapshotTotalMinted = ${totalMinted},
-            lastBalanceUpdate = ${now},
-            eligible = ${currentBalance >= MAINNET_SWAP_CONFIG.minTokensForEligibility}`,
-        }),
-      });
+      const { error: updateError } = await supabase
+        .from("muso_swap_registrations")
+        .update({
+          snapshot_balance: currentBalance,
+          snapshot_total_minted: totalMinted,
+          last_balance_update: now,
+          eligible,
+        })
+        .eq("player_id", input.playerId);
+
+      if (updateError) {
+        throw new Error(`Failed to update swap snapshot: ${updateError.message}`);
+      }
 
       return {
         success: true,
         snapshotBalance: currentBalance,
-        eligible: currentBalance >= MAINNET_SWAP_CONFIG.minTokensForEligibility,
+        eligible,
       };
     }),
 });

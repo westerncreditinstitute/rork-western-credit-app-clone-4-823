@@ -1,124 +1,37 @@
 import * as z from "zod";
 import { createTRPCRouter, publicProcedure } from "../create-context";
+// Replaces the old SurrealDB HTTP key-value store client
+// (process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT), which no longer exists after
+// the Railway migration. Backed by the new `section_avatars` Supabase table
+// (see migrations/029_providers_avatars_muso_supabase.sql).
+import { supabaseAdmin as supabase } from "@/lib/supabase-admin";
 
-interface Avatar {
+interface DbAvatar {
   id: string;
-  courseId: string;
-  sectionId: string;
+  course_id: string;
+  section_id: string;
   title: string;
-  embedCode: string;
-  apiKey: string;
-  description: string;
-  order: number;
-  createdAt: string;
-  updatedAt: string;
+  embed_code: string | null;
+  api_key: string | null;
+  description: string | null;
+  order_index: number | null;
+  created_at: string;
+  updated_at: string;
 }
 
-interface AvatarsStore {
-  avatars: Avatar[];
-}
-
-async function getAvatarsStore(): Promise<AvatarsStore> {
-  const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-  const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-  const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
-
-  if (!endpoint || !namespace || !token) {
-    console.log("[Avatars] Using empty store - DB not configured");
-    return { avatars: [] };
-  }
-
-  try {
-    const url = `${endpoint}/key/${namespace}/avatars`;
-    console.log("[Avatars] Fetching from:", url);
-    
-    const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        "Authorization": `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-    });
-
-    console.log("[Avatars] GET Response status:", response.status);
-
-    if (response.status === 404) {
-      console.log("[Avatars] No data found, returning empty store");
-      return { avatars: [] };
-    }
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("[Avatars] GET Error:", errorText);
-      return { avatars: [] };
-    }
-
-    const data = await response.json();
-    console.log("[Avatars] Fetched data:", JSON.stringify(data).substring(0, 200));
-    
-    if (data && data.avatars && Array.isArray(data.avatars)) {
-      return data as AvatarsStore;
-    }
-    
-    return { avatars: [] };
-  } catch (error) {
-    console.error("[Avatars] Error fetching store:", error);
-    return { avatars: [] };
-  }
-}
-
-async function saveAvatarsStore(store: AvatarsStore): Promise<boolean> {
-  const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-  const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-  const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
-
-  if (!endpoint || !namespace || !token) {
-    throw new Error("Database configuration missing");
-  }
-
-  const url = `${endpoint}/key/${namespace}/avatars`;
-  console.log("[Avatars] Saving to:", url);
-  console.log("[Avatars] Data size:", store.avatars.length, "avatars");
-
-  const headers = {
-    "Authorization": `Bearer ${token}`,
-    "Content-Type": "application/json",
+function dbToAvatar(db: DbAvatar) {
+  return {
+    id: db.id,
+    courseId: db.course_id,
+    sectionId: db.section_id,
+    title: db.title,
+    embedCode: db.embed_code ?? "",
+    apiKey: db.api_key ?? "",
+    description: db.description ?? "",
+    order: db.order_index ?? 0,
+    createdAt: db.created_at,
+    updatedAt: db.updated_at,
   };
-  const body = JSON.stringify(store);
-
-  try {
-    // Try PUT first (update existing)
-    let response = await fetch(url, {
-      method: "PUT",
-      headers,
-      body,
-    });
-
-    console.log("[Avatars] PUT Response status:", response.status);
-
-    // If PUT returns 404, the key doesn't exist yet - try POST to create it
-    if (response.status === 404) {
-      console.log("[Avatars] Key not found, trying POST to create...");
-      response = await fetch(url, {
-        method: "POST",
-        headers,
-        body,
-      });
-      console.log("[Avatars] POST Response status:", response.status);
-    }
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("[Avatars] Save Error:", errorText);
-      throw new Error(`Failed to save: ${response.status} - ${errorText}`);
-    }
-
-    console.log("[Avatars] Save successful");
-    return true;
-  } catch (error) {
-    console.error("[Avatars] Error saving store:", error);
-    throw error;
-  }
 }
 
 export const avatarsRouter = createTRPCRouter({
@@ -129,13 +42,20 @@ export const avatarsRouter = createTRPCRouter({
     }))
     .query(async ({ input }) => {
       console.log("[Avatars] getAll called with:", input);
-      
-      const store = await getAvatarsStore();
-      let avatars = store.avatars;
 
-      avatars = avatars.filter(a => a.courseId === input.courseId && a.sectionId === input.sectionId);
-      avatars.sort((a, b) => (a.order || 0) - (b.order || 0));
-      
+      const { data, error } = await supabase
+        .from("section_avatars")
+        .select("*")
+        .eq("course_id", input.courseId)
+        .eq("section_id", input.sectionId)
+        .order("order_index", { ascending: true });
+
+      if (error) {
+        console.error("[Avatars] getAll error:", error);
+        throw new Error(`Failed to fetch avatars: ${error.message}`);
+      }
+
+      const avatars = ((data ?? []) as DbAvatar[]).map(dbToAvatar);
       console.log("[Avatars] Returning", avatars.length, "avatars");
       return avatars;
     }),
@@ -144,12 +64,20 @@ export const avatarsRouter = createTRPCRouter({
     .input(z.object({ id: z.string() }))
     .query(async ({ input }) => {
       console.log("[Avatars] getById called with:", input.id);
-      
-      const store = await getAvatarsStore();
-      const avatar = store.avatars.find(a => a.id === input.id);
-      
-      console.log("[Avatars] Found avatar:", avatar ? "yes" : "no");
-      return avatar || null;
+
+      const { data, error } = await supabase
+        .from("section_avatars")
+        .select("*")
+        .eq("id", input.id)
+        .maybeSingle();
+
+      if (error) {
+        console.error("[Avatars] getById error:", error);
+        throw new Error(`Failed to fetch avatar: ${error.message}`);
+      }
+
+      console.log("[Avatars] Found avatar:", data ? "yes" : "no");
+      return data ? dbToAvatar(data as DbAvatar) : null;
     }),
 
   create: publicProcedure
@@ -164,29 +92,28 @@ export const avatarsRouter = createTRPCRouter({
     }))
     .mutation(async ({ input }) => {
       console.log("[Avatars] create called with:", JSON.stringify(input, null, 2));
-      
-      const store = await getAvatarsStore();
-      const now = new Date().toISOString();
-      const uniqueId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      
-      const newAvatar: Avatar = {
-        id: `avatars_${uniqueId}`,
-        courseId: input.courseId,
-        sectionId: input.sectionId,
-        title: input.title,
-        embedCode: input.embedCode,
-        apiKey: input.apiKey || "",
-        description: input.description || "",
-        order: input.order,
-        createdAt: now,
-        updatedAt: now,
-      };
 
-      store.avatars.push(newAvatar);
-      await saveAvatarsStore(store);
+      const { data, error } = await supabase
+        .from("section_avatars")
+        .insert({
+          course_id: input.courseId,
+          section_id: input.sectionId,
+          title: input.title,
+          embed_code: input.embedCode,
+          api_key: input.apiKey ?? "",
+          description: input.description ?? "",
+          order_index: input.order,
+        })
+        .select()
+        .single();
 
-      console.log("[Avatars] Created avatar:", newAvatar.id);
-      return newAvatar;
+      if (error) {
+        console.error("[Avatars] create error:", error);
+        throw new Error(`Failed to create avatar: ${error.message}`);
+      }
+
+      console.log("[Avatars] Created avatar:", data.id);
+      return dbToAvatar(data as DbAvatar);
     }),
 
   update: publicProcedure
@@ -199,43 +126,53 @@ export const avatarsRouter = createTRPCRouter({
     }))
     .mutation(async ({ input }) => {
       console.log("[Avatars] update called for:", input.id);
-      
-      const store = await getAvatarsStore();
-      const index = store.avatars.findIndex(a => a.id === input.id);
 
-      if (index === -1) {
+      const updatePayload: Record<string, unknown> = {};
+      if (input.title !== undefined) updatePayload.title = input.title;
+      if (input.embedCode !== undefined) updatePayload.embed_code = input.embedCode;
+      if (input.apiKey !== undefined) updatePayload.api_key = input.apiKey;
+      if (input.description !== undefined) updatePayload.description = input.description;
+
+      const { data, error } = await supabase
+        .from("section_avatars")
+        .update(updatePayload)
+        .eq("id", input.id)
+        .select()
+        .maybeSingle();
+
+      if (error) {
+        console.error("[Avatars] update error:", error);
+        throw new Error(`Failed to update avatar: ${error.message}`);
+      }
+
+      if (!data) {
         throw new Error("Avatar not found");
       }
 
-      const { id, ...updates } = input;
-      store.avatars[index] = {
-        ...store.avatars[index],
-        ...Object.fromEntries(
-          Object.entries(updates).filter(([_, v]) => v !== undefined)
-        ),
-        updatedAt: new Date().toISOString(),
-      };
-
-      await saveAvatarsStore(store);
-
-      console.log("[Avatars] Updated avatar:", id);
-      return store.avatars[index];
+      console.log("[Avatars] Updated avatar:", input.id);
+      return dbToAvatar(data as DbAvatar);
     }),
 
   delete: publicProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ input }) => {
       console.log("[Avatars] delete called for:", input.id);
-      
-      const store = await getAvatarsStore();
-      const index = store.avatars.findIndex(a => a.id === input.id);
 
-      if (index === -1) {
-        throw new Error("Avatar not found");
+      const { data, error } = await supabase
+        .from("section_avatars")
+        .delete()
+        .eq("id", input.id)
+        .select()
+        .maybeSingle();
+
+      if (error) {
+        console.error("[Avatars] delete error:", error);
+        throw new Error(`Failed to delete avatar: ${error.message}`);
       }
 
-      store.avatars.splice(index, 1);
-      await saveAvatarsStore(store);
+      if (!data) {
+        throw new Error("Avatar not found");
+      }
 
       console.log("[Avatars] Deleted avatar:", input.id);
       return { success: true };

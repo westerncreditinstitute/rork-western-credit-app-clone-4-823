@@ -57,6 +57,7 @@ import {
 import Colors from "@/constants/colors";
 import { courses } from "@/mocks/data";
 import { useSubscription } from "@/contexts/SubscriptionContext";
+import { useUser } from "@/contexts/UserContext";
 
 export default function CourseDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -84,7 +85,8 @@ export default function CourseDetailScreen() {
   const dueToday = (course.certificationFee ?? 0) + (course.enrollmentFee ?? 0);
   const isBundle = course.isBundle === true;
   const isFreeWithRequirements = course.isFree && course.requiresCompletedCourses;
-  const MOCK_USER_ID = "user_demo_123";
+  const { user: currentUser } = useUser();
+  const userId = currentUser?.id || "";
 
   const checkCourseCompletion = (courseId: string): boolean => {
     const targetCourse = courses.find(c => c.id === courseId);
@@ -412,7 +414,7 @@ export default function CourseDetailScreen() {
           {isACECourse && (course.enrolled || courseEnrolled) && (
             <View style={styles.certificationSection}>
               <CertificationEligibility
-                userId={MOCK_USER_ID}
+                userId={userId}
                 courseId={course.id}
                 courseName={course.title}
                 onNavigateToSection={(sectionId) => {

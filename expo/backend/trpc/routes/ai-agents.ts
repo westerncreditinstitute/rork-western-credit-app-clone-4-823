@@ -1123,38 +1123,24 @@ async function fetchAnalysesPerBureau(userId: string): Promise<
  * must behave differently, or an outage would silence every agent.
  */
 async function fetchEnrolledCourseIds(userId: string): Promise<string[] | null> {
-  const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-  const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-  const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
-
-  if (!endpoint || !namespace || !token) return null;
+  if (!userId) return null;
 
   try {
-    const response = await fetch(`${endpoint}/sql`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-        "surreal-ns": namespace,
-        "surreal-db": "app",
-      },
-      body: JSON.stringify({
-        query: `SELECT courseId, enrolled FROM progress WHERE userId = '${userId.replace(/'/g, "")}'`,
-      }),
-    });
+    const { data, error } = await supabase
+      .from("course_progress")
+      .select("course_id, enrolled")
+      .eq("user_id", userId);
 
-    if (!response.ok) {
-      console.error("[AI Agents] Enrollment lookup failed:", response.status);
+    if (error) {
+      console.error("[AI Agents] Enrollment lookup failed:", error.message);
       return null;
     }
 
-    const data = await response.json();
-    const rows = data?.[0]?.result;
-    if (!Array.isArray(rows)) return null;
+    if (!Array.isArray(data)) return null;
 
-    return rows
+    return data
       .filter((r: { enrolled?: boolean }) => r?.enrolled)
-      .map((r: { courseId?: string }) => String(r?.courseId ?? ""))
+      .map((r: { course_id?: string }) => String(r?.course_id ?? ""))
       .filter(Boolean);
   } catch (error) {
     console.error("[AI Agents] Enrollment lookup error:", error);
@@ -1170,34 +1156,21 @@ async function fetchEnrolledCourseIds(userId: string): Promise<string[] | null> 
  * paid" apart from "could not find out".
  */
 async function fetchCertificatePaid(userId: string): Promise<boolean | null> {
-  const endpoint = process.env.EXPO_PUBLIC_RORK_DB_ENDPOINT;
-  const namespace = process.env.EXPO_PUBLIC_RORK_DB_NAMESPACE;
-  const token = process.env.EXPO_PUBLIC_RORK_DB_TOKEN;
-
-  if (!endpoint || !namespace || !token) return null;
+  if (!userId) return null;
 
   try {
-    const response = await fetch(`${endpoint}/sql`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-        "surreal-ns": namespace,
-        "surreal-db": "app",
-      },
-      body: JSON.stringify({
-        query: `SELECT tier, certificatePaid FROM subscriptions WHERE userId = '${userId.replace(/'/g, "")}' AND status = 'active'`,
-      }),
-    });
+    const { data, error } = await supabase
+      .from("subscriptions")
+      .select("tier, certificate_paid")
+      .eq("user_id", userId)
+      .eq("status", "active");
 
-    if (!response.ok) {
-      console.error("[AI Agents] Certificate lookup failed:", response.status);
+    if (error) {
+      console.error("[AI Agents] Certificate lookup failed:", error.message);
       return null;
     }
 
-    const data = await response.json();
-    const rows = data?.[0]?.result;
-    if (!Array.isArray(rows)) return null;
+    if (!Array.isArray(data)) return null;
 
     // A CSO affiliate is a paid state by definition; otherwise the flag on
     // the subscription record decides.
@@ -1207,9 +1180,9 @@ async function fetchCertificatePaid(userId: string): Promise<boolean | null> {
     // have already paid, so absence must not collapse into "trial" or the
     // change would retroactively confiscate the library they bought. Only an
     // explicit `false` (written at sign-up under the new model) is a trial.
-    return rows.some(
-      (r: { tier?: string; certificatePaid?: boolean }) =>
-        r?.tier === "cso_affiliate" || r?.certificatePaid !== false
+    return data.some(
+      (r: { tier?: string; certificate_paid?: boolean }) =>
+        r?.tier === "cso_affiliate" || r?.certificate_paid !== false
     );
   } catch (error) {
     console.error("[AI Agents] Certificate lookup error:", error);
