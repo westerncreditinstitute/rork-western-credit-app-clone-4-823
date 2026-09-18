@@ -25,6 +25,7 @@ import Colors from "@/constants/colors";
 import { trpc } from "@/lib/trpc";
 import { useUser } from "@/contexts/UserContext";
 import { useDisputes } from "@/contexts/DisputesContext";
+import { isValidUUID } from "@/utils/validation";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Clipboard from "expo-clipboard";
 
@@ -236,6 +237,13 @@ export default function CreditRepairModal({
     }
     if (!accountNumber.trim()) {
       Alert.alert("Missing Information", "Please enter the account or reference number.");
+      return;
+    }
+    if (!isValidUUID(userId)) {
+      Alert.alert(
+        "Account Not Set Up",
+        "Your account isn't fully set up yet. Please log out and log back in, or create a real account instead of using demo mode."
+      );
       return;
     }
     setSaveError(null);
