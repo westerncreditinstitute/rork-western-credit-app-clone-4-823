@@ -2,6 +2,7 @@ import { httpLink } from "@trpc/client";
 import { createTRPCReact } from "@trpc/react-query";
 import superjson from "superjson";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Platform } from "react-native";
 
 import type { AppRouter } from "@/backend/trpc/app-router";
 
@@ -51,6 +52,16 @@ const getBaseUrl = () => {
     if (url) {
       console.warn(`[WCI-CONFIG] EXPO_PUBLIC_RORK_API_BASE_URL = ${url}`);
       console.warn(`[WCI-CONFIG] status endpoint: ${url}/api/system-status`);
+    } else if (Platform.OS === "web") {
+      // Correct and expected on a single-origin deployment (e.g. Railway,
+      // see RAILWAY_DEPLOYMENT.md): every request resolves to a same-origin
+      // relative path (`/api/trpc/...`), which the browser fetches against
+      // whatever host served this page. Nothing to fix here.
+      console.warn(
+        "[WCI-CONFIG] EXPO_PUBLIC_RORK_API_BASE_URL is EMPTY - requests will " +
+          "use same-origin relative paths. This is expected on single-origin " +
+          "web deployments (Railway) and is not an error.",
+      );
     } else {
       console.warn(
         "[WCI-CONFIG] EXPO_PUBLIC_RORK_API_BASE_URL is EMPTY. Rork did not " +
@@ -454,10 +465,18 @@ async function probeHealthOnce(baseUrl: string): Promise<{ ok: boolean; message?
  * Checks whether the API server is currently reachable. Probes the health
  * route twice, then falls back to a real tRPC read - a flaky health route
  * must never flag the server offline while content requests still answer.
+ *
+ * An empty `EXPO_PUBLIC_RORK_API_BASE_URL` is not itself a failure: on web
+ * (e.g. the single-origin Railway deployment described in
+ * RAILWAY_DEPLOYMENT.md) leaving it unset is the *correct* configuration -
+ * every request already resolves as a same-origin relative path, exactly
+ * like `fetchWithRetry`/`trpcClient` below already do. Only on native
+ * platforms (iOS/Android), where there is no implicit origin to fall back
+ * to, does a missing base URL mean requests genuinely cannot be made.
  */
 export async function checkApiReachable(): Promise<{ ok: boolean; message?: string }> {
   const baseUrl = getBaseUrl();
-  if (!baseUrl) {
+  if (!baseUrl && Platform.OS !== "web") {
     return { ok: false, message: "API base URL is not configured." };
   }
 
