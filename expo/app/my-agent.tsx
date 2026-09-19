@@ -86,6 +86,23 @@ let warpShownThisSession = false;
 /** Which surface of the tab is on screen. */
 type AgentView = "chat" | "overview";
 
+/** Outcome of the direct-to-database agent lookup. */
+type DirectStatus = "idle" | "pending" | "success" | "none" | "unavailable";
+
+/**
+ * How long the API gets to answer before this screen reads the assignment
+ * straight from the database.
+ *
+ * The fallback used to wait for `myAgentQuery.isError`. Against a host that
+ * completes the TCP/TLS handshake and then never replies - exactly how the
+ * Rork dev API fails when it is asleep - that verdict is roughly four minutes
+ * away: five attempts at a 20s timeout plus backoff (~112s), doubled by the
+ * react-query retry. Nothing could render until then, so the tab looked
+ * permanently stuck. Six seconds is far longer than a healthy API needs and
+ * short enough that the user is never left staring at a spinner.
+ */
+const DIRECT_FALLBACK_GRACE_MS = 6000;
+
 // ============================================================
 // Main My Agent Screen
 // ============================================================
@@ -185,7 +202,10 @@ function MyAgentScreenInner({
   // different transport, so it also covers a first open on a new device
   // where there is nothing cached yet.
   const [directAgent, setDirectAgent] = useState<CachedAgent | null>(null);
-  const [directLookupPending, setDirectLookupPending] = useState(false);
+  const [directStatus, setDirectStatus] = useState<DirectStatus>("idle");
+  const [directReason, setDirectReason] = useState<string | null>(null);
+  /** True once the API has had its grace period to answer. */
+  const [graceElapsed, setGraceElapsed] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -193,11 +213,17 @@ function MyAgentScreenInner({
     if (!userId) {
       setCachedAgent(null);
       setDirectAgent(null);
+      setDirectStatus("idle");
+      setDirectReason(null);
+      setGraceElapsed(false);
       setCacheChecked(true);
       return;
     }
 
     setDirectAgent(null);
+    setDirectStatus("idle");
+    setDirectReason(null);
+    setGraceElapsed(false);
 
     setCacheChecked(false);
     void readCachedAgent(userId).then((cached) => {
@@ -352,6 +378,8 @@ function MyAgentScreenInner({
         // Drop the direct-read copy so the API's answer becomes the source
         // of truth again and the reconnecting banner clears.
         setDirectAgent(null);
+        setDirectStatus("idle");
+        setDirectReason(null);
         myAgentQuery.refetch();
       }
     });
@@ -359,19 +387,39 @@ function MyAgentScreenInner({
     return unsubscribe;
   }, [userId, isACE1, myAgentQuery, assignAgentMutation]);
 
-  // ── Fall back to the database when the API host is unreachable ──
+  // ── Give the API a deadline, then read the database directly ───
   //
-  // The API tier and the database are separate hosts. When the API is down
-  // (504 at the edge, or a timeout) the assignment is still readable straight
-  // from Supabase in well under a second, so the console opens instead of
-  // dead-ending on "Can't reach the server right now".
-  //
-  // Deliberately limited to TRANSPORT failures: a structured setup error
-  // (missing tables, RLS, empty pool) means the database itself is the
-  // problem, and going direct would hit the very same wall.
+  // Starts the moment the tab opens rather than waiting for a verdict from
+  // the API. When the host accepts the connection and then never replies -
+  // how the Rork dev API fails while asleep - `getMyAgent` does not report
+  // failure for roughly four minutes (five attempts at a 20s timeout plus
+  // backoff, doubled by the react-query retry). Keying the fallback off
+  // `isError` therefore left this tab on a spinner for that entire window,
+  // which is what made it look broken on the device while the web build -
+  // which talks to a *different*, working origin - was fine.
   useEffect(() => {
     if (!userId || !isACE1) return;
-    if (myAgentQuery.data?.agent || directAgent || directLookupPending) return;
+
+    const timer = setTimeout(
+      () => setGraceElapsed(true),
+      DIRECT_FALLBACK_GRACE_MS,
+    );
+    return () => clearTimeout(timer);
+  }, [userId, isACE1]);
+
+  // ── Fall back to the database when the API is slow or unreachable ──
+  //
+  // The API tier and the database are separate hosts. When the API is down
+  // (504 at the edge, or a silent timeout) the assignment is still readable
+  // straight from Supabase in well under a second, so the console opens
+  // instead of dead-ending on "Can't reach the server right now".
+  //
+  // Still deliberately read-only: it can surface an agent the user already
+  // has, but assigning a new one needs the pool bookkeeping the API owns.
+  useEffect(() => {
+    if (!userId || !isACE1) return;
+    if (myAgentQuery.data?.agent) return;
+    if (directStatus !== "idle") return;
 
     const transportFailed =
       (myAgentQuery.isError &&
@@ -379,32 +427,40 @@ function MyAgentScreenInner({
       (assignAgentMutation.isError &&
         isTransportErrorMessage(assignAgentMutation.error?.message));
 
-    if (!transportFailed) return;
+    // Either the API has already given up, or it has used up its grace period
+    // without answering. A healthy API answers in well under a second, so in
+    // practice this only fires when something is genuinely wrong.
+    if (!transportFailed && !graceElapsed) return;
 
     let active = true;
-    setDirectLookupPending(true);
+    setDirectStatus("pending");
 
-    void fetchAgentDirect(userId)
-      .then((outcome) => {
-        if (!active) return;
-        if (outcome.status === "success") {
-          console.log("[MyAgent] Resolved agent directly from the database");
-          const resolved: CachedAgent = {
-            agent: outcome.result.agent as unknown as AgentInfo,
-            assignment: outcome.result.assignment,
-          };
-          setDirectAgent(resolved);
-          // Worth persisting: it is a real, server-confirmed assignment.
-          void writeCachedAgent(userId, resolved);
-          return;
-        }
-        if (outcome.status === "unavailable") {
-          console.warn("[MyAgent] Direct lookup unavailable:", outcome.reason);
-        }
-      })
-      .finally(() => {
-        if (active) setDirectLookupPending(false);
-      });
+    void fetchAgentDirect(userId).then((outcome) => {
+      if (!active) return;
+
+      if (outcome.status === "success") {
+        console.log("[MyAgent] Resolved agent directly from the database");
+        const resolved: CachedAgent = {
+          agent: outcome.result.agent as unknown as AgentInfo,
+          assignment: outcome.result.assignment,
+        };
+        setDirectAgent(resolved);
+        setDirectStatus("success");
+        // Worth persisting: it is a real, server-confirmed assignment.
+        void writeCachedAgent(userId, resolved);
+        return;
+      }
+
+      if (outcome.status === "unavailable") {
+        console.warn("[MyAgent] Direct lookup unavailable:", outcome.reason);
+        setDirectReason(outcome.reason);
+        setDirectStatus("unavailable");
+        return;
+      }
+
+      // Authoritative: the database has no active assignment for this user.
+      setDirectStatus("none");
+    });
 
     return () => {
       active = false;
@@ -412,8 +468,8 @@ function MyAgentScreenInner({
   }, [
     userId,
     isACE1,
-    directAgent,
-    directLookupPending,
+    directStatus,
+    graceElapsed,
     myAgentQuery.isError,
     myAgentQuery.error?.message,
     myAgentQuery.data?.agent,
@@ -473,12 +529,24 @@ function MyAgentScreenInner({
   const isShowingCachedAgent =
     !myAgentQuery.data?.agent && (!!directAgent?.agent || !!cachedAgent?.agent);
 
+  /** The direct read has produced a definitive answer of some kind. */
+  const directResolved =
+    directStatus === "success" ||
+    directStatus === "none" ||
+    directStatus === "unavailable";
+
+  // `myAgentQuery.isLoading` is deliberately NOT sufficient on its own here.
+  // A silently hanging API keeps it true for minutes, and while it was the
+  // last word this screen showed a spinner for that whole time even though
+  // the database had already answered. Once the direct read has resolved we
+  // know everything we are going to know, so the UI commits to a real state
+  // instead of waiting out a request that may never land.
   const isAssigning =
     !agent &&
     (assignAgentMutation.isPending ||
       !cacheChecked ||
-      directLookupPending ||
-      (myAgentQuery.isLoading && !myAgentQuery.data));
+      directStatus === "pending" ||
+      (myAgentQuery.isLoading && !myAgentQuery.data && !directResolved));
 
   /**
    * True ONLY while the `assign` mutation is actually creating a brand-new
@@ -521,11 +589,32 @@ function MyAgentScreenInner({
       };
     }
 
+    // The API call can still be technically "in flight" (hung, never errored)
+    // at the point the direct database read has already finished. Both of the
+    // outcomes below therefore have to speak for themselves, or the screen
+    // falls through to the far too cheerful "tap Try Again" copy while the
+    // server is in fact unreachable and Try Again cannot possibly work.
+    const apiAnswered = myAgentQuery.isSuccess;
+    const unreachable =
+      !apiAnswered &&
+      // Could not read the database either.
+      (directStatus === "unavailable" ||
+        // Read it fine, and this user genuinely has no agent yet. Claiming one
+        // is a write that only the API can do (it owns the pool's capacity
+        // bookkeeping), so with the API down this is still a dead end.
+        directStatus === "none");
+
     const raw =
       assignAgentMutation.error?.message ||
       myAgentQuery.data?.setupError?.message ||
       myAgentQuery.error?.message ||
-      "";
+      (unreachable
+        ? `UNREACHABLE: ${
+            directStatus === "none"
+              ? "The server isn't responding, so a new agent can't be assigned to you right now."
+              : (directReason ?? "The server isn't responding right now.")
+          }`
+        : "");
 
     if (!raw) return null;
 
@@ -568,6 +657,13 @@ function MyAgentScreenInner({
           title: "All Agents Are Busy",
           description: detail,
         };
+      case "UNREACHABLE":
+        return {
+          code,
+          title: "Can't Reach the Server",
+          description: detail,
+          hint: "Nothing is lost — this is a connection problem, not a problem with your account. The screen keeps checking and will pick up on its own the moment the server answers.",
+        };
       default:
         return {
           code: code ?? "UNKNOWN",
@@ -579,6 +675,9 @@ function MyAgentScreenInner({
     assignAgentMutation.error?.message,
     myAgentQuery.data?.setupError?.message,
     myAgentQuery.error?.message,
+    myAgentQuery.isSuccess,
+    directStatus,
+    directReason,
   ]);
 
   // ── Handlers ──────────────────────────────────────────────────
