@@ -96,7 +96,10 @@ nonisolated struct VideoProgressRecord: Identifiable, Codable, Hashable, Sendabl
 
     nonisolated init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        // SurrealDB record ids arrive as strings like "video_progress:123_abc".
+        // `videoProgress.*` now reads from Supabase, so ids arrive as plain
+        // uuid strings rather than the old SurrealDB "video_progress:123_abc"
+        // record form. Decoding stays permissive because both are strings and
+        // a row that predates the migration must still open.
         id = (try? container.decode(String.self, forKey: .id)) ?? UUID().uuidString
         videoId = try container.decodeIfPresent(String.self, forKey: .videoId) ?? ""
         currentTime = try container.decodeIfPresent(Int.self, forKey: .currentTime)

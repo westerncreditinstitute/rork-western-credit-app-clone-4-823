@@ -84,6 +84,15 @@ final class EquifaxFetchViewModel {
     /// Saves each bureau separately so the dashboard shows them apart, exactly
     /// as an uploaded report would.
     private func persist(_ report: EquifaxReport) async {
+        // A demo/seed account has no database-backed id, and `user_id` is a
+        // Postgres `uuid` column: every save below would be rejected by the
+        // server one round-trip later. Checking up front turns a stack of
+        // opaque per-bureau failures into a single, accurate explanation.
+        guard Validation.isValidUUID(userId) else {
+            saveWarning = Validation.accountNotSetUpMessage
+            return
+        }
+
         phase = .saving
 
         var failures: [String] = []
