@@ -3,13 +3,20 @@
  *
  * Which courses a student has bought decides two separate things:
  *   1. Which tools they can open (the Interactive Coach is ACE-2 and up).
- *   2. What their AI Credit Repair Agent is allowed to talk about.
+ *   2. What their AI Agent is allowed to talk about.
  *
  * The agents are trained on the whole credit domain, so the limits here are
- * the ONLY thing keeping an ACE-1 student from getting ACE-2 material for
- * free out of the chat window. That makes this file a revenue boundary, not
- * a cosmetic one - it is shared by the app, the backend and the iOS mirror
- * (`Models/AgentAccess.swift`) so the three can never disagree.
+ * the ONLY thing keeping an ACE-1 student from getting ACE-2 (score building)
+ * or ACE-3 (business credit) material for free out of the chat window. That
+ * makes this file a revenue boundary, not a cosmetic one - it is shared by the
+ * app, the backend and the iOS mirror (`Models/AgentAccess.swift`) so the
+ * three can never disagree.
+ *
+ * The three subjects map one-to-one onto the three courses:
+ *   - ACE-1 (Advanced Credit Repair)      -> credit_repair   (disputes)
+ *   - ACE-2 (Advanced Credit Building)    -> score_building  (raising a score)
+ *   - ACE-3 (Advanced Business Credit)    -> business_credit (business credit)
+ * The ACE-4 Complete Bundle unlocks all three with no restrictions.
  */
 
 /** Course ids as they appear in `mocks/data.ts` and the progress table. */
@@ -22,7 +29,7 @@ export const COURSE_ID = {
 } as const;
 
 /** A subject area an agent is cleared to discuss. */
-export type AgentTopic = 'credit_repair' | 'score_building';
+export type AgentTopic = 'credit_repair' | 'score_building' | 'business_credit';
 
 export interface AgentScope {
   /** ACE-4 bundle students get the agent with no subject limits at all. */
@@ -33,24 +40,36 @@ export interface AgentScope {
   hasAccess: boolean;
 }
 
+/** Human-readable course name for each subject, used in refusals + labels. */
+export const COURSE_NAME: Record<AgentTopic, string> = {
+  credit_repair: 'ACE-1 (Advanced Credit Repair)',
+  score_building: 'ACE-2 (Advanced Credit Building)',
+  business_credit: 'ACE-3 (Advanced Business Credit)',
+};
+
 /**
  * Works out what a student's agent may discuss from the courses they own.
  *
- * ACE-3 (Business Credit) deliberately grants NO agent: the tool is a
- * consumer credit repair assistant and has nothing to offer a business
- * credit student, so an ACE-3-only student is shown an explanation rather
- * than an agent that would refuse every question they asked it.
+ * Each course unlocks exactly its own subject and nothing else, so an ACE-1
+ * student cannot get score-building advice, an ACE-2 student cannot get
+ * dispute advice, and an ACE-3 student cannot get either - each of those is
+ * the paid deliverable of a different course.
  */
 export function deriveAgentScope(enrolledCourseIds: readonly string[]): AgentScope {
   const owns = (id: string): boolean => enrolledCourseIds.includes(id);
 
   if (owns(COURSE_ID.bundle)) {
-    return { unrestricted: true, topics: ['credit_repair', 'score_building'], hasAccess: true };
+    return {
+      unrestricted: true,
+      topics: ['credit_repair', 'score_building', 'business_credit'],
+      hasAccess: true,
+    };
   }
 
   const topics: AgentTopic[] = [];
   if (owns(COURSE_ID.ace1)) topics.push('credit_repair');
   if (owns(COURSE_ID.ace2)) topics.push('score_building');
+  if (owns(COURSE_ID.ace3)) topics.push('business_credit');
 
   return { unrestricted: false, topics, hasAccess: topics.length > 0 };
 }
@@ -75,15 +94,21 @@ export function agentScopeLabel(scope: AgentScope): string {
   if (scope.unrestricted) return 'Full access — all credit topics';
   const hasRepair = scope.topics.includes('credit_repair');
   const hasBuilding = scope.topics.includes('score_building');
+  const hasBusiness = scope.topics.includes('business_credit');
+
+  if (hasRepair && hasBuilding && hasBusiness) return 'Credit repair, building & business credit';
   if (hasRepair && hasBuilding) return 'Credit repair & score building';
+  if (hasRepair && hasBusiness) return 'Credit repair & business credit';
+  if (hasBuilding && hasBusiness) return 'Score building & business credit';
   if (hasRepair) return 'Credit repair specialist';
   if (hasBuilding) return 'Score building specialist';
+  if (hasBusiness) return 'Business credit specialist';
   return 'No agent included';
 }
 
-/** Explains to an ACE-3-only student why there is no agent for them. */
+/** Explains to a student with no agent-bearing course why there is no agent. */
 export const AGENT_NOT_INCLUDED_MESSAGE =
-  'Your personal AI Credit Repair Agent comes with ACE-1 (Advanced Credit Repair) and ACE-2 (Advanced Credit Building). ACE-3 covers business credit, which this consumer credit agent is not trained for. Add ACE-1 or ACE-2 — or get everything with the Complete ACE Bundle — to be matched with an agent.';
+  'Your personal AI Agent is included with ACE-1 (Advanced Credit Repair), ACE-2 (Advanced Credit Building) and ACE-3 (Advanced Business Credit). Enroll in any of those — or get everything with the Complete ACE Bundle — to be matched with an agent.';
 
 // ============================================================
 // System prompt restrictions
@@ -108,11 +133,20 @@ const SCORE_BUILDING_ALLOWED = `- Raising a FICO score toward and past 800
 - Establishing new credit lines, signature loans and a new credit file
 - Score monitoring and score simulation`;
 
+const BUSINESS_CREDIT_ALLOWED = `- Establishing business credit separate from personal credit
+- Forming an entity (LLC/corporation), getting an EIN and a D-U-N-S number
+- Net-30 vendor accounts, business tradelines and store/gas cards
+- Business credit cards, business loans and lines of credit
+- Dun & Bradstreet PAYDEX and Experian/Equifax business scores
+- The business credit ladder (vendor → store card → business card → bank/SBA)
+- Funding readiness, documentation and keeping business and personal finances separate
+- Monitoring the business credit bureaus`;
+
 /**
  * Builds the scope clause appended to the agent's system prompt.
  *
- * Returns an empty string for bundle students so the prompt stays exactly as
- * trained, with no refusal instructions to trip over.
+ * Returns the unrestricted clause for bundle students so the prompt stays
+ * exactly as trained, with no refusal instructions to trip over.
  */
 export function buildScopeInstruction(scope: AgentScope): string {
   if (scope.unrestricted) {
@@ -126,16 +160,18 @@ This student owns the Complete ACE Bundle, which includes every course. You have
 
   const hasRepair = scope.topics.includes('credit_repair');
   const hasBuilding = scope.topics.includes('score_building');
+  const hasBusiness = scope.topics.includes('business_credit');
 
-  const enrollmentName = hasRepair && hasBuilding
-    ? 'ACE-1 (Advanced Credit Repair) and ACE-2 (Advanced Credit Building)'
-    : hasRepair
-      ? 'ACE-1 (Advanced Credit Repair)'
-      : 'ACE-2 (Advanced Credit Building)';
+  const ownedNames = scope.topics.map((t) => COURSE_NAME[t]);
+  const enrollmentName =
+    ownedNames.length <= 1
+      ? ownedNames[0] ?? 'no ACE course'
+      : `${ownedNames.slice(0, -1).join(', ')} and ${ownedNames[ownedNames.length - 1]}`;
 
   const allowed = [
     hasRepair ? CREDIT_REPAIR_ALLOWED : '',
     hasBuilding ? SCORE_BUILDING_ALLOWED : '',
+    hasBusiness ? BUSINESS_CREDIT_ALLOWED : '',
   ]
     .filter(Boolean)
     .join('\n');
@@ -153,11 +189,13 @@ This student owns the Complete ACE Bundle, which includes every course. You have
       '- Building or raising a credit score, reaching 800+, new credit lines, authorized users, credit builder loans, credit limit strategy, credit mix → covered by ACE-2 (Advanced Credit Building)'
     );
   }
+  if (!hasBusiness) {
+    offLimits.push(
+      '- Business credit, corporate credit profiles, business funding, trade lines, net-30 vendors, PAYDEX, SBA loans, business entity setup → covered by ACE-3 (Advanced Business Credit)'
+    );
+  }
   offLimits.push(
-    '- Business credit, corporate credit profiles, business funding, trade lines, SBA loans, business entity setup → covered by ACE-3 (Advanced Business Credit)'
-  );
-  offLimits.push(
-    '- Anything unrelated to consumer credit education: investing, crypto, taxes, insurance, real estate, medical, relationship or general legal advice, coding, current events, or general chit-chat'
+    '- Anything unrelated to credit education: investing, crypto, taxes, insurance, real estate, medical, relationship or general legal advice, coding, current events, or general chit-chat'
   );
 
   return `

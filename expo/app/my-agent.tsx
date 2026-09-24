@@ -863,10 +863,9 @@ function MyAgentScreenInner({
     return <LockedView router={router} insets={insets} embedded={embedded} />;
   }
 
-  // ACE-3 is a business credit course, and this agent is a consumer credit
-  // specialist. Rather than hand an ACE-3-only student an agent that would
-  // refuse every question, explain the mismatch and point at the courses
-  // that do include one.
+  // Every agent-bearing course (ACE-1, ACE-2, ACE-3) now includes an agent,
+  // each scoped to its own subject. This only fires for a student who owns no
+  // agent-bearing course at all, and points them at the ones that do.
   if (!agentScope.hasAccess) {
     return (
       <NoAgentView router={router} insets={insets} embedded={embedded} />
@@ -1144,6 +1143,7 @@ function MyAgentScreenInner({
                 loadError={chat.loadError}
                 onSend={chat.sendMessage}
                 onRetry={chat.retryMessage}
+                scope={agentScope}
               />
             ) : (
               <View style={styles.loadingContainer}>
@@ -1292,7 +1292,15 @@ function MyAgentScreenInner({
                 <TrendingUp size={20} color={Colors.accent} />
                 <Text style={styles.featureTitle}>FCRA Expert</Text>
                 <Text style={styles.featureDesc}>
-                  Knows all dispute letter types and credit score factors
+                  {agentScope.unrestricted ||
+                  (agentScope.topics.includes("credit_repair") &&
+                    agentScope.topics.includes("score_building"))
+                    ? "Knows all dispute letter types and credit score factors"
+                    : agentScope.topics.includes("business_credit")
+                      ? "Knows the business credit ladder, PAYDEX and funding readiness"
+                      : agentScope.topics.includes("score_building")
+                        ? "Knows the five credit score factors and how to move each one"
+                        : "Knows every dispute letter type and your FCRA/FDCPA rights"}
                 </Text>
               </View>
             </View>
@@ -1334,6 +1342,7 @@ function MyAgentScreenInner({
                 setCreditSummaryVisible(false);
                 setCreditAnalysisVisible(true);
               }}
+              scope={agentScope}
             />
             <NegativeAccountsDashboard
               visible={negativeDashboardVisible}
@@ -1539,7 +1548,7 @@ function NoAgentView({
             <Bot size={48} color={Colors.primary} />
           </View>
           <Text style={styles.lockedTitle}>
-            No agent for this course
+            No agent yet
           </Text>
           <Text style={styles.lockedDesc}>{AGENT_NOT_INCLUDED_MESSAGE}</Text>
 
@@ -1554,6 +1563,12 @@ function NoAgentView({
               <TrendingUp size={16} color={Colors.accent} />
               <Text style={styles.lockedFeatureText}>
                 ACE-2 — score building toward 800+
+              </Text>
+            </View>
+            <View style={styles.lockedFeatureRow}>
+              <Shield size={16} color={Colors.accent} />
+              <Text style={styles.lockedFeatureText}>
+                ACE-3 — establishing business credit
               </Text>
             </View>
             <View style={styles.lockedFeatureRow}>

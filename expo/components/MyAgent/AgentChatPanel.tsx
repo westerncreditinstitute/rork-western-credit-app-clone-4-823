@@ -38,6 +38,7 @@ import {
 } from "lucide-react-native";
 
 import Colors from "@/constants/colors";
+import type { AgentScope } from "@/constants/agent-access";
 import type {
   AgentChatMessage,
   ConnectionState,
@@ -50,27 +51,50 @@ import type {
 /** The My Agent identity colour, shared with the tab bar. */
 const AGENT_VIOLET = "#A78BFA";
 
-const SUGGESTIONS: { label: string; message: string }[] = [
+/**
+ * Starter prompts, each tagged with the subject it belongs to. The list is
+ * filtered by the student's course scope so an ACE-1 student is never invited
+ * to ask a score-building question (and vice versa) - a suggestion chip that
+ * leads straight to a refusal is worse than no chip at all.
+ */
+type SuggestionTopic = "credit_repair" | "score_building" | "business_credit";
+
+const SUGGESTIONS: { label: string; message: string; topic: SuggestionTopic }[] = [
   {
     label: "What disputes are open?",
     message: "What disputes do I currently have open? Show me their status.",
+    topic: "credit_repair",
   },
   {
     label: "Write a 609 letter",
     message: "Can you write a 609 dispute letter for me?",
+    topic: "credit_repair",
   },
   {
     label: "Analyze my credit report",
     message:
       "Please analyze my credit report and tell me which accounts I should dispute first.",
+    topic: "credit_repair",
   },
   {
     label: "How do I raise my score?",
     message: "What are the best credit building tips for me right now?",
+    topic: "score_building",
   },
   {
     label: "Explain credit scores",
     message: "Explain the five credit score factors and their percentages.",
+    topic: "score_building",
+  },
+  {
+    label: "How do I start business credit?",
+    message: "How do I start building business credit for my company?",
+    topic: "business_credit",
+  },
+  {
+    label: "What is a PAYDEX score?",
+    message: "What is a PAYDEX score and how do I improve it?",
+    topic: "business_credit",
   },
 ];
 
@@ -90,6 +114,8 @@ export interface AgentChatPanelProps {
   loadError: string | null;
   onSend: (text: string) => void;
   onRetry: (clientId: string) => void;
+  /** The student's course scope, used to filter the starter prompts. */
+  scope?: AgentScope;
   /** Extra bottom padding so the composer clears the floating tab bar. */
   bottomInset?: number;
 }
@@ -108,10 +134,18 @@ export default function AgentChatPanel({
   loadError,
   onSend,
   onRetry,
+  scope,
   bottomInset = 0,
 }: AgentChatPanelProps) {
   const [draft, setDraft] = useState<string>("");
   const listRef = useRef<FlatList<AgentChatMessage>>(null);
+
+  // Only offer starter prompts from courses the student owns. With no scope
+  // supplied we show the full list (e.g. bundle / preview contexts).
+  const suggestions = useMemo(() => {
+    if (!scope || scope.unrestricted) return SUGGESTIONS;
+    return SUGGESTIONS.filter((s) => scope.topics.includes(s.topic));
+  }, [scope]);
 
   const canSend = draft.trim().length > 0;
 
@@ -187,11 +221,11 @@ export default function AgentChatPanel({
       <View>
         {isAgentTyping ? <TypingBubble agentName={agentName} /> : null}
         {messages.length === 0 && !isLoading ? (
-          <SuggestionList onPick={handleSuggestion} />
+          <SuggestionList suggestions={suggestions} onPick={handleSuggestion} />
         ) : null}
       </View>
     ),
-    [isAgentTyping, agentName, messages.length, isLoading, handleSuggestion],
+    [isAgentTyping, agentName, messages.length, isLoading, handleSuggestion, suggestions],
   );
 
   return (
@@ -480,11 +514,18 @@ function TypingBubble({ agentName }: { agentName: string }) {
 // Suggestions
 // ============================================================
 
-function SuggestionList({ onPick }: { onPick: (message: string) => void }) {
+function SuggestionList({
+  suggestions,
+  onPick,
+}: {
+  suggestions: { label: string; message: string; topic: SuggestionTopic }[];
+  onPick: (message: string) => void;
+}) {
+  if (suggestions.length === 0) return null;
   return (
     <View style={styles.suggestions}>
       <Text style={styles.suggestionsTitle}>Try asking</Text>
-      {SUGGESTIONS.map((suggestion) => (
+      {suggestions.map((suggestion) => (
         <TouchableOpacity
           key={suggestion.label}
           style={styles.suggestionChip}

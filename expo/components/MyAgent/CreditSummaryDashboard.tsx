@@ -27,6 +27,7 @@ import {
   Activity,
 } from "lucide-react-native";
 import Colors from "@/constants/colors";
+import type { AgentScope } from "@/constants/agent-access";
 import { trpc } from "@/lib/trpc";
 import { useUser } from "@/contexts/UserContext";
 import { useEquifaxReport } from "@/contexts/EquifaxReportContext";
@@ -72,6 +73,8 @@ export interface CreditSummaryDashboardProps {
   onViewBreakdown?: () => void;
   /** Jump to the report upload/analysis modal. */
   onUploadReport?: () => void;
+  /** The student's course scope, used to keep score-building copy in-scope. */
+  scope?: AgentScope;
 }
 
 // ============================================================
@@ -104,9 +107,13 @@ export default function CreditSummaryDashboard({
   onClose,
   onViewBreakdown,
   onUploadReport,
+  scope,
 }: CreditSummaryDashboardProps) {
   const { user } = useUser();
   const userId = user?.id || "";
+
+  // Score-building copy is only shown to students whose scope includes ACE-2.
+  const showScoreBuilding = !scope || scope.unrestricted || scope.topics.includes("score_building");
 
   // Live Consumer Data Suite data pulled this session (credit report + monitoring)
   const { report: liveReport, getSummary, monitoring } = useEquifaxReport();
@@ -516,8 +523,9 @@ export default function CreditSummaryDashboard({
                 <View style={styles.allClearBox}>
                   <CheckCircle2 size={18} color={Colors.success} />
                   <Text style={styles.allClearText}>
-                    Every account on file came back clean. Focus on keeping
-                    utilization low and payments on time.
+                    {showScoreBuilding
+                      ? "Every account on file came back clean. Focus on keeping utilization low and payments on time."
+                      : "Every account on file came back clean — there is nothing here to dispute."}
                   </Text>
                 </View>
               )}
