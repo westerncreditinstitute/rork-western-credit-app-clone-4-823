@@ -1,9 +1,21 @@
 /**
- * tRPC routes for Equifax OneView API integration
- * 
+ * tRPC routes for the Equifax **Consumer Data Suite** integration.
+ *
+ * This replaces the previous (incorrect) OneView *business* API integration.
+ * It now drives the two consumer-facing product scopes:
+ *
+ *   1. Credit Reports    -> POST {host}/personal/consumer-data-suite/v1/creditReport
+ *   2. Credit Monitoring -> GET  {host}/personal/consumer-data-suite/v1/creditMonitoring
+ *
  * Endpoints:
- *   - equifax.fetchCreditReport: Fetch and parse credit report (ACE-1 only, session-only storage)
- *   - equifax.validateConnection: Test Equifax API connectivity and credentials
+ *   - equifax.fetchCreditReport:     Fetch + parse the consumer's credit report
+ *                                    (session-only storage, no DB persistence).
+ *   - equifax.fetchCreditMonitoring: Fetch credit-monitoring alerts for the
+ *                                    consumer (new-accounts, inquiries, etc.).
+ *   - equifax.validateConnection:    Test Equifax API connectivity + credentials
+ *                                    for BOTH product scopes.
+ *   - equifax.getAnalyticsDashboard: Performance metrics for Equifax operations.
+ *   - equifax.exportAnalytics:       Export analytics metrics as JSON.
  */
 
 import * as z from "zod";
@@ -23,12 +35,40 @@ const ParsedNegativeAccountSchema = z.object({
   accountNumber: z.string(),
   creditorName: z.string(),
   creditorAddress: z.string().optional(),
-  accountType: z.enum(["charge-off", "collection", "late-payment", "delinquent", "unknown"]),
+  accountType: z.enum([
+    "charge-off",
+    "collection",
+    "late-payment",
+    "delinquent",
+    "bankruptcy",
+    "public-record",
+    "unknown",
+  ]),
   status: z.string(),
   delinquency: z.string().optional(),
   balance: z.number().optional(),
   dateReported: z.string().optional(),
   bureau: z.enum(["Equifax", "Experian", "TransUnion"]),
+});
+
+/**
+ * Schema for the high-level credit summary returned alongside a report.
+ * Powers the proper summary report page in the app.
+ */
+const CreditReportSummarySchema = z.object({
+  totalAccounts: z.number(),
+  openAccounts: z.number(),
+  negativeAccounts: z.number(),
+  collections: z.number(),
+  publicRecords: z.number(),
+  inquiries: z.number(),
+  creditScore: z.number().optional(),
+  totalBalance: z.number().optional(),
+  totalCreditLimit: z.number().optional(),
+  creditUtilization: z.number().optional(),
+  averageAccountAgeMonths: z.number().optional(),
+  lengthOfCreditHistoryMonths: z.number().optional(),
+  debtToCreditRatio: z.number().optional(),
 });
 
 /**
@@ -41,6 +81,29 @@ const BureauReportSchema = z.object({
   negativeAccountCount: z.number(),
   negativeAccounts: z.array(ParsedNegativeAccountSchema),
   creditScore: z.number().optional(),
+  summary: CreditReportSummarySchema.optional(),
+});
+
+/**
+ * Schema for a single credit-monitoring alert.
+ */
+const CreditMonitoringAlertSchema = z.object({
+  id: z.string(),
+  type: z.string(),
+  bureau: z.enum(["Equifax", "Experian", "TransUnion"]),
+  date: z.string(),
+  title: z.string(),
+  description: z.string().optional(),
+  severity: z.enum(["info", "warning", "critical"]),
+});
+
+/**
+ * Schema for the credit-monitoring result.
+ */
+const CreditMonitoringResultSchema = z.object({
+  fetchedAt: z.string(),
+  alerts: z.array(CreditMonitoringAlertSchema),
+  totalAlerts: z.number(),
 });
 
 /**
@@ -245,8 +308,11 @@ export const equifaxRouter = createTRPCRouter({
 
   /**
    * Validate Equifax API connection and credentials
-   * 
-   * Used for diagnostics and testing. Returns connection status.
+   *
+   * Used for diagnostics and testing. Verifies that OAuth tokens can be
+   * minted for BOTH Consumer Data Suite product scopes:
+   *   - Credit Reports
+   *   - Credit Monitoring
    */
   validateConnection: protectedProcedure.query(async ({ ctx }) => {
     try {
@@ -258,21 +324,48 @@ export const equifaxRouter = createTRPCRouter({
         return {
           success: true,
           connected: true,
-          message: "Running in DEMO MODE (mock data). Add EQUIFAX_MEMBER_NUMBER and EQUIFAX_SECURITY_CODE to use live data.",
+          message:
+            "Running in DEMO MODE (mock data). Add EQUIFAX_CLIENT_ID and EQUIFAX_CLIENT_SECRET to use live data.",
+          scopes: {
+            creditReport: false,
+            creditMonitoring: false,
+          },
         };
       }
 
-      // Try to get access token (will validate OAuth credentials)
-      const token = await equifaxClient.getAccessToken();
+      // Mint a token for each product scope (validates OAuth credentials).
+      const scopes = {
+        creditReport: false,
+        creditMonitoring: false,
+      };
 
-      if (!token) {
-        throw new Error("Failed to obtain access token");
+      try {
+        const reportToken = await equifaxClient.getCreditReportToken();
+        scopes.creditReport = Boolean(reportToken);
+      } catch (scopeError) {
+        console.error("[tRPC] validateConnection creditReport scope failed:", scopeError);
+      }
+
+      try {
+        const monitoringToken = await equifaxClient.getCreditMonitoringToken();
+        scopes.creditMonitoring = Boolean(monitoringToken);
+      } catch (scopeError) {
+        console.error("[tRPC] validateConnection creditMonitoring scope failed:", scopeError);
+      }
+
+      const connected = scopes.creditReport && scopes.creditMonitoring;
+
+      if (!connected) {
+        throw new Error(
+          `Failed to obtain access token(s). creditReport=${scopes.creditReport} creditMonitoring=${scopes.creditMonitoring}`,
+        );
       }
 
       return {
         success: true,
         connected: true,
-        message: "Successfully connected to Equifax API",
+        message: "Successfully connected to Equifax Consumer Data Suite (both scopes).",
+        scopes,
       };
     } catch (error) {
       const classified = classifyError(error);
@@ -282,9 +375,94 @@ export const equifaxRouter = createTRPCRouter({
         success: false,
         connected: false,
         message: classified.message,
+        scopes: {
+          creditReport: false,
+          creditMonitoring: false,
+        },
       };
     }
   }),
+
+  /**
+   * Fetch credit-monitoring alerts for the consumer.
+   *
+   * Uses the Credit Monitoring product scope:
+   *   GET {host}/personal/consumer-data-suite/v1/creditMonitoring
+   *
+   * Session-only: alerts are returned to the client and held in
+   * EquifaxReportContext; nothing is persisted to the DB.
+   */
+  fetchCreditMonitoring: protectedProcedure
+    .input(
+      z.object({
+        forceRefresh: z.boolean().default(false),
+        consumerInfo: z
+          .object({
+            firstName: z.string().optional(),
+            lastName: z.string().optional(),
+            ssn: z.string().optional(),
+            dateOfBirth: z.string().optional(),
+            address: z.string().optional(),
+            city: z.string().optional(),
+            state: z.string().optional(),
+            zip: z.string().optional(),
+            consumerId: z.string().optional(),
+          })
+          .optional(),
+      }),
+    )
+    .output(
+      z.object({
+        success: z.boolean(),
+        monitoring: CreditMonitoringResultSchema.optional(),
+        error: z.string().nullable(),
+        errorType: z
+          .enum([
+            "AUTHENTICATION_ERROR",
+            "INVALID_CONSUMER_DATA",
+            "API_ERROR",
+            "PARSE_ERROR",
+            "UNKNOWN_ERROR",
+          ])
+          .nullable(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.user.id;
+      try {
+        console.log(
+          "[tRPC] fetchCreditMonitoring called by user:",
+          userId,
+          "forceRefresh:",
+          input.forceRefresh,
+        );
+
+        const equifaxClient = getEquifaxClient();
+        const result = await equifaxClient.getMonitoringAlerts(input.consumerInfo);
+
+        return {
+          success: true,
+          monitoring: {
+            fetchedAt: result.fetchedAt,
+            alerts: result.alerts,
+            totalAlerts: result.totalAlerts,
+          },
+          error: null,
+          errorType: null,
+        };
+      } catch (error) {
+        const classified = classifyError(error);
+        const errorMsg = error instanceof Error ? error.message : "Unknown error";
+        console.error("[tRPC] fetchCreditMonitoring error:", classified, errorMsg);
+
+        return {
+          success: false,
+          monitoring: undefined,
+          error: classified.message,
+          errorType: classified.type,
+        };
+      }
+    }),
 
   /**
    * Get analytics dashboard data

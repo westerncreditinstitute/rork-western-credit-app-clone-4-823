@@ -21,10 +21,15 @@ import {
   Clock,
   Wallet,
   FileSearch,
+  CreditCard,
+  Shield,
+  Bell,
+  Activity,
 } from "lucide-react-native";
 import Colors from "@/constants/colors";
 import { trpc } from "@/lib/trpc";
 import { useUser } from "@/contexts/UserContext";
+import { useEquifaxReport } from "@/contexts/EquifaxReportContext";
 
 // ============================================================
 // CreditSummaryDashboard — the "all three bureaus in one place"
@@ -103,6 +108,11 @@ export default function CreditSummaryDashboard({
   const { user } = useUser();
   const userId = user?.id || "";
 
+  // Live Consumer Data Suite data pulled this session (credit report + monitoring)
+  const { report: liveReport, getSummary, monitoring } = useEquifaxReport();
+  const liveSummary = getSummary("equifax");
+  const hasLiveReport = !!liveReport;
+
   const summaryQuery = trpc.aiAgents.getBureauDashboard.useQuery(
     { userId },
     { enabled: visible && !!userId, staleTime: 15_000 },
@@ -162,7 +172,7 @@ export default function CreditSummaryDashboard({
   }, [bureaus]);
 
   const isLoading = summaryQuery.isLoading;
-  const isEmpty = !isLoading && bureaus.length === 0;
+  const isEmpty = !isLoading && bureaus.length === 0 && !hasLiveReport;
   const hasNegatives = totals.negativeCount > 0;
 
   return (
@@ -193,6 +203,125 @@ export default function CreditSummaryDashboard({
           style={styles.scroll}
           contentContainerStyle={styles.scrollContent}
         >
+          {/* ── Live Consumer Data Suite summary (this session) ── */}
+          {liveSummary ? (
+            <View style={styles.liveCard}>
+              <View style={styles.liveHeader}>
+                <CreditCard size={18} color={Colors.primary} />
+                <Text style={styles.liveTitle}>Your Credit Snapshot</Text>
+              </View>
+              <View style={styles.liveGrid}>
+                {[
+                  {
+                    label: "Credit Score",
+                    value: liveSummary.creditScore
+                      ? String(liveSummary.creditScore)
+                      : "—",
+                  },
+                  {
+                    label: "Open Accounts",
+                    value: String(liveSummary.openAccounts),
+                  },
+                  {
+                    label: "Utilization",
+                    value:
+                      typeof liveSummary.creditUtilization === "number"
+                        ? `${liveSummary.creditUtilization.toFixed(0)}%`
+                        : "—",
+                  },
+                  {
+                    label: "Collections",
+                    value: String(liveSummary.collections),
+                  },
+                  {
+                    label: "Public Records",
+                    value: String(liveSummary.publicRecords),
+                  },
+                  {
+                    label: "Inquiries",
+                    value: String(liveSummary.inquiries),
+                  },
+                  {
+                    label: "Total Balance",
+                    value:
+                      typeof liveSummary.totalBalance === "number"
+                        ? formatCurrency(liveSummary.totalBalance)
+                        : "—",
+                  },
+                  {
+                    label: "Credit Limit",
+                    value:
+                      typeof liveSummary.totalCreditLimit === "number"
+                        ? formatCurrency(liveSummary.totalCreditLimit)
+                        : "—",
+                  },
+                  {
+                    label: "Credit History",
+                    value:
+                      typeof liveSummary.lengthOfCreditHistoryMonths === "number"
+                        ? `${Math.round(liveSummary.lengthOfCreditHistoryMonths)} mo`
+                        : "—",
+                  },
+                ].map((s) => (
+                  <View key={s.label} style={styles.liveGridItem}>
+                    <Text style={styles.liveGridValue}>{s.value}</Text>
+                    <Text style={styles.liveGridLabel}>{s.label}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          ) : null}
+
+          {/* ── Credit monitoring alerts (this session) ── */}
+          {monitoring ? (
+            <View style={styles.liveCard}>
+              <View style={styles.liveHeader}>
+                <Shield size={18} color={Colors.primary} />
+                <Text style={styles.liveTitle}>Credit Monitoring</Text>
+              </View>
+              {monitoring.alerts.length > 0 ? (
+                <View style={styles.monitoringList}>
+                  {monitoring.alerts.slice(0, 8).map((alert) => {
+                    const tone =
+                      alert.severity === "critical"
+                        ? Colors.error
+                        : alert.severity === "warning"
+                          ? Colors.warning
+                          : Colors.textLight;
+                    return (
+                      <View key={alert.id} style={styles.monitoringAlert}>
+                        <View
+                          style={[styles.monitoringDot, { backgroundColor: tone }]}
+                        />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.monitoringAlertTitle}>
+                            {alert.title}
+                          </Text>
+                          {alert.description ? (
+                            <Text style={styles.monitoringAlertDesc}>
+                              {alert.description}
+                            </Text>
+                          ) : null}
+                          <Text style={styles.monitoringAlertMeta}>
+                            {alert.bureau} ·{" "}
+                            {new Date(alert.date).toLocaleDateString()}
+                          </Text>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              ) : (
+                <View style={styles.monitoringEmpty}>
+                  <CheckCircle2 size={16} color={Colors.success} />
+                  <Text style={styles.monitoringEmptyText}>
+                    No new changes detected on your credit file.
+                  </Text>
+                </View>
+              )}
+            </View>
+          ) : null}
+
           {isLoading ? (
             <View style={styles.busyBox}>
               <ActivityIndicator size="large" color={Colors.primary} />
@@ -223,7 +352,7 @@ export default function CreditSummaryDashboard({
             </View>
           ) : null}
 
-          {!isLoading && !isEmpty ? (
+          {!isLoading && bureaus.length > 0 ? (
             <>
               {/* ── Hero: total negative items across the board ──── */}
               <LinearGradient
@@ -436,6 +565,45 @@ const styles = StyleSheet.create({
   closeButton: { padding: 4 },
   scroll: { flex: 1 },
   scrollContent: { padding: 16, paddingBottom: 40 },
+
+  // Live Consumer Data Suite summary + monitoring
+  liveCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  liveHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 12,
+  },
+  liveTitle: { fontSize: 16, fontWeight: "700", color: Colors.text },
+  liveGrid: { flexDirection: "row", flexWrap: "wrap" },
+  liveGridItem: { width: "33.33%", paddingVertical: 8 },
+  liveGridValue: { fontSize: 17, fontWeight: "700", color: Colors.text },
+  liveGridLabel: { fontSize: 11, color: Colors.textLight, marginTop: 2 },
+  monitoringList: { gap: 12 },
+  monitoringAlert: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
+  monitoringDot: { width: 8, height: 8, borderRadius: 4, marginTop: 5 },
+  monitoringAlertTitle: { fontSize: 14, fontWeight: "600", color: Colors.text },
+  monitoringAlertDesc: {
+    fontSize: 13,
+    color: Colors.textLight,
+    marginTop: 2,
+    lineHeight: 18,
+  },
+  monitoringAlertMeta: { fontSize: 11, color: Colors.textLight, marginTop: 4 },
+  monitoringEmpty: { flexDirection: "row", alignItems: "center", gap: 8 },
+  monitoringEmptyText: {
+    flex: 1,
+    fontSize: 13,
+    color: Colors.textLight,
+    lineHeight: 19,
+  },
 
   busyBox: { alignItems: "center", paddingVertical: 48, gap: 14 },
   busyText: { fontSize: 15, color: Colors.textLight, textAlign: "center" },

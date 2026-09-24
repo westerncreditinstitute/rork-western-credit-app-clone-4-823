@@ -79,6 +79,31 @@ protectedProcedure Middleware:
 
 ## Equifax Fetch Flow
 
+> **Updated — Consumer Data Suite.** The Equifax leg now uses the **Consumer Data
+> Suite** product scopes instead of the old OneView business API:
+> - Credit Reports → `POST {host}/personal/consumer-data-suite/v1/creditReport`
+> - Credit Monitoring → `GET {host}/personal/consumer-data-suite/v1/creditMonitoring`
+>
+> See `EQUIFAX_CONSUMER_DATA_SUITE_MIGRATION.md` for full details.
+
+### Equifax OAuth (Consumer Data Suite)
+
+```
+getEquifaxClient().getCreditReportToken() / getCreditMonitoringToken()
+       ↓
+getAccessToken(scope)  — per-scope cache (5-min buffer)
+       ↓
+POST {host}/v2/oauth/token
+  Authorization: Basic base64(EQUIFAX_CLIENT_ID:EQUIFAX_CLIENT_SECRET)
+  Content-Type: application/x-www-form-urlencoded
+  Body: grant_type=client_credentials&scope=<product scope URL>
+       ↓
+access_token  →  used as  Authorization: Bearer <token>  on the product call
+```
+
+If `EQUIFAX_CLIENT_ID` or `EQUIFAX_CLIENT_SECRET` is missing, the client runs in
+DEMO MODE and returns mock data (no network call).
+
 ### Complete Request Flow
 
 ```

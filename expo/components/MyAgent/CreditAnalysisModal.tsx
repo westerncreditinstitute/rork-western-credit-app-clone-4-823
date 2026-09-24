@@ -23,6 +23,12 @@ import {
   ChevronDown,
   ChevronUp,
   MapPin,
+  Bell,
+  RefreshCw,
+  Shield,
+  CreditCard,
+  Activity,
+  Info,
 } from "lucide-react-native";
 import Colors from "@/constants/colors";
 import { trpc } from "@/lib/trpc";
@@ -101,6 +107,10 @@ export default function CreditAnalysisModal({
     negativeAccountsByBureau,
     setReportData: setEquifaxReportData,
     setErrorData: setEquifaxErrorData,
+    monitoring,
+    setMonitoringData,
+    setMonitoringError: setContextMonitoringError,
+    setMonitoringLoading,
   } = useEquifaxReport();
 
   const [parsing, setParsing] = useState(false);
@@ -138,6 +148,11 @@ export default function CreditAnalysisModal({
 
   const saveAnalysisMutation = trpc.aiAgents.saveCreditAnalysis.useMutation();
   const fetchEquifaxMutation = trpc.equifax.fetchCreditReport.useMutation();
+  const fetchMonitoringMutation = trpc.equifax.fetchCreditMonitoring.useMutation();
+
+  // Credit-monitoring local UI state (the data itself lives in context)
+  const [fetchingMonitoring, setFetchingMonitoring] = useState(false);
+  const [monitoringFetchError, setMonitoringFetchError] = useState<string | null>(null);
 
   // Determine if we should show the Equifax multi-bureau view
   const hasEquifaxReport = useMemo(() => {
@@ -189,6 +204,50 @@ export default function CreditAnalysisModal({
       setFetchingEquifax(false);
     }
   }, [userId, fetchEquifaxMutation, consumerInfo, setEquifaxReportData, setEquifaxErrorData]);
+
+  // Fetch credit-monitoring alerts (Consumer Data Suite — Credit Monitoring scope)
+  const handleFetchMonitoring = useCallback(async () => {
+    if (!userId) {
+      setMonitoringFetchError(
+        "You must be logged in to monitor your credit. Please sign in and try again.",
+      );
+      return;
+    }
+
+    setFetchingMonitoring(true);
+    setMonitoringFetchError(null);
+    setMonitoringLoading(true);
+
+    try {
+      const result = await fetchMonitoringMutation.mutateAsync({
+        consumerInfo,
+      });
+
+      if (!result.success || !result.monitoring) {
+        const errMsg = result.error || "Failed to fetch monitoring alerts";
+        setMonitoringFetchError(errMsg);
+        setContextMonitoringError(errMsg, result.errorType || "UNKNOWN_ERROR");
+        return;
+      }
+
+      setMonitoringData(result.monitoring);
+    } catch (error) {
+      const errorMsg =
+        error instanceof Error ? error.message : "Failed to fetch monitoring alerts";
+      setMonitoringFetchError(errorMsg);
+      setContextMonitoringError(errorMsg, "UNKNOWN_ERROR");
+      console.error("Equifax monitoring error:", error);
+    } finally {
+      setFetchingMonitoring(false);
+    }
+  }, [
+    userId,
+    fetchMonitoringMutation,
+    consumerInfo,
+    setMonitoringData,
+    setContextMonitoringError,
+    setMonitoringLoading,
+  ]);
 
   // Handle parsed accounts from the WebView parser
   const handleAccountsParsed = useCallback(
@@ -336,6 +395,150 @@ export default function CreditAnalysisModal({
             Checked {equifaxReport.combined.totalBureaus} bureaus. Average credit score:{" "}
             {averageScore ? averageScore.toFixed(0) : "N/A"}
           </Text>
+        </View>
+
+        {/* ── Consumer Data Suite summary (the "proper summary report") ── */}
+        {(() => {
+          const summary = equifaxReport.bureaus.equifax?.summary;
+          if (!summary) return null;
+
+          const fmtCurrency = (n?: number) =>
+            typeof n === "number"
+              ? `$${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}`
+              : "—";
+
+          const stats: { label: string; value: string }[] = [
+            { label: "Credit Score", value: summary.creditScore ? String(summary.creditScore) : "—" },
+            { label: "Open Accounts", value: String(summary.openAccounts) },
+            { label: "Total Accounts", value: String(summary.totalAccounts) },
+            {
+              label: "Utilization",
+              value:
+                typeof summary.creditUtilization === "number"
+                  ? `${summary.creditUtilization.toFixed(0)}%`
+                  : "—",
+            },
+            { label: "Collections", value: String(summary.collections) },
+            { label: "Public Records", value: String(summary.publicRecords) },
+            { label: "Inquiries", value: String(summary.inquiries) },
+            { label: "Total Balance", value: fmtCurrency(summary.totalBalance) },
+            { label: "Credit Limit", value: fmtCurrency(summary.totalCreditLimit) },
+            {
+              label: "Avg Account Age",
+              value:
+                typeof summary.averageAccountAgeMonths === "number"
+                  ? `${Math.round(summary.averageAccountAgeMonths)} mo`
+                  : "—",
+            },
+            {
+              label: "Credit History",
+              value:
+                typeof summary.lengthOfCreditHistoryMonths === "number"
+                  ? `${Math.round(summary.lengthOfCreditHistoryMonths)} mo`
+                  : "—",
+            },
+            {
+              label: "Debt-to-Credit",
+              value:
+                typeof summary.debtToCreditRatio === "number"
+                  ? `${summary.debtToCreditRatio.toFixed(0)}%`
+                  : "—",
+            },
+          ];
+
+          return (
+            <View style={styles.cdsSummaryCard}>
+              <View style={styles.cdsSummaryHeader}>
+                <CreditCard size={18} color={Colors.primary} />
+                <Text style={styles.cdsSummaryTitle}>Credit Summary</Text>
+              </View>
+              <View style={styles.cdsGrid}>
+                {stats.map((s) => (
+                  <View key={s.label} style={styles.cdsGridItem}>
+                    <Text style={styles.cdsGridValue}>{s.value}</Text>
+                    <Text style={styles.cdsGridLabel}>{s.label}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          );
+        })()}
+
+        {/* ── Credit Monitoring ── */}
+        <View style={styles.monitoringCard}>
+          <View style={styles.monitoringHeader}>
+            <View style={styles.monitoringHeaderLeft}>
+              <Shield size={18} color={Colors.primary} />
+              <Text style={styles.monitoringTitle}>Credit Monitoring</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.monitoringRefresh}
+              onPress={handleFetchMonitoring}
+              disabled={fetchingMonitoring}
+              accessibilityRole="button"
+              accessibilityLabel="Refresh credit monitoring alerts"
+            >
+              {fetchingMonitoring ? (
+                <ActivityIndicator size="small" color={Colors.primary} />
+              ) : (
+                <>
+                  <RefreshCw size={13} color={Colors.primary} />
+                  <Text style={styles.monitoringRefreshText}>
+                    {monitoring ? "Refresh" : "Check Now"}
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {monitoringFetchError ? (
+            <View style={styles.monitoringErrorRow}>
+              <AlertTriangle size={14} color={Colors.warning} />
+              <Text style={styles.monitoringErrorText}>{monitoringFetchError}</Text>
+            </View>
+          ) : null}
+
+          {monitoring && monitoring.alerts.length > 0 ? (
+            <View style={styles.monitoringList}>
+              {monitoring.alerts.map((alert) => {
+                const tone =
+                  alert.severity === "critical"
+                    ? Colors.error
+                    : alert.severity === "warning"
+                      ? Colors.warning
+                      : Colors.textLight;
+                return (
+                  <View key={alert.id} style={styles.monitoringAlert}>
+                    <View style={[styles.monitoringDot, { backgroundColor: tone }]} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.monitoringAlertTitle}>{alert.title}</Text>
+                      {alert.description ? (
+                        <Text style={styles.monitoringAlertDesc}>{alert.description}</Text>
+                      ) : null}
+                      <Text style={styles.monitoringAlertMeta}>
+                        {alert.bureau} · {new Date(alert.date).toLocaleDateString()}
+                      </Text>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          ) : monitoring ? (
+            <View style={styles.monitoringEmpty}>
+              <CheckCircle2 size={16} color={Colors.success} />
+              <Text style={styles.monitoringEmptyText}>
+                No new changes detected on your credit file.
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.monitoringEmpty}>
+              <Info size={15} color={Colors.textLight} />
+              <Text style={styles.monitoringEmptyText}>
+                Tap "Check Now" to watch your file for new inquiries, accounts, and
+                other key changes.
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Bureau tabs/sections */}
@@ -1002,6 +1205,139 @@ const styles = StyleSheet.create({
   },
   bureauTag: { fontSize: 12, color: Colors.textLight, marginBottom: 8 },
   summaryText: { fontSize: 14, color: Colors.textLight, lineHeight: 21 },
+
+  // Consumer Data Suite summary grid
+  cdsSummaryCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  cdsSummaryHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 14,
+  },
+  cdsSummaryTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: Colors.text,
+  },
+  cdsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
+  cdsGridItem: {
+    width: "33.33%",
+    paddingVertical: 8,
+    alignItems: "flex-start",
+  },
+  cdsGridValue: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: Colors.text,
+  },
+  cdsGridLabel: {
+    fontSize: 11,
+    color: Colors.textLight,
+    marginTop: 2,
+  },
+
+  // Credit monitoring
+  monitoringCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  monitoringHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  monitoringHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  monitoringTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: Colors.text,
+  },
+  monitoringRefresh: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+  monitoringRefreshText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Colors.primary,
+  },
+  monitoringErrorRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 8,
+  },
+  monitoringErrorText: {
+    flex: 1,
+    fontSize: 13,
+    color: Colors.warning,
+  },
+  monitoringList: {
+    gap: 12,
+  },
+  monitoringAlert: {
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "flex-start",
+  },
+  monitoringDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginTop: 5,
+  },
+  monitoringAlertTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: Colors.text,
+  },
+  monitoringAlertDesc: {
+    fontSize: 13,
+    color: Colors.textLight,
+    marginTop: 2,
+    lineHeight: 18,
+  },
+  monitoringAlertMeta: {
+    fontSize: 11,
+    color: Colors.textLight,
+    marginTop: 4,
+  },
+  monitoringEmpty: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  monitoringEmptyText: {
+    flex: 1,
+    fontSize: 13,
+    color: Colors.textLight,
+    lineHeight: 19,
+  },
 
   // Bureau sections
   bureauTabs: {

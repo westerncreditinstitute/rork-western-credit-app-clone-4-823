@@ -1,5 +1,17 @@
 # Equifax OneView API Implementation - Complete Guide
 
+> **⚠️ SUPERSEDED (Consumer Data Suite migration).** This document describes the
+> original **OneView business API** integration. The app has since migrated to
+> the **Equifax Consumer Data Suite** so users can pull their *own* credit report
+> and monitor it:
+>
+> - Credit Reports → `POST {host}/personal/consumer-data-suite/v1/creditReport`
+> - Credit Monitoring → `GET {host}/personal/consumer-data-suite/v1/creditMonitoring`
+>
+> See **`EQUIFAX_CONSUMER_DATA_SUITE_MIGRATION.md`** for the current, authoritative
+> integration details (scope-based OAuth, new endpoints, summary + monitoring).
+> The OneView notes below are retained for historical context only.
+
 ## Overview
 
 The Equifax OneView API integration is now fully implemented with OAuth2 authentication, multi-bureau data fetching, and a consumer information form in the frontend.
