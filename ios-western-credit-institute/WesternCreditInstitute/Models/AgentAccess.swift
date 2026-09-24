@@ -12,11 +12,18 @@ import Foundation
 ///
 /// Which courses a student has bought decides two separate things:
 ///   1. Which tools they can open (the Interactive Coach is ACE-2 and up).
-///   2. What their AI Credit Repair Agent is allowed to talk about.
+///   2. What their AI Agent is allowed to talk about.
 ///
 /// The agents are trained on the whole credit domain, so the limits here are
-/// the only thing keeping an ACE-1 student from getting ACE-2 material free
-/// out of the chat window - a revenue boundary, not a cosmetic one.
+/// the only thing keeping an ACE-1 student from getting ACE-2 (score building)
+/// or ACE-3 (business credit) material for free out of the chat window - a
+/// revenue boundary, not a cosmetic one.
+///
+/// The three subjects map one-to-one onto the three courses:
+///   - ACE-1 (Advanced Credit Repair)      -> creditRepair   (disputes)
+///   - ACE-2 (Advanced Credit Building)    -> scoreBuilding  (raising a score)
+///   - ACE-3 (Advanced Business Credit)    -> businessCredit (business credit)
+/// The ACE-4 Complete Bundle unlocks all three with no restrictions.
 nonisolated enum CourseID {
     static let ace1 = "3"
     static let ace2 = "4"
@@ -29,6 +36,16 @@ nonisolated enum CourseID {
 nonisolated enum AgentTopic: String, Hashable, Sendable {
     case creditRepair
     case scoreBuilding
+    case businessCredit
+
+    /// Human-readable course name for each subject, used in refusals + labels.
+    var courseName: String {
+        switch self {
+        case .creditRepair: return "ACE-1 (Advanced Credit Repair)"
+        case .scoreBuilding: return "ACE-2 (Advanced Credit Building)"
+        case .businessCredit: return "ACE-3 (Advanced Business Credit)"
+        }
+    }
 }
 
 nonisolated struct AgentScope: Hashable, Sendable {
@@ -41,18 +58,19 @@ nonisolated struct AgentScope: Hashable, Sendable {
 
     /// Works out what a student's agent may discuss from the courses owned.
     ///
-    /// ACE-3 (Business Credit) deliberately grants no agent: the tool is a
-    /// consumer credit repair assistant and has nothing to offer a business
-    /// credit student, so an ACE-3-only student is shown an explanation
-    /// rather than an agent that would refuse every question they asked.
+    /// Each course unlocks exactly its own subject and nothing else, so an
+    /// ACE-1 student cannot get score-building advice, an ACE-2 student cannot
+    /// get dispute advice, and an ACE-3 student cannot get either - each of
+    /// those is the paid deliverable of a different course.
     static func derive(from enrolledCourseIds: Set<String>) -> AgentScope {
         if enrolledCourseIds.contains(CourseID.bundle) {
-            return AgentScope(unrestricted: true, topics: [.creditRepair, .scoreBuilding])
+            return AgentScope(unrestricted: true, topics: [.creditRepair, .scoreBuilding, .businessCredit])
         }
 
         var topics: Set<AgentTopic> = []
         if enrolledCourseIds.contains(CourseID.ace1) { topics.insert(.creditRepair) }
         if enrolledCourseIds.contains(CourseID.ace2) { topics.insert(.scoreBuilding) }
+        if enrolledCourseIds.contains(CourseID.ace3) { topics.insert(.businessCredit) }
 
         return AgentScope(unrestricted: false, topics: topics)
     }
@@ -62,14 +80,20 @@ nonisolated struct AgentScope: Hashable, Sendable {
         if unrestricted { return "Full access — all credit topics" }
         let hasRepair = topics.contains(.creditRepair)
         let hasBuilding = topics.contains(.scoreBuilding)
+        let hasBusiness = topics.contains(.businessCredit)
+
+        if hasRepair && hasBuilding && hasBusiness { return "Credit repair, building & business credit" }
         if hasRepair && hasBuilding { return "Credit repair & score building" }
+        if hasRepair && hasBusiness { return "Credit repair & business credit" }
+        if hasBuilding && hasBusiness { return "Score building & business credit" }
         if hasRepair { return "Credit repair specialist" }
         if hasBuilding { return "Score building specialist" }
+        if hasBusiness { return "Business credit specialist" }
         return "No agent included"
     }
 
-    /// Explains to an ACE-3-only student why there is no agent for them.
-    static let notIncludedMessage = "Your personal AI Credit Repair Agent comes with ACE-1 (Advanced Credit Repair) and ACE-2 (Advanced Credit Building). ACE-3 covers business credit, which this consumer credit agent is not trained for. Add ACE-1 or ACE-2 — or get everything with the Complete ACE Bundle — to be matched with an agent."
+    /// Explains to a student with no agent-bearing course why there is no agent.
+    static let notIncludedMessage = "Your personal AI Agent is included with ACE-1 (Advanced Credit Repair), ACE-2 (Advanced Credit Building) and ACE-3 (Advanced Business Credit). Enroll in any of those — or get everything with the Complete ACE Bundle — to be matched with an agent."
 }
 
 nonisolated enum CourseEntitlements {
